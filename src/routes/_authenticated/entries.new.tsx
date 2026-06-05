@@ -411,22 +411,13 @@ function NewEntryPage() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">অতিরিক্ত তথ্য</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <label className="flex items-center gap-2 rounded-md border border-dashed p-3 cursor-pointer hover:bg-muted/40">
-                <Checkbox
-                  checked={isAdvance}
-                  onCheckedChange={(v) => setIsAdvance(Boolean(v))}
-                />
-                <div>
-                  <div className="text-sm font-medium">অগ্রিম চালান / Advance Delivery</div>
-                  <div className="text-xs text-muted-foreground">এডমিন অনুমোদনের সময় মূল্য নির্ধারণ করবেন</div>
-                </div>
-              </label>
               <div className="space-y-1.5">
                 <Label>মন্তব্য (ঐচ্ছিক)</Label>
                 <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
             </CardContent>
           </Card>
+
         )}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
