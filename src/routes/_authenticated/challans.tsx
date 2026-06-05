@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RecentSalesTable } from "@/components/recent-sales-table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchSales, fetchAllCustomers, fetchActiveBrickTypes, type SaleType } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -23,7 +23,6 @@ export const Route = createFileRoute("/_authenticated/challans")({
 
 function ChallansPage() {
   const { data: me } = useCurrentUser();
-  const [open, setOpen] = useState(false);
   const q = useQuery({
     queryKey: ["sales", "challans", me?.user.id, me?.role],
     enabled: !!me,
@@ -37,22 +36,17 @@ function ChallansPage() {
           <h2 className="text-xl font-bold tracking-tight md:text-2xl">চালান এন্ট্রি</h2>
           <p className="text-sm text-muted-foreground">নতুন বিক্রয় এন্ট্রি যোগ করুন ও আপনার সাম্প্রতিক চালান দেখুন</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> নতুন এন্ট্রি</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>নতুন চালান এন্ট্রি</DialogTitle></DialogHeader>
-            <NewEntryForm onDone={() => setOpen(false)} />
-          </DialogContent>
-        </Dialog>
+        <Button asChild>
+          <Link to="/entries/new"><Plus className="mr-2 h-4 w-4" /> নতুন এন্ট্রি</Link>
+        </Button>
       </div>
       <RecentSalesTable entries={q.data ?? []} loading={q.isLoading} title="সাম্প্রতিক চালান" subtitle="শেষ ৫০টি" limit={50} />
     </div>
   );
 }
 
-function NewEntryForm({ onDone }: { onDone: () => void }) {
+// Legacy inline form kept for reference but no longer mounted.
+function _NewEntryForm({ onDone }: { onDone: () => void }) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const customersQ = useQuery({ queryKey: ["customers-all"], queryFn: fetchAllCustomers });
