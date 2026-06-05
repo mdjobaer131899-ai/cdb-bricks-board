@@ -40,20 +40,25 @@ const OTHERS_NAME = "অন্যান্য";
 async function generateNextChallanNo(): Promise<string> {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const prefix = `CDB-${ymd}-`;
+  const defaultPrefix = `CDB-${ymd}-`;
+  // Get the most recently created entry and increment its trailing number,
+  // preserving whatever prefix the user used manually.
   const { data } = await supabase
     .from("sales_entries")
-    .select("challan_no")
-    .like("challan_no", `${prefix}%`)
-    .order("challan_no", { ascending: false })
+    .select("challan_no, created_at")
+    .order("created_at", { ascending: false })
     .limit(1);
-  let next = 1;
-  if (data && data[0]?.challan_no) {
-    const tail = data[0].challan_no.split("-").pop() ?? "0";
-    const n = parseInt(tail, 10);
-    if (Number.isFinite(n)) next = n + 1;
+  const last = data?.[0]?.challan_no?.trim();
+  if (last) {
+    const match = last.match(/^(.*?)(\d+)(\D*)$/);
+    if (match) {
+      const [, head, numStr, tail] = match;
+      const next = (parseInt(numStr, 10) || 0) + 1;
+      return `${head}${String(next).padStart(numStr.length, "0")}${tail}`;
+    }
+    return `${last}-1`;
   }
-  return `${prefix}${String(next).padStart(3, "0")}`;
+  return `${defaultPrefix}001`;
 }
 
 function NewEntryPage() {
