@@ -1,50 +1,51 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  FileText,
-  Package,
-  DollarSign,
-  Truck,
-  Clock,
-  CheckCircle2,
-  Users,
-  Layers,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { FileText, Package, DollarSign, Truck, Clock, CheckCircle2, Users, Layers } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter";
 import { RecentSalesTable } from "@/components/recent-sales-table";
-import { MOCK_SALES, TOTAL_CUSTOMERS, LIFETIME_BRICKS, type SaleEntry } from "@/lib/mock-data";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const bn = (n: number) => n.toLocaleString("bn-BD");
-
-function inRange(e: SaleEntry, r: DateRange) {
-  const d = new Date(e.date);
-  const from = new Date(r.from); from.setHours(0, 0, 0, 0);
-  const to = new Date(r.to); to.setHours(23, 59, 59, 999);
-  return d >= from && d <= to;
-}
+import { fetchSales } from "@/lib/sales-queries";
+import { bn, isoDate } from "@/lib/format";
+import { supabase } from "@/integrations/supabase/client";
 
 export function AdminDashboard() {
   const [range, setRange] = useState<DateRange>({ from: new Date(), to: new Date() });
-  const [loading, setLoading] = useState(true);
+  const from = isoDate(range.from);
+  const to = isoDate(range.to);
 
-  useEffect(() => {
-    setLoading(true);
-    const t = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(t);
-  }, [range]);
+  const salesQ = useQuery({
+    queryKey: ["sales", "admin", from, to],
+    queryFn: () => fetchSales({ from, to }),
+  });
 
-  const filtered = useMemo(() => MOCK_SALES.filter((e) => inRange(e, range)), [range]);
-  const stats = useMemo(() => {
-    return {
-      challans: filtered.length,
-      bricks: filtered.reduce((s, e) => s + e.bricks, 0),
-      amount: filtered.reduce((s, e) => s + e.amount, 0),
-      advance: filtered.filter((e) => e.type === "advance").length,
-      pending: filtered.filter((e) => e.status === "pending").length,
-      approved: filtered.filter((e) => e.status === "approved").length,
-    };
-  }, [filtered]);
+  const customersQ = useQuery({
+    queryKey: ["customers-count"],
+    queryFn: async () => {
+      const { count } = await supabase.from("customers").select("id", { count: "exact", head: true });
+      return count ?? 0;
+    },
+  });
+
+  const lifetimeQ = useQuery({
+    queryKey: ["lifetime-bricks"],
+    queryFn: async () => {
+      const { data } = await supabase.from("sales_entries").select("quantity").eq("status", "approved");
+      return (data ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0);
+    },
+  });
+
+  const loading = salesQ.isLoading;
+  const sales = salesQ.data ?? [];
+
+  const stats = useMemo(() => ({
+    challans: sales.length,
+    bricks: sales.reduce((s, e) => s + e.quantity, 0),
+    amount: sales.reduce((s, e) => s + Number(e.total_amount), 0),
+    advance: sales.filter((e) => e.sale_type === "advance").length,
+    pending: sales.filter((e) => e.status === "pending").length,
+    approved: sales.filter((e) => e.status === "approved").length,
+  }), [sales]);
 
   return (
     <div className="space-y-5">
@@ -59,19 +60,19 @@ export function AdminDashboard() {
           ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-[110px] rounded-xl" />)
           : (
             <>
-              <StatCard label="আজকের মোট চালান" value={bn(stats.challans)} icon={FileText} tone="primary" />
+              <StatCard label="মোট চালান (নির্বাচিত)" value={bn(stats.challans)} icon={FileText} tone="primary" />
               <StatCard label="ডেলিভার্ড ইট" value={bn(stats.bricks)} icon={Package} tone="info" hint="ইটের সংখ্যা" />
               <StatCard label="মোট বিক্রয় (৳)" value={`৳ ${bn(stats.amount)}`} icon={DollarSign} tone="success" />
               <StatCard label="অগ্রিম ডেলিভারি" value={bn(stats.advance)} icon={Truck} tone="info" />
               <StatCard label="অপেক্ষমাণ অনুমোদন" value={bn(stats.pending)} icon={Clock} tone="warning" badge={stats.pending} />
               <StatCard label="অনুমোদিত বিক্রয়" value={bn(stats.approved)} icon={CheckCircle2} tone="success" />
-              <StatCard label="মোট গ্রাহক" value={bn(TOTAL_CUSTOMERS)} icon={Users} tone="primary" hint="সব সময়" />
-              <StatCard label="লাইফটাইম ইট" value={bn(LIFETIME_BRICKS)} icon={Layers} tone="destructive" hint="ডেলিভার্ড" />
+              <StatCard label="মোট গ্রাহক" value={bn(customersQ.data ?? 0)} icon={Users} tone="primary" hint="সব সময়" />
+              <StatCard label="লাইফটাইম ইট" value={bn(lifetimeQ.data ?? 0)} icon={Layers} tone="destructive" hint="অনুমোদিত ডেলিভার্ড" />
             </>
           )}
       </div>
 
-      <RecentSalesTable entries={filtered} loading={loading} />
+      <RecentSalesTable entries={sales} loading={loading} />
     </div>
   );
 }

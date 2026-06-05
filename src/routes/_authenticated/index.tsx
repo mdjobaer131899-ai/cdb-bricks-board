@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useAuth } from "@/lib/auth-store";
+import { useCurrentUser } from "@/lib/use-current-user";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { ManagerDashboard } from "@/components/manager-dashboard";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
       { title: "ড্যাশবোর্ড — CDB Bricks" },
@@ -15,8 +15,8 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const { user, ready } = useAuth();
-  if (!ready) {
+  const { data, loading } = useCurrentUser();
+  if (loading || !data) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-8 w-64" />
@@ -27,5 +27,5 @@ function Index() {
       </div>
     );
   }
-  return user.role === "admin" ? <AdminDashboard /> : <ManagerDashboard />;
+  return data.role === "admin" ? <AdminDashboard /> : <ManagerDashboard />;
 }
