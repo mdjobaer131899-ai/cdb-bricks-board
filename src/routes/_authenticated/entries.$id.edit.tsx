@@ -47,7 +47,7 @@ function EditEntryPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sales_entries")
-        .select("*, customer:customers(id, name, phone, address)")
+        .select("*, customer:customers(id, name)")
         .eq("id", id)
         .single();
       if (error) throw error;
@@ -71,7 +71,6 @@ function EditEntryPage() {
   const [challanNo, setChallanNo] = useState("");
   const [saleDate, setSaleDate] = useState(isoDate(new Date()));
   const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
   const [driverName, setDriverName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [brickTypeId, setBrickTypeId] = useState("");
@@ -90,7 +89,6 @@ function EditEntryPage() {
     setChallanNo(e.challan_no);
     setSaleDate(e.sale_date);
     setCustomerName(e.customer?.name ?? "");
-    setCustomerPhone(e.customer?.phone ?? "");
     setDriverName(e.driver_name ?? "");
     setVehicleNumber(e.vehicle_number ?? "");
     setBrickTypeId(e.brick_type_id);
@@ -137,7 +135,7 @@ function EditEntryPage() {
     if (entry.customer_id) {
       await supabase
         .from("customers")
-        .update({ name: customerName.trim(), phone: customerPhone.trim() || null })
+        .update({ name: customerName.trim() })
         .eq("id", entry.customer_id);
     }
 
@@ -183,7 +181,7 @@ function EditEntryPage() {
     if (entry.customer_id) {
       await supabase
         .from("customers")
-        .update({ name: customerName.trim(), phone: customerPhone.trim() || null })
+        .update({ name: customerName.trim() })
         .eq("id", entry.customer_id);
     }
     const qty = Number(quantity) || 0;
@@ -282,14 +280,10 @@ function EditEntryPage() {
 
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">গ্রাহক</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CardContent>
             <div className="space-y-1.5">
               <Label>গ্রাহকের নাম</Label>
               <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label>মোবাইল <span className="text-muted-foreground">(ঐচ্ছিক)</span></Label>
-              <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
             </div>
           </CardContent>
         </Card>
