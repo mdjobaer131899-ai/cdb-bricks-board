@@ -24,7 +24,6 @@ export const Route = createFileRoute("/_authenticated/entries/new")({
   component: NewEntryPage,
 });
 
-// Canonical display order for brick types
 const BRICK_ORDER = [
   "১ নং ইট",
   "২ নং ইট",
@@ -82,8 +81,6 @@ function NewEntryPage() {
   const [saleDate, setSaleDate] = useState(isoDate(new Date()));
   const [customerId, setCustomerId] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
   const [driverName, setDriverName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [brickTypeId, setBrickTypeId] = useState("");
@@ -94,7 +91,6 @@ function NewEntryPage() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [addCustOpen, setAddCustOpen] = useState(false);
-
 
   useEffect(() => {
     generateNextChallanNo().then(setChallanNo);
@@ -121,59 +117,39 @@ function NewEntryPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!me) return;
-    if (!challanNo.trim() || !brickTypeId || !quantity) {
+    if (!challanNo.trim() || !brickTypeId) {
       toast.error("সকল প্রয়োজনীয় তথ্য পূরণ করুন");
       return;
     }
-    if (isAdmin && !customerId) {
+    if (!customerId) {
       toast.error("গ্রাহক নির্বাচন করুন");
       return;
     }
-    if (!isAdmin && !customerName.trim()) {
-      toast.error("গ্রাহকের নাম লিখুন");
+    if (!isOthers && !quantity) {
+      toast.error("পরিমাণ লিখুন");
       return;
     }
     if (isOthers && !customBrickName.trim()) {
       toast.error("ইটের ধরনের নাম লিখুন");
       return;
     }
-    if (isAdmin && !isAdvance && !unitPrice) {
+    if (isAdmin && !isAdvance && !isOthers && !unitPrice) {
       toast.error("একক মূল্য দিন বা অগ্রিম চালান নির্বাচন করুন");
       return;
     }
     setBusy(true);
 
-    // For managers: create a customer record on the fly from the typed name.
-    let finalCustomerId = customerId;
-    if (!isAdmin) {
-      const { data: newCust, error: custErr } = await supabase
-        .from("customers")
-        .insert({
-          name: customerName.trim(),
-          phone: customerPhone.trim() || null,
-          created_by: me.user.id,
-        })
-        .select("id")
-        .single();
-      if (custErr || !newCust) {
-        setBusy(false);
-        toast.error(custErr?.message ?? "গ্রাহক সংরক্ষণে সমস্যা হয়েছে");
-        return;
-      }
-      finalCustomerId = newCust.id;
-    }
-
-    // Managers never set price — admins fill it during approval. Managers cannot mark advance.
     const advanceFlag = isAdmin ? isAdvance : false;
-    const finalUnitPrice = isAdmin && !advanceFlag ? Number(unitPrice) : 0;
-    const finalTotal = isAdmin && !advanceFlag ? totalAmount : 0;
+    const finalUnitPrice = isAdmin && !advanceFlag ? Number(unitPrice) || 0 : 0;
+    const finalQuantity = isOthers ? 0 : Number(quantity);
+    const finalTotal = isAdmin && !advanceFlag ? finalQuantity * finalUnitPrice : 0;
 
     const { error } = await supabase.from("sales_entries").insert({
       challan_no: challanNo.trim(),
-      customer_id: finalCustomerId,
+      customer_id: customerId,
       brick_type_id: brickTypeId,
       custom_brick_name: isOthers ? customBrickName.trim() : null,
-      quantity: Number(quantity),
+      quantity: finalQuantity,
       unit_price: finalUnitPrice,
       total_amount: finalTotal,
       sale_type: advanceFlag ? "advance" : "regular",
@@ -195,7 +171,6 @@ function NewEntryPage() {
     navigate({ to: "/challans" });
   }
 
-
   if (meLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -212,19 +187,13 @@ function NewEntryPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Challan Info */}
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">চালান তথ্য</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>চালান নং</Label>
-              <Input
-                value={challanNo}
-                onChange={(e) => setChallanNo(e.target.value)}
-                required
-              />
+              <Input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} required />
             </div>
-
             <div className="space-y-1.5">
               <Label>তারিখ</Label>
               <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} required />
@@ -232,97 +201,70 @@ function NewEntryPage() {
           </CardContent>
         </Card>
 
-        {/* Customer */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">গ্রাহক</CardTitle>
-            {isAdmin && (
-              <Dialog open={addCustOpen} onOpenChange={setAddCustOpen}>
-                <DialogTrigger asChild>
-                  <Button type="button" size="sm" variant="outline">
-                    <Plus className="mr-1 h-4 w-4" /> নতুন গ্রাহক
-                  </Button>
-                </DialogTrigger>
-                <AddCustomerDialog
-                  onClose={() => setAddCustOpen(false)}
-                  onCreated={(c) => {
-                    qc.invalidateQueries({ queryKey: ["customers-all"] });
-                    setCustomerId(c.id);
-                    setAddCustOpen(false);
-                  }}
-                />
-              </Dialog>
-            )}
+            <Dialog open={addCustOpen} onOpenChange={setAddCustOpen}>
+              <DialogTrigger asChild>
+                <Button type="button" size="sm" variant="outline">
+                  <Plus className="mr-1 h-4 w-4" /> নতুন গ্রাহক
+                </Button>
+              </DialogTrigger>
+              <AddCustomerDialog
+                onClose={() => setAddCustOpen(false)}
+                onCreated={(c) => {
+                  qc.invalidateQueries({ queryKey: ["customers-all"] });
+                  setCustomerId(c.id);
+                  setAddCustOpen(false);
+                }}
+              />
+            </Dialog>
           </CardHeader>
           <CardContent>
-            {isAdmin ? (
-              <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between font-normal"
-                  >
-                    {selectedCustomer
-                      ? `${selectedCustomer.name}${selectedCustomer.phone ? ` — ${selectedCustomer.phone}` : ""}`
-                      : "গ্রাহক খুঁজুন বা নির্বাচন করুন..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 pointer-events-auto" align="start">
-                  <Command>
-                    <CommandInput placeholder="নাম বা ফোন দিয়ে খুঁজুন..." />
-                    <CommandList>
-                      <CommandEmpty>কোনো গ্রাহক পাওয়া যায়নি</CommandEmpty>
-                      <CommandGroup>
-                        {(customersQ.data ?? []).map((c) => (
-                          <CommandItem
-                            key={c.id}
-                            value={`${c.name} ${c.phone ?? ""} ${c.address ?? ""}`}
-                            onSelect={() => {
-                              setCustomerId(c.id);
-                              setCustomerOpen(false);
-                            }}
-                          >
-                            <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
-                            <div className="flex flex-col">
-                              <span>{c.name}</span>
-                              {c.phone && <span className="text-xs text-muted-foreground">{c.phone}</span>}
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>গ্রাহকের নাম</Label>
-                  <Input
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="যেমন: রহিম মিয়া"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>মোবাইল <span className="text-muted-foreground">(ঐচ্ছিক)</span></Label>
-                  <Input
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="01XXXXXXXXX"
-                  />
-                </div>
-              </div>
-            )}
+            <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between font-normal"
+                >
+                  {selectedCustomer
+                    ? `${selectedCustomer.name}${selectedCustomer.phone ? ` — ${selectedCustomer.phone}` : ""}`
+                    : "গ্রাহকের নামের প্রথম অক্ষর লিখুন..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0 pointer-events-auto" align="start">
+                <Command>
+                  <CommandInput placeholder="নাম বা ফোন দিয়ে খুঁজুন..." />
+                  <CommandList>
+                    <CommandEmpty>কোনো গ্রাহক পাওয়া যায়নি</CommandEmpty>
+                    <CommandGroup>
+                      {(customersQ.data ?? []).map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={`${c.name} ${c.phone ?? ""} ${c.address ?? ""}`}
+                          onSelect={() => {
+                            setCustomerId(c.id);
+                            setCustomerOpen(false);
+                          }}
+                        >
+                          <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
+                          <div className="flex flex-col">
+                            <span>{c.name}</span>
+                            {c.phone && <span className="text-xs text-muted-foreground">{c.phone}</span>}
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </CardContent>
         </Card>
 
-
-        {/* Delivery & Brick details */}
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">ডেলিভারি ও ইটের তথ্য</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -347,10 +289,12 @@ function NewEntryPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>{quantityLabel}</Label>
-              <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
-            </div>
+            {!isOthers && (
+              <div className="space-y-1.5">
+                <Label>{quantityLabel}</Label>
+                <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+              </div>
+            )}
             {isOthers && (
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>ইটের ধরনের নাম লিখুন</Label>
@@ -365,7 +309,6 @@ function NewEntryPage() {
           </CardContent>
         </Card>
 
-        {/* Amount + advance — visible to Admins only. Managers do not see prices. */}
         {isAdmin ? (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">মূল্য</CardTitle></CardHeader>
@@ -417,7 +360,6 @@ function NewEntryPage() {
               </div>
             </CardContent>
           </Card>
-
         )}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -442,10 +384,12 @@ function AddCustomerDialog({ onCreated, onClose }: { onCreated: (c: { id: string
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { toast.error("নাম দিন"); return; }
+    if (!phone.trim()) { toast.error("মোবাইল নাম্বার দিন"); return; }
+    if (!address.trim()) { toast.error("ঠিকানা দিন"); return; }
     setBusy(true);
     const { data, error } = await supabase
       .from("customers")
-      .insert({ name: name.trim(), phone: phone || null, address: address || null, created_by: me?.user.id ?? null })
+      .insert({ name: name.trim(), phone: phone.trim(), address: address.trim(), created_by: me?.user.id ?? null })
       .select("id")
       .single();
     setBusy(false);
@@ -459,16 +403,16 @@ function AddCustomerDialog({ onCreated, onClose }: { onCreated: (c: { id: string
       <DialogHeader><DialogTitle>নতুন গ্রাহক যোগ করুন</DialogTitle></DialogHeader>
       <form onSubmit={submit} className="space-y-3">
         <div className="space-y-1.5">
-          <Label>নাম</Label>
+          <Label>নাম *</Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
         </div>
         <div className="space-y-1.5">
-          <Label>মোবাইল</Label>
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" />
+          <Label>মোবাইল *</Label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" required />
         </div>
         <div className="space-y-1.5">
-          <Label>ঠিকানা</Label>
-          <Textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} />
+          <Label>ঠিকানা *</Label>
+          <Textarea rows={2} value={address} onChange={(e) => setAddress(e.target.value)} required />
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>বাতিল</Button>
