@@ -109,6 +109,7 @@ export type Database = {
           challan_no: string
           created_at: string
           created_by: string
+          custom_brick_name: string | null
           customer_id: string
           driver_name: string | null
           id: string
@@ -129,6 +130,7 @@ export type Database = {
           challan_no: string
           created_at?: string
           created_by: string
+          custom_brick_name?: string | null
           customer_id: string
           driver_name?: string | null
           id?: string
@@ -149,6 +151,7 @@ export type Database = {
           challan_no?: string
           created_at?: string
           created_by?: string
+          custom_brick_name?: string | null
           customer_id?: string
           driver_name?: string | null
           id?: string

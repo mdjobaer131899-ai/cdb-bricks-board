@@ -24,6 +24,20 @@ export const Route = createFileRoute("/_authenticated/entries/new")({
   component: NewEntryPage,
 });
 
+// Canonical display order for brick types
+const BRICK_ORDER = [
+  "১ নং ইট",
+  "২ নং ইট",
+  "পিকেট",
+  "১ নং আদলা",
+  "২ নং আদলা",
+  "মিক্সার আদলা",
+  "অন্যান্য",
+];
+
+const ADLA_NAMES = new Set(["১ নং আদলা", "২ নং আদলা", "মিক্সার আদলা"]);
+const OTHERS_NAME = "অন্যান্য";
+
 async function generateNextChallanNo(): Promise<string> {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -52,6 +66,18 @@ function NewEntryPage() {
   const customersQ = useQuery({ queryKey: ["customers-all"], queryFn: fetchAllCustomers });
   const bricksQ = useQuery({ queryKey: ["brick-types-active"], queryFn: fetchActiveBrickTypes });
 
+  const orderedBricks = useMemo(() => {
+    const list = bricksQ.data ?? [];
+    return [...list].sort((a, b) => {
+      const ia = BRICK_ORDER.indexOf(a.name);
+      const ib = BRICK_ORDER.indexOf(b.name);
+      if (ia === -1 && ib === -1) return a.name.localeCompare(b.name);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+  }, [bricksQ.data]);
+
   const [challanNo, setChallanNo] = useState("");
   const [saleDate, setSaleDate] = useState(isoDate(new Date()));
   const [customerId, setCustomerId] = useState("");
@@ -59,6 +85,7 @@ function NewEntryPage() {
   const [driverName, setDriverName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [brickTypeId, setBrickTypeId] = useState("");
+  const [customBrickName, setCustomBrickName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
   const [isAdvance, setIsAdvance] = useState(false);
@@ -70,12 +97,16 @@ function NewEntryPage() {
     generateNextChallanNo().then(setChallanNo);
   }, []);
 
+  const selectedBrick = orderedBricks.find((b) => b.id === brickTypeId);
+  const isAdla = selectedBrick ? ADLA_NAMES.has(selectedBrick.name) : false;
+  const isOthers = selectedBrick?.name === OTHERS_NAME;
+  const quantityLabel = isAdla ? "মোট পরিমাণ (ফুট) / Total Quantity (Feet)" : "মোট ইট (পিস)";
+
   useEffect(() => {
-    if (brickTypeId) {
-      const bt = bricksQ.data?.find((b) => b.id === brickTypeId);
-      if (bt && !isAdvance) setUnitPrice(String(bt.default_unit_price));
+    if (isAdmin && selectedBrick && !isAdvance && !isOthers) {
+      setUnitPrice(String(selectedBrick.default_unit_price));
     }
-  }, [brickTypeId, bricksQ.data, isAdvance]);
+  }, [brickTypeId, isAdmin, isAdvance, isOthers, selectedBrick]);
 
   const totalAmount = useMemo(() => {
     if (isAdvance) return 0;
@@ -91,18 +122,27 @@ function NewEntryPage() {
       toast.error("সকল প্রয়োজনীয় তথ্য পূরণ করুন");
       return;
     }
-    if (!isAdvance && !unitPrice) {
+    if (isOthers && !customBrickName.trim()) {
+      toast.error("ইটের ধরনের নাম লিখুন");
+      return;
+    }
+    if (isAdmin && !isAdvance && !unitPrice) {
       toast.error("একক মূল্য দিন বা অগ্রিম চালান নির্বাচন করুন");
       return;
     }
     setBusy(true);
+    // Managers never set price — admins fill it during approval.
+    const finalUnitPrice = isAdmin && !isAdvance ? Number(unitPrice) : 0;
+    const finalTotal = isAdmin && !isAdvance ? totalAmount : 0;
+
     const { error } = await supabase.from("sales_entries").insert({
       challan_no: challanNo.trim(),
       customer_id: customerId,
       brick_type_id: brickTypeId,
+      custom_brick_name: isOthers ? customBrickName.trim() : null,
       quantity: Number(quantity),
-      unit_price: isAdvance ? 0 : Number(unitPrice),
-      total_amount: totalAmount,
+      unit_price: finalUnitPrice,
+      total_amount: finalTotal,
       sale_type: isAdvance ? "advance" : "regular",
       status: "pending",
       sale_date: saleDate,
@@ -241,60 +281,98 @@ function NewEntryPage() {
               <Select value={brickTypeId} onValueChange={setBrickTypeId}>
                 <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
                 <SelectContent>
-                  {(bricksQ.data ?? []).map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.name} — ৳{bn(b.default_unit_price)}</SelectItem>
+                  {orderedBricks.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name}
+                      {isAdmin && b.name !== OTHERS_NAME && b.default_unit_price > 0
+                        ? ` — ৳${bn(b.default_unit_price)}`
+                        : ""}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>মোট ইট (পিস)</Label>
-              <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+              <Label>{quantityLabel}</Label>
+              <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
             </div>
+            {isOthers && (
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>ইটের ধরনের নাম লিখুন</Label>
+                <Input
+                  value={customBrickName}
+                  onChange={(e) => setCustomBrickName(e.target.value)}
+                  placeholder="যেমন: বিশেষ অর্ডার"
+                  required
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Amount + advance */}
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">মূল্য</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <label className="flex items-center gap-2 rounded-md border border-dashed p-3 cursor-pointer hover:bg-muted/40">
-              <Checkbox
-                checked={isAdvance}
-                onCheckedChange={(v) => {
-                  const next = Boolean(v);
-                  setIsAdvance(next);
-                  if (next) setUnitPrice("0");
-                }}
-              />
-              <div>
-                <div className="text-sm font-medium">অগ্রিম চালান / Advance Delivery</div>
-                <div className="text-xs text-muted-foreground">পরিমাণ ০ হিসেবে সংরক্ষিত হবে</div>
-              </div>
-            </label>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>একক মূল্য (৳)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={unitPrice}
-                  onChange={(e) => setUnitPrice(e.target.value)}
-                  disabled={isAdvance}
+        {/* Amount + advance — visible to Admins only. Managers do not see prices. */}
+        {isAdmin ? (
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">মূল্য</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <label className="flex items-center gap-2 rounded-md border border-dashed p-3 cursor-pointer hover:bg-muted/40">
+                <Checkbox
+                  checked={isAdvance}
+                  onCheckedChange={(v) => {
+                    const next = Boolean(v);
+                    setIsAdvance(next);
+                    if (next) setUnitPrice("0");
+                  }}
                 />
+                <div>
+                  <div className="text-sm font-medium">অগ্রিম চালান / Advance Delivery</div>
+                  <div className="text-xs text-muted-foreground">পরিমাণ ০ হিসেবে সংরক্ষিত হবে</div>
+                </div>
+              </label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>একক মূল্য (৳)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={unitPrice}
+                    onChange={(e) => setUnitPrice(e.target.value)}
+                    disabled={isAdvance}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>মোট পরিমাণ (৳)</Label>
+                  <Input value={bn(totalAmount)} disabled className="font-semibold text-primary" />
+                </div>
               </div>
               <div className="space-y-1.5">
-                <Label>মোট পরিমাণ (৳)</Label>
-                <Input value={bn(totalAmount)} disabled className="font-semibold text-primary" />
+                <Label>মন্তব্য (ঐচ্ছিক)</Label>
+                <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>মন্তব্য (ঐচ্ছিক)</Label>
-              <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">অতিরিক্ত তথ্য</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <label className="flex items-center gap-2 rounded-md border border-dashed p-3 cursor-pointer hover:bg-muted/40">
+                <Checkbox
+                  checked={isAdvance}
+                  onCheckedChange={(v) => setIsAdvance(Boolean(v))}
+                />
+                <div>
+                  <div className="text-sm font-medium">অগ্রিম চালান / Advance Delivery</div>
+                  <div className="text-xs text-muted-foreground">এডমিন অনুমোদনের সময় মূল্য নির্ধারণ করবেন</div>
+                </div>
+              </label>
+              <div className="space-y-1.5">
+                <Label>মন্তব্য (ঐচ্ছিক)</Label>
+                <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" onClick={() => navigate({ to: "/challans" })}>বাতিল</Button>
