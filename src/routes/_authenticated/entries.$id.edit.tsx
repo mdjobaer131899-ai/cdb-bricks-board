@@ -104,8 +104,7 @@ function EditEntryPage() {
 
   const canEdit =
     !!entry &&
-    entry.status === "pending" &&
-    (isAdmin || entry.created_by === me?.user.id);
+    (isAdmin || (entry.status === "pending" && entry.created_by === me?.user.id));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -182,7 +181,7 @@ function EditEntryPage() {
       <div className="mx-auto max-w-xl space-y-3 p-6 text-center">
         <h2 className="text-lg font-semibold">এই এন্ট্রি এডিট করা যাবে না</h2>
         <p className="text-sm text-muted-foreground">
-          অনুমোদিত বা প্রত্যাখ্যাত এন্ট্রি পরিবর্তন করা যায় না।
+          এই এন্ট্রি পরিবর্তন করার অনুমতি নেই।
         </p>
         <Button variant="outline" onClick={() => navigate({ to: "/challans" })}>ফিরে যান</Button>
       </div>

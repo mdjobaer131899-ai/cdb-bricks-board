@@ -69,7 +69,7 @@ export function RecentSalesTable({
                 : entries.length === 0 ? (
                   <TableRow><TableCell colSpan={colCount} className="py-10 text-center text-sm text-muted-foreground">কোনো এন্ট্রি পাওয়া যায়নি।</TableCell></TableRow>
                 ) : entries.slice(0, limit).map((e) => {
-                  const canEdit = e.status === "pending" && (isAdmin || e.created_by === currentUserId);
+                  const canEdit = isAdmin || (e.status === "pending" && e.created_by === currentUserId);
                   return (
                     <TableRow key={e.id} className="hover:bg-muted/40">
                       <TableCell className="font-mono text-xs font-semibold">{e.challan_no}</TableCell>

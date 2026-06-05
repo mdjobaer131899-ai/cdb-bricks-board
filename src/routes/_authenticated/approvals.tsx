@@ -5,7 +5,7 @@ import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -29,8 +29,8 @@ function ApprovalsPage() {
   const { data: me } = useCurrentUser();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirm, setConfirm] = useState<{ ids: string[]; action: Pending } | null>(null);
+  const [prices, setPrices] = useState<Record<string, string>>({});
+  const [confirm, setConfirm] = useState<{ id: string; action: Pending } | null>(null);
 
   const q = useQuery({
     queryKey: ["sales", "pending-all"],
@@ -41,41 +41,51 @@ function ApprovalsPage() {
   });
 
   const rows = useMemo(() => q.data ?? [], [q.data]);
-  const allChecked = rows.length > 0 && selected.size === rows.length;
-  const someChecked = selected.size > 0 && !allChecked;
 
   if (me && me.role !== "admin") {
     return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">এই পৃষ্ঠা শুধুমাত্র অ্যাডমিনদের জন্য।</CardContent></Card>;
   }
 
-  function toggleAll(v: boolean) {
-    setSelected(v ? new Set(rows.map((r) => r.id)) : new Set());
-  }
-  function toggleOne(id: string, v: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (v) next.add(id); else next.delete(id);
-      return next;
-    });
+  function setPrice(id: string, v: string) {
+    setPrices((p) => ({ ...p, [id]: v }));
   }
 
-  async function performAction(ids: string[], action: Pending) {
-    if (!me || ids.length === 0) return;
+  async function performAction(id: string, action: Pending) {
+    if (!me) return;
+    const row = rows.find((r) => r.id === id);
+    if (!row) return;
+
     setBusy(true);
-    const { error } = await supabase.from("sales_entries").update({
-      status: action,
-      approved_by: me.user.id,
-      approved_at: new Date().toISOString(),
-    }).in("id", ids);
+    let error: { message: string } | null = null;
+    if (action === "approved") {
+      const raw = prices[id] ?? String(row.unit_price ?? "");
+      const unit = Number(raw);
+      if (!unit || unit <= 0) {
+        setBusy(false);
+        setConfirm(null);
+        toast.error(`চালান ${row.challan_no}: একক মূল্য দিন`);
+        return;
+      }
+      const res = await supabase.from("sales_entries").update({
+        status: "approved",
+        approved_by: me.user.id,
+        approved_at: new Date().toISOString(),
+        unit_price: unit,
+        total_amount: unit * Number(row.quantity),
+      }).eq("id", id);
+      error = res.error;
+    } else {
+      const res = await supabase.from("sales_entries").update({
+        status: "rejected",
+        approved_by: me.user.id,
+        approved_at: new Date().toISOString(),
+      }).eq("id", id);
+      error = res.error;
+    }
     setBusy(false);
     setConfirm(null);
     if (error) { toast.error(error.message); return; }
-    toast.success(
-      action === "approved"
-        ? `${bn(ids.length)} টি এন্ট্রি অনুমোদিত হয়েছে`
-        : `${bn(ids.length)} টি এন্ট্রি প্রত্যাখ্যাত হয়েছে`,
-    );
-    setSelected(new Set());
+    toast.success(action === "approved" ? `চালান ${row.challan_no} অনুমোদিত` : `চালান ${row.challan_no} প্রত্যাখ্যাত`);
     qc.invalidateQueries({ queryKey: ["sales"] });
   }
 
@@ -83,7 +93,7 @@ function ApprovalsPage() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold tracking-tight md:text-2xl">অনুমোদন হাব</h2>
-        <p className="text-sm text-muted-foreground">অপেক্ষমাণ এন্ট্রি অনুমোদন বা প্রত্যাখ্যান করুন</p>
+        <p className="text-sm text-muted-foreground">প্রতিটি এন্ট্রির একক মূল্য বসিয়ে অনুমোদন করুন</p>
       </div>
 
       <Card>
@@ -91,17 +101,6 @@ function ApprovalsPage() {
           <div className="flex items-center gap-2">
             <CardTitle className="text-base">অপেক্ষমাণ এন্ট্রি</CardTitle>
             <Badge variant="outline">{bn(rows.length)} টি</Badge>
-            {selected.size > 0 && <Badge>{bn(selected.size)} নির্বাচিত</Badge>}
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="default" disabled={selected.size === 0 || busy}
-              onClick={() => setConfirm({ ids: Array.from(selected), action: "approved" })}>
-              <CheckCircle2 className="mr-2 h-4 w-4" /> Approve Selected
-            </Button>
-            <Button size="sm" variant="destructive" disabled={selected.size === 0 || busy}
-              onClick={() => setConfirm({ ids: Array.from(selected), action: "rejected" })}>
-              <XCircle className="mr-2 h-4 w-4" /> Reject Selected
-            </Button>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -109,19 +108,13 @@ function ApprovalsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={allChecked ? true : someChecked ? "indeterminate" : false}
-                      onCheckedChange={(v) => toggleAll(!!v)}
-                      aria-label="সব নির্বাচন"
-                    />
-                  </TableHead>
                   <TableHead>চালান #</TableHead>
                   <TableHead>তারিখ</TableHead>
                   <TableHead>গ্রাহক</TableHead>
                   <TableHead>ইটের ধরন</TableHead>
                   <TableHead className="text-right">পরিমাণ</TableHead>
-                  <TableHead className="text-right">টাকা</TableHead>
+                  <TableHead className="text-right w-32">একক মূল্য (৳)</TableHead>
+                  <TableHead className="text-right">মোট (৳)</TableHead>
                   <TableHead>তৈরি করেছেন</TableHead>
                   <TableHead className="text-right">অ্যাকশন</TableHead>
                 </TableRow>
@@ -133,38 +126,47 @@ function ApprovalsPage() {
                     ))
                   : rows.length === 0 ? (
                     <TableRow><TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">কোনো অপেক্ষমাণ এন্ট্রি নেই 🎉</TableCell></TableRow>
-                  ) : rows.map((r) => (
-                    <TableRow key={r.id} data-state={selected.has(r.id) ? "selected" : undefined}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selected.has(r.id)}
-                          onCheckedChange={(v) => toggleOne(r.id, !!v)}
-                          aria-label="নির্বাচন"
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{r.challan_no}</TableCell>
-                      <TableCell className="text-xs">{bnDate(r.sale_date)}</TableCell>
-                      <TableCell className="font-medium">{r.customer?.name ?? "—"}</TableCell>
-                      <TableCell className="text-muted-foreground">{r.brick_type?.name ?? "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">{bn(r.quantity)}</TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold">৳ {bn(r.total_amount)}</TableCell>
-                      <TableCell className="text-muted-foreground text-xs">{r.manager_name}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button size="sm" variant="outline" className="h-8 text-success border-success/40 hover:bg-success/10"
-                            disabled={busy}
-                            onClick={() => setConfirm({ ids: [r.id], action: "approved" })}>
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-8 text-destructive border-destructive/40 hover:bg-destructive/10"
-                            disabled={busy}
-                            onClick={() => setConfirm({ ids: [r.id], action: "rejected" })}>
-                            <XCircle className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  ) : rows.map((r) => {
+                    const raw = prices[r.id] ?? (r.unit_price ? String(r.unit_price) : "");
+                    const unit = Number(raw) || 0;
+                    const total = unit * Number(r.quantity);
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-mono text-xs">{r.challan_no}</TableCell>
+                        <TableCell className="text-xs">{bnDate(r.sale_date)}</TableCell>
+                        <TableCell className="font-medium">{r.customer?.name ?? "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{r.brick_type?.name ?? "—"}</TableCell>
+                        <TableCell className="text-right tabular-nums">{bn(r.quantity)}</TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            className="h-8 text-right tabular-nums"
+                            value={raw}
+                            onChange={(e) => setPrice(r.id, e.target.value)}
+                            placeholder="০"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold">৳ {bn(total)}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{r.manager_name}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="outline" className="h-8 text-success border-success/40 hover:bg-success/10"
+                              disabled={busy || unit <= 0}
+                              onClick={() => setConfirm({ id: r.id, action: "approved" })}>
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 text-destructive border-destructive/40 hover:bg-destructive/10"
+                              disabled={busy}
+                              onClick={() => setConfirm({ id: r.id, action: "rejected" })}>
+                              <XCircle className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
               </TableBody>
             </Table>
           </div>
@@ -178,13 +180,15 @@ function ApprovalsPage() {
               {confirm?.action === "approved" ? "অনুমোদন নিশ্চিত করুন" : "প্রত্যাখ্যান নিশ্চিত করুন"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {confirm ? `${bn(confirm.ids.length)} টি এন্ট্রি ${confirm.action === "approved" ? "অনুমোদিত" : "প্রত্যাখ্যাত"} হবে। এই কাজটি স্থায়ী।` : ""}
+              {confirm?.action === "approved"
+                ? "এই এন্ট্রিটি অনুমোদিত হবে এবং একক মূল্য সংরক্ষিত হবে।"
+                : "এই এন্ট্রিটি প্রত্যাখ্যাত হবে।"}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>বাতিল</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); if (confirm) performAction(confirm.ids, confirm.action); }}
+              onClick={(e) => { e.preventDefault(); if (confirm) performAction(confirm.id, confirm.action); }}
               disabled={busy}
               className={confirm?.action === "rejected" ? "bg-destructive hover:bg-destructive/90" : ""}
             >
