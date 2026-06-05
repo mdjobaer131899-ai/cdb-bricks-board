@@ -9,154 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as ReportsRouteImport } from './routes/reports'
-import { Route as CustomersRouteImport } from './routes/customers'
-import { Route as ChallansRouteImport } from './routes/challans'
-import { Route as ApprovalsRouteImport } from './routes/approvals'
-import { Route as IndexRouteImport } from './routes/index'
 
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReportsRoute = ReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CustomersRoute = CustomersRouteImport.update({
-  id: '/customers',
-  path: '/customers',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChallansRoute = ChallansRouteImport.update({
-  id: '/challans',
-  path: '/challans',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApprovalsRoute = ApprovalsRouteImport.update({
-  id: '/approvals',
-  path: '/approvals',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-
-export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
-  '/challans': typeof ChallansRoute
-  '/customers': typeof CustomersRoute
-  '/reports': typeof ReportsRoute
-  '/settings': typeof SettingsRoute
-}
-export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
-  '/challans': typeof ChallansRoute
-  '/customers': typeof CustomersRoute
-  '/reports': typeof ReportsRoute
-  '/settings': typeof SettingsRoute
-}
+export interface FileRoutesByFullPath {}
+export interface FileRoutesByTo {}
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
-  '/challans': typeof ChallansRoute
-  '/customers': typeof CustomersRoute
-  '/reports': typeof ReportsRoute
-  '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/approvals'
-    | '/challans'
-    | '/customers'
-    | '/reports'
-    | '/settings'
+  fullPaths: never
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/approvals' | '/challans' | '/customers' | '/reports' | '/settings'
-  id:
-    | '__root__'
-    | '/'
-    | '/approvals'
-    | '/challans'
-    | '/customers'
-    | '/reports'
-    | '/settings'
+  to: never
+  id: '__root__'
   fileRoutesById: FileRoutesById
 }
-export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  ApprovalsRoute: typeof ApprovalsRoute
-  ChallansRoute: typeof ChallansRoute
-  CustomersRoute: typeof CustomersRoute
-  ReportsRoute: typeof ReportsRoute
-  SettingsRoute: typeof SettingsRoute
-}
+export interface RootRouteChildren {}
 
 declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reports': {
-      id: '/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof ReportsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/customers': {
-      id: '/customers'
-      path: '/customers'
-      fullPath: '/customers'
-      preLoaderRoute: typeof CustomersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/challans': {
-      id: '/challans'
-      path: '/challans'
-      fullPath: '/challans'
-      preLoaderRoute: typeof ChallansRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/approvals': {
-      id: '/approvals'
-      path: '/approvals'
-      fullPath: '/approvals'
-      preLoaderRoute: typeof ApprovalsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-  }
+  interface FileRoutesByPath {}
 }
 
-const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  ApprovalsRoute: ApprovalsRoute,
-  ChallansRoute: ChallansRoute,
-  CustomersRoute: CustomersRoute,
-  ReportsRoute: ReportsRoute,
-  SettingsRoute: SettingsRoute,
-}
+const rootRouteChildren: RootRouteChildren = {}
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
