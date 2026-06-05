@@ -1,13 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, CheckCircle2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -77,6 +81,8 @@ function EditEntryPage() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     const e = entryQ.data;
@@ -163,6 +169,70 @@ function EditEntryPage() {
     qc.invalidateQueries({ queryKey: ["sales-entry", id] });
     navigate({ to: "/challans" });
   }
+
+  async function handleApprove() {
+    if (!entry || !me || !isAdmin) return;
+    const unit = Number(unitPrice) || 0;
+    if (unit <= 0) {
+      toast.error("একক মূল্য দিন");
+      setConfirmApprove(false);
+      return;
+    }
+    setBusy(true);
+    // Save edited fields first (customer + entry), then approve.
+    if (entry.customer_id) {
+      await supabase
+        .from("customers")
+        .update({ name: customerName.trim(), phone: customerPhone.trim() || null })
+        .eq("id", entry.customer_id);
+    }
+    const qty = Number(quantity) || 0;
+    const { error: upErr } = await supabase
+      .from("sales_entries")
+      .update({
+        challan_no: challanNo.trim(),
+        sale_date: saleDate,
+        brick_type_id: brickTypeId,
+        custom_brick_name: isOthers ? customBrickName.trim() : null,
+        quantity: qty,
+        driver_name: driverName || null,
+        vehicle_number: vehicleNumber || null,
+        notes: notes || null,
+      })
+      .eq("id", entry.id);
+    if (upErr) { setBusy(false); setConfirmApprove(false); toast.error(upErr.message); return; }
+
+    const { error } = await supabase
+      .from("sales_entries")
+      .update({
+        status: "approved",
+        approved_by: me.user.id,
+        approved_at: new Date().toISOString(),
+        unit_price: unit,
+        total_amount: unit * qty,
+      })
+      .eq("id", entry.id);
+    setBusy(false);
+    setConfirmApprove(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`চালান ${entry.challan_no} অনুমোদিত`);
+    qc.invalidateQueries({ queryKey: ["sales"] });
+    navigate({ to: "/approvals" });
+  }
+
+  async function handleDelete() {
+    if (!entry) return;
+    setBusy(true);
+    const { error } = await supabase.from("sales_entries").delete().eq("id", entry.id);
+    setBusy(false);
+    setConfirmDelete(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`চালান ${entry.challan_no} মুছে ফেলা হয়েছে`);
+    qc.invalidateQueries({ queryKey: ["sales"] });
+    navigate({ to: isAdmin && entry.status === "pending" ? "/approvals" : "/challans" });
+  }
+
+
 
   if (meLoading || entryQ.isLoading) {
     return (
@@ -282,14 +352,76 @@ function EditEntryPage() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:flex-wrap">
           <Button type="button" variant="outline" onClick={() => navigate({ to: "/challans" })}>বাতিল</Button>
-          <Button type="submit" disabled={busy}>
+          {isAdmin && (
+            <Button
+              type="button"
+              variant="outline"
+              className="text-destructive border-destructive/40 hover:bg-destructive/10"
+              disabled={busy}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> ডিলেট
+            </Button>
+          )}
+          <Button type="submit" disabled={busy} variant="secondary">
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            পরিবর্তন সংরক্ষণ করুন
+            পরিবর্তন সংরক্ষণ
           </Button>
+          {isAdmin && entry.status === "pending" && (
+            <Button
+              type="button"
+              disabled={busy || !(Number(unitPrice) > 0)}
+              onClick={() => setConfirmApprove(true)}
+              className="bg-success text-success-foreground hover:bg-success/90"
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" /> কনফার্ম ও অনুমোদন
+            </Button>
+          )}
         </div>
       </form>
+
+      <AlertDialog open={confirmApprove} onOpenChange={(o) => !o && setConfirmApprove(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>অনুমোদন নিশ্চিত করুন</AlertDialogTitle>
+            <AlertDialogDescription>
+              চালান <span className="font-semibold">{entry.challan_no}</span> অনুমোদিত হবে এবং একক মূল্য সংরক্ষিত হবে।
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>বাতিল</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleApprove(); }}
+              disabled={busy}
+            >
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} অনুমোদন করুন
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>চালান মুছে ফেলবেন?</AlertDialogTitle>
+            <AlertDialogDescription>
+              চালান নং <span className="font-semibold">{entry.challan_no}</span> স্থায়ীভাবে মুছে যাবে।
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>বাতিল</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              disabled={busy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} মুছে ফেলুন
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

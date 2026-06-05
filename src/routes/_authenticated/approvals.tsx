@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
@@ -134,7 +134,15 @@ function ApprovalsPage() {
                       <TableRow key={r.id}>
                         <TableCell className="font-mono text-xs">{r.challan_no}</TableCell>
                         <TableCell className="text-xs">{bnDate(r.sale_date)}</TableCell>
-                        <TableCell className="font-medium">{r.customer?.name ?? "—"}</TableCell>
+                        <TableCell className="font-medium">
+                          <Link
+                            to="/entries/$id/edit"
+                            params={{ id: r.id }}
+                            className="text-primary underline-offset-2 hover:underline"
+                          >
+                            {r.customer?.name ?? "—"}
+                          </Link>
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{r.brick_type?.name ?? "—"}</TableCell>
                         <TableCell className="text-right tabular-nums">{bn(r.quantity)}</TableCell>
                         <TableCell className="text-right">
