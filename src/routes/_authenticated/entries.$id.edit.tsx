@@ -165,6 +165,7 @@ function EditEntryPage() {
     toast.success("এন্ট্রি আপডেট হয়েছে");
     qc.invalidateQueries({ queryKey: ["sales"] });
     qc.invalidateQueries({ queryKey: ["sales-entry", id] });
+    qc.invalidateQueries({ queryKey: ["customers-all"] });
     navigate({ to: "/challans" });
   }
 
@@ -215,6 +216,8 @@ function EditEntryPage() {
     if (error) { toast.error(error.message); return; }
     toast.success(`চালান ${entry.challan_no} অনুমোদিত`);
     qc.invalidateQueries({ queryKey: ["sales"] });
+    qc.invalidateQueries({ queryKey: ["sales-entry", id] });
+    qc.invalidateQueries({ queryKey: ["customers-all"] });
     navigate({ to: "/approvals" });
   }
 
@@ -227,6 +230,7 @@ function EditEntryPage() {
     if (error) { toast.error(error.message); return; }
     toast.success(`চালান ${entry.challan_no} মুছে ফেলা হয়েছে`);
     qc.invalidateQueries({ queryKey: ["sales"] });
+    qc.invalidateQueries({ queryKey: ["customers-all"] });
     navigate({ to: isAdmin && entry.status === "pending" ? "/approvals" : "/challans" });
   }
 
