@@ -1,16 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { CalendarIcon, FileDown, Loader2 } from "lucide-react";
+import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DateRangeFilter, type DateRange } from "@/components/date-range-filter";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchSales, type SaleRow } from "@/lib/sales-queries";
+import { fetchSales, fetchAllCustomers, type SaleRow } from "@/lib/sales-queries";
+import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate, isoDate } from "@/lib/format";
-import { printReport, escapeHtml } from "@/lib/print-report";
+import { exportReportPdf, type PdfColumn } from "@/lib/pdf-export";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({ meta: [{ title: "রিপোর্ট — CDB Bricks" }] }),
@@ -18,87 +25,142 @@ export const Route = createFileRoute("/_authenticated/reports")({
 });
 
 function ReportsPage() {
-  const [range, setRange] = useState<DateRange>({ from: new Date(Date.now() - 29 * 86400000), to: new Date() });
-  const from = isoDate(range.from);
-  const to = isoDate(range.to);
-  const q = useQuery({ queryKey: ["sales-report", from, to], queryFn: () => fetchSales({ from, to, limit: 1000 }) });
-  const sales = q.data ?? [];
-  const subtitle = `${bnDate(range.from)} — ${bnDate(range.to)}`;
-
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold tracking-tight md:text-2xl">রিপোর্ট সেন্টার</h2>
-        <p className="text-sm text-muted-foreground">বিক্রয় বিশ্লেষণ ও PDF/প্রিন্ট এক্সপোর্ট</p>
+        <p className="text-sm text-muted-foreground">বিক্রয় বিশ্লেষণ ও PDF এক্সপোর্ট</p>
       </div>
-      <DateRangeFilter value={range} onChange={setRange} />
-
       <Tabs defaultValue="daily">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="daily">দৈনিক বিক্রয়</TabsTrigger>
-          <TabsTrigger value="customer">গ্রাহকওয়ারী</TabsTrigger>
-          <TabsTrigger value="brick">ইটের ধরন</TabsTrigger>
-          <TabsTrigger value="manager">ম্যানেজার পারফরম্যান্স</TabsTrigger>
+          <TabsTrigger value="daily">দৈনিক</TabsTrigger>
+          <TabsTrigger value="range">তারিখ পরিসীমা</TabsTrigger>
+          <TabsTrigger value="customer">গ্রাহক সারাংশ</TabsTrigger>
+          <TabsTrigger value="advance">অগ্রিম চালান</TabsTrigger>
         </TabsList>
-        <TabsContent value="daily" className="mt-4"><DailyReport sales={sales} loading={q.isLoading} subtitle={subtitle} /></TabsContent>
-        <TabsContent value="customer" className="mt-4"><GroupedReport sales={sales} loading={q.isLoading} subtitle={subtitle} title="গ্রাহকওয়ারী বিক্রয়" keyName="customer" /></TabsContent>
-        <TabsContent value="brick" className="mt-4"><GroupedReport sales={sales} loading={q.isLoading} subtitle={subtitle} title="ইটের ধরন অনুযায়ী" keyName="brick" /></TabsContent>
-        <TabsContent value="manager" className="mt-4"><GroupedReport sales={sales} loading={q.isLoading} subtitle={subtitle} title="ম্যানেজার পারফরম্যান্স" keyName="manager" /></TabsContent>
+        <TabsContent value="daily" className="mt-4"><DailyReport /></TabsContent>
+        <TabsContent value="range" className="mt-4"><RangeReport /></TabsContent>
+        <TabsContent value="customer" className="mt-4"><CustomerReport /></TabsContent>
+        <TabsContent value="advance" className="mt-4"><AdvanceReport /></TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function LoadingTable() {
-  return <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>;
+function DatePicker({ value, onChange, label }: { value: Date; onChange: (d: Date) => void; label?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className={cn("gap-2 font-normal")}>
+          <CalendarIcon className="h-3.5 w-3.5" />
+          {label ? <span className="text-muted-foreground">{label}:</span> : null}
+          {format(value, "dd MMM yyyy")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar mode="single" selected={value} onSelect={(d) => d && (onChange(d), setOpen(false))} className="pointer-events-auto p-3" />
+      </PopoverContent>
+    </Popover>
+  );
 }
 
-function DailyReport({ sales, loading, subtitle }: { sales: SaleRow[]; loading: boolean; subtitle: string }) {
-  const rows = useMemo(() => {
-    const map = new Map<string, { date: string; challans: number; bricks: number; amount: number }>();
-    sales.filter((s) => s.status === "approved").forEach((s) => {
-      const k = s.sale_date;
-      const cur = map.get(k) ?? { date: k, challans: 0, bricks: 0, amount: 0 };
-      cur.challans += 1; cur.bricks += s.quantity; cur.amount += Number(s.total_amount);
-      map.set(k, cur);
+function LoadingTable() { return <div className="space-y-2 p-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>; }
+
+function useAdminName() {
+  const { data: me } = useCurrentUser();
+  return me?.fullName ?? "Admin";
+}
+
+async function downloadPdf(opts: Parameters<typeof exportReportPdf>[0]) {
+  try {
+    await exportReportPdf(opts);
+    toast.success("PDF তৈরি হয়েছে");
+  } catch (e) {
+    toast.error("PDF তৈরি ব্যর্থ: " + (e as Error).message);
+  }
+}
+
+/* ---------------- 1. Daily Report ---------------- */
+function DailyReport() {
+  const [date, setDate] = useState<Date>(new Date());
+  const [exporting, setExporting] = useState(false);
+  const admin = useAdminName();
+  const d = isoDate(date);
+  const q = useQuery({
+    queryKey: ["report-daily", d],
+    queryFn: () => fetchSales({ from: d, to: d, limit: 1000 }),
+  });
+  const sales = (q.data ?? []).filter((s) => s.status === "approved");
+  const totals = sales.reduce((t, s) => ({ challans: t.challans + 1, bricks: t.bricks + s.quantity, amount: t.amount + Number(s.total_amount) }), { challans: 0, bricks: 0, amount: 0 });
+
+  async function onExport() {
+    setExporting(true);
+    const columns: PdfColumn[] = [
+      { header: "Challan", dataKey: "challan_no" },
+      { header: "Customer", dataKey: "customer" },
+      { header: "Brick Type", dataKey: "brick" },
+      { header: "Qty", dataKey: "qty", align: "right" },
+      { header: "Rate", dataKey: "rate", align: "right" },
+      { header: "Amount", dataKey: "amount", align: "right" },
+    ];
+    const rows = sales.map((s) => ({
+      challan_no: s.challan_no,
+      customer: s.customer?.name ?? "—",
+      brick: s.brick_type?.name ?? "—",
+      qty: bn(s.quantity),
+      rate: bn(s.unit_price),
+      amount: "৳ " + bn(s.total_amount),
+    }));
+    await downloadPdf({
+      filename: `daily-report-${d}.pdf`,
+      reportTitle: "Daily Sales Report — দৈনিক বিক্রয় রিপোর্ট",
+      subtitle: `তারিখ: ${bnDate(date)}`,
+      adminName: admin,
+      columns, rows,
+      footerSummary: [
+        { label: "মোট চালান", value: bn(totals.challans) },
+        { label: "মোট ইট", value: bn(totals.bricks) },
+        { label: "মোট টাকা", value: "৳ " + bn(totals.amount) },
+      ],
     });
-    return Array.from(map.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
-  }, [sales]);
-
-  const totals = rows.reduce((t, r) => ({ challans: t.challans + r.challans, bricks: t.bricks + r.bricks, amount: t.amount + r.amount }), { challans: 0, bricks: 0, amount: 0 });
-
-  function onPrint() {
-    const body = `
-      <table><thead><tr><th>তারিখ</th><th class="right">চালান</th><th class="right">ইট</th><th class="right">মোট (৳)</th></tr></thead>
-      <tbody>${rows.map((r) => `<tr><td>${escapeHtml(bnDate(r.date))}</td><td class="right">${bn(r.challans)}</td><td class="right">${bn(r.bricks)}</td><td class="right">৳ ${bn(r.amount)}</td></tr>`).join("")}</tbody></table>
-      <div class="totals"><div class="row grand"><span>সর্বমোট</span><span>চালান ${bn(totals.challans)} · ইট ${bn(totals.bricks)} · ৳ ${bn(totals.amount)}</span></div></div>`;
-    printReport({ title: "দৈনিক বিক্রয় রিপোর্ট", subtitle, bodyHtml: body });
+    setExporting(false);
   }
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">দৈনিক বিক্রয়</CardTitle>
-        <Button size="sm" variant="outline" onClick={onPrint}><Printer className="mr-2 h-4 w-4" /> PDF / প্রিন্ট</Button>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+        <CardTitle className="text-base">দৈনিক বিক্রয় রিপোর্ট</CardTitle>
+        <div className="flex gap-2">
+          <DatePicker value={date} onChange={setDate} label="তারিখ" />
+          <Button size="sm" onClick={onExport} disabled={exporting || sales.length === 0}>
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} Export PDF
+          </Button>
+        </div>
       </CardHeader>
-      <CardContent>
-        {loading ? <LoadingTable /> : (
+      <CardContent className="p-0">
+        {q.isLoading ? <LoadingTable /> : (
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader><TableRow><TableHead>তারিখ</TableHead><TableHead className="text-right">চালান</TableHead><TableHead className="text-right">ইট</TableHead><TableHead className="text-right">মোট (৳)</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow>
+                <TableHead>চালান</TableHead><TableHead>গ্রাহক</TableHead><TableHead>ইটের ধরন</TableHead>
+                <TableHead className="text-right">পরিমাণ</TableHead><TableHead className="text-right">দর</TableHead><TableHead className="text-right">মোট</TableHead>
+              </TableRow></TableHeader>
               <TableBody>
-                {rows.length === 0 ? <TableRow><TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">কোনো তথ্য নেই</TableCell></TableRow>
-                  : rows.map((r) => (
-                  <TableRow key={r.date}>
-                    <TableCell>{bnDate(r.date)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{bn(r.challans)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{bn(r.bricks)}</TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold">৳ {bn(r.amount)}</TableCell>
+                {sales.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">কোনো তথ্য নেই</TableCell></TableRow>
+                : sales.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-mono text-xs">{s.challan_no}</TableCell>
+                    <TableCell className="font-medium">{s.customer?.name ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{s.brick_type?.name ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{bn(s.quantity)}</TableCell>
+                    <TableCell className="text-right tabular-nums">৳ {bn(s.unit_price)}</TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">৳ {bn(s.total_amount)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-            {rows.length > 0 && (
+            {sales.length > 0 && (
               <div className="border-t bg-muted/40 px-4 py-3 text-sm flex justify-between font-semibold">
                 <span>সর্বমোট</span>
                 <span>চালান {bn(totals.challans)} · ইট {bn(totals.bricks)} · ৳ {bn(totals.amount)}</span>
@@ -111,61 +173,311 @@ function DailyReport({ sales, loading, subtitle }: { sales: SaleRow[]; loading: 
   );
 }
 
-function GroupedReport({ sales, loading, subtitle, title, keyName }: { sales: SaleRow[]; loading: boolean; subtitle: string; title: string; keyName: "customer" | "brick" | "manager" }) {
-  const rows = useMemo(() => {
-    const map = new Map<string, { name: string; challans: number; bricks: number; amount: number }>();
-    sales.filter((s) => s.status === "approved").forEach((s) => {
-      const name = keyName === "customer" ? (s.customer?.name ?? "—") : keyName === "brick" ? (s.brick_type?.name ?? "—") : s.manager_name;
-      const cur = map.get(name) ?? { name, challans: 0, bricks: 0, amount: 0 };
-      cur.challans += 1; cur.bricks += s.quantity; cur.amount += Number(s.total_amount);
-      map.set(name, cur);
+/* ---------------- 2. Date Range Report ---------------- */
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-xl font-bold tabular-nums mt-1">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RangeReport() {
+  const [from, setFrom] = useState<Date>(new Date(Date.now() - 29 * 86400000));
+  const [to, setTo] = useState<Date>(new Date());
+  const [exporting, setExporting] = useState(false);
+  const admin = useAdminName();
+  const fromS = isoDate(from), toS = isoDate(to);
+  const q = useQuery({
+    queryKey: ["report-range", fromS, toS],
+    queryFn: () => fetchSales({ from: fromS, to: toS, limit: 2000 }),
+  });
+  const sales = (q.data ?? []).filter((s) => s.status === "approved");
+  const totals = sales.reduce((t, s) => ({ challans: t.challans + 1, bricks: t.bricks + s.quantity, amount: t.amount + Number(s.total_amount), customers: t.customers.add(s.customer?.id ?? "") }),
+    { challans: 0, bricks: 0, amount: 0, customers: new Set<string>() });
+
+  async function onExport() {
+    setExporting(true);
+    const columns: PdfColumn[] = [
+      { header: "Date", dataKey: "date" },
+      { header: "Challan", dataKey: "challan_no" },
+      { header: "Customer", dataKey: "customer" },
+      { header: "Brick", dataKey: "brick" },
+      { header: "Qty", dataKey: "qty", align: "right" },
+      { header: "Amount", dataKey: "amount", align: "right" },
+    ];
+    const rows = sales.map((s) => ({
+      date: bnDate(s.sale_date),
+      challan_no: s.challan_no,
+      customer: s.customer?.name ?? "—",
+      brick: s.brick_type?.name ?? "—",
+      qty: bn(s.quantity),
+      amount: "৳ " + bn(s.total_amount),
+    }));
+    await downloadPdf({
+      filename: `range-report-${fromS}_to_${toS}.pdf`,
+      reportTitle: "Date Range Sales Report — তারিখ পরিসীমা রিপোর্ট",
+      subtitle: `${bnDate(from)} — ${bnDate(to)}`,
+      adminName: admin, columns, rows,
+      footerSummary: [
+        { label: "মোট চালান", value: bn(totals.challans) },
+        { label: "মোট ইট", value: bn(totals.bricks) },
+        { label: "মোট গ্রাহক", value: bn(totals.customers.size) },
+        { label: "মোট টাকা", value: "৳ " + bn(totals.amount) },
+      ],
     });
-    return Array.from(map.values()).sort((a, b) => b.amount - a.amount);
-  }, [sales, keyName]);
-
-  const totals = rows.reduce((t, r) => ({ challans: t.challans + r.challans, bricks: t.bricks + r.bricks, amount: t.amount + r.amount }), { challans: 0, bricks: 0, amount: 0 });
-  const heading = keyName === "customer" ? "গ্রাহক" : keyName === "brick" ? "ইটের ধরন" : "ম্যানেজার";
-
-  function onPrint() {
-    const body = `
-      <table><thead><tr><th>${heading}</th><th class="right">চালান</th><th class="right">ইট</th><th class="right">মোট (৳)</th></tr></thead>
-      <tbody>${rows.map((r) => `<tr><td>${escapeHtml(r.name)}</td><td class="right">${bn(r.challans)}</td><td class="right">${bn(r.bricks)}</td><td class="right">৳ ${bn(r.amount)}</td></tr>`).join("")}</tbody></table>
-      <div class="totals"><div class="row grand"><span>সর্বমোট</span><span>চালান ${bn(totals.challans)} · ইট ${bn(totals.bricks)} · ৳ ${bn(totals.amount)}</span></div></div>`;
-    printReport({ title, subtitle, bodyHtml: body });
+    setExporting(false);
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">{title}</CardTitle>
-        <Button size="sm" variant="outline" onClick={onPrint}><Printer className="mr-2 h-4 w-4" /> PDF / প্রিন্ট</Button>
-      </CardHeader>
-      <CardContent>
-        {loading ? <LoadingTable /> : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader><TableRow><TableHead>{heading}</TableHead><TableHead className="text-right">চালান</TableHead><TableHead className="text-right">ইট</TableHead><TableHead className="text-right">মোট (৳)</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {rows.length === 0 ? <TableRow><TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">কোনো তথ্য নেই</TableCell></TableRow>
-                  : rows.map((r) => (
-                  <TableRow key={r.name}>
-                    <TableCell className="font-medium">{r.name}</TableCell>
-                    <TableCell className="text-right tabular-nums">{bn(r.challans)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{bn(r.bricks)}</TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold">৳ {bn(r.amount)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {rows.length > 0 && (
-              <div className="border-t bg-muted/40 px-4 py-3 text-sm flex justify-between font-semibold">
-                <span>সর্বমোট</span>
-                <span>চালান {bn(totals.challans)} · ইট {bn(totals.bricks)} · ৳ {bn(totals.amount)}</span>
-              </div>
-            )}
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-3 flex flex-wrap gap-2 items-center">
+          <DatePicker value={from} onChange={setFrom} label="From" />
+          <span className="text-muted-foreground">→</span>
+          <DatePicker value={to} onChange={setTo} label="To" />
+          <Button size="sm" className="ml-auto" onClick={onExport} disabled={exporting || sales.length === 0}>
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} Export PDF
+          </Button>
+        </CardContent>
+      </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard label="মোট চালান" value={bn(totals.challans)} />
+        <MetricCard label="মোট ইট" value={bn(totals.bricks)} />
+        <MetricCard label="মোট গ্রাহক" value={bn(totals.customers.size)} />
+        <MetricCard label="মোট টাকা" value={"৳ " + bn(totals.amount)} />
+      </div>
+      <Card>
+        <CardHeader><CardTitle className="text-base">বিস্তারিত তালিকা</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          {q.isLoading ? <LoadingTable /> : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead>তারিখ</TableHead><TableHead>চালান</TableHead><TableHead>গ্রাহক</TableHead>
+                  <TableHead>ইট</TableHead><TableHead className="text-right">পরিমাণ</TableHead><TableHead className="text-right">মোট</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {sales.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">কোনো তথ্য নেই</TableCell></TableRow>
+                  : sales.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="text-xs">{bnDate(s.sale_date)}</TableCell>
+                      <TableCell className="font-mono text-xs">{s.challan_no}</TableCell>
+                      <TableCell className="font-medium">{s.customer?.name ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{s.brick_type?.name ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{bn(s.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">৳ {bn(s.total_amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------- 3. Customer Summary Report ---------------- */
+function CustomerReport() {
+  const [customerId, setCustomerId] = useState<string>("");
+  const [exporting, setExporting] = useState(false);
+  const admin = useAdminName();
+  const cq = useQuery({ queryKey: ["customers-all"], queryFn: fetchAllCustomers });
+  const sq = useQuery({
+    queryKey: ["report-customer", customerId],
+    queryFn: () => fetchSales({ limit: 2000 }),
+    enabled: !!customerId,
+  });
+
+  const sales = useMemo(() => (sq.data ?? []).filter((s) => s.status === "approved" && s.customer?.id === customerId), [sq.data, customerId]);
+  const totalDeliveries = sales.length;
+  const totalAdvance = sales.filter((s) => s.sale_type === "advance").reduce((t, s) => t + s.quantity, 0);
+  const totalAmount = sales.reduce((t, s) => t + Number(s.total_amount), 0);
+
+  const perBrick = useMemo(() => {
+    const map = new Map<string, { name: string; bricks: number; amount: number }>();
+    sales.forEach((s) => {
+      const k = s.brick_type?.id ?? "—";
+      const cur = map.get(k) ?? { name: s.brick_type?.name ?? "—", bricks: 0, amount: 0 };
+      cur.bricks += s.quantity; cur.amount += Number(s.total_amount);
+      map.set(k, cur);
+    });
+    return Array.from(map.values()).sort((a, b) => b.bricks - a.bricks);
+  }, [sales]);
+
+  const customer = (cq.data ?? []).find((c) => c.id === customerId);
+
+  async function onExport() {
+    if (!customer) return;
+    setExporting(true);
+    const columns: PdfColumn[] = [
+      { header: "Brick Type", dataKey: "brick" },
+      { header: "Total Bricks", dataKey: "bricks", align: "right" },
+      { header: "Total Amount", dataKey: "amount", align: "right" },
+    ];
+    const rows = perBrick.map((p) => ({ brick: p.name, bricks: bn(p.bricks), amount: "৳ " + bn(p.amount) }));
+    await downloadPdf({
+      filename: `customer-${customer.name}.pdf`,
+      reportTitle: "Customer Summary Report — গ্রাহক সারাংশ",
+      subtitle: `${customer.name}${customer.phone ? " · " + customer.phone : ""}`,
+      adminName: admin, columns, rows,
+      footerSummary: [
+        { label: "মোট ডেলিভারি", value: bn(totalDeliveries) },
+        { label: "মোট অগ্রিম ইট", value: bn(totalAdvance) },
+        { label: "মোট টাকা", value: "৳ " + bn(totalAmount) },
+      ],
+    });
+    setExporting(false);
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-3 flex flex-wrap gap-2 items-center">
+          <Select value={customerId} onValueChange={setCustomerId}>
+            <SelectTrigger className="w-64 h-9"><SelectValue placeholder="গ্রাহক নির্বাচন করুন" /></SelectTrigger>
+            <SelectContent>
+              {(cq.data ?? []).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button size="sm" className="ml-auto" onClick={onExport} disabled={exporting || !customerId || sales.length === 0}>
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} Export PDF
+          </Button>
+        </CardContent>
+      </Card>
+
+      {!customerId ? (
+        <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">একজন গ্রাহক নির্বাচন করুন</CardContent></Card>
+      ) : sq.isLoading ? <Card><CardContent><LoadingTable /></CardContent></Card> : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <MetricCard label="মোট ডেলিভারি" value={bn(totalDeliveries)} />
+            <MetricCard label="মোট অগ্রিম ইট" value={bn(totalAdvance)} />
+            <MetricCard label="মোট টাকা" value={"৳ " + bn(totalAmount)} />
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">ইটের ধরন অনুযায়ী</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead>ইটের ধরন</TableHead>
+                    <TableHead className="text-right">মোট ইট</TableHead>
+                    <TableHead className="text-right">মোট টাকা</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {perBrick.length === 0 ? <TableRow><TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">কোনো তথ্য নেই</TableCell></TableRow>
+                    : perBrick.map((p) => (
+                      <TableRow key={p.name}>
+                        <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell className="text-right tabular-nums">{bn(p.bricks)}</TableCell>
+                        <TableCell className="text-right tabular-nums font-semibold">৳ {bn(p.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- 4. Advance Deliveries Report ---------------- */
+function AdvanceReport() {
+  const [from, setFrom] = useState<Date>(new Date(Date.now() - 89 * 86400000));
+  const [to, setTo] = useState<Date>(new Date());
+  const [exporting, setExporting] = useState(false);
+  const admin = useAdminName();
+  const fromS = isoDate(from), toS = isoDate(to);
+  const q = useQuery({
+    queryKey: ["report-advance", fromS, toS],
+    queryFn: () => fetchSales({ from: fromS, to: toS, limit: 2000 }),
+  });
+  const sales: SaleRow[] = (q.data ?? []).filter((s) => s.sale_type === "advance");
+  const totalBricks = sales.reduce((t, s) => t + s.quantity, 0);
+
+  async function onExport() {
+    setExporting(true);
+    const columns: PdfColumn[] = [
+      { header: "Date", dataKey: "date" },
+      { header: "Challan", dataKey: "challan_no" },
+      { header: "Customer", dataKey: "customer" },
+      { header: "Brick Type", dataKey: "brick" },
+      { header: "Qty", dataKey: "qty", align: "right" },
+      { header: "Status", dataKey: "status" },
+    ];
+    const rows = sales.map((s) => ({
+      date: bnDate(s.sale_date),
+      challan_no: s.challan_no,
+      customer: s.customer?.name ?? "—",
+      brick: s.brick_type?.name ?? "—",
+      qty: bn(s.quantity),
+      status: s.status,
+    }));
+    await downloadPdf({
+      filename: `advance-deliveries-${fromS}_to_${toS}.pdf`,
+      reportTitle: "Advance Deliveries Report — অগ্রিম চালান রিপোর্ট",
+      subtitle: `${bnDate(from)} — ${bnDate(to)}`,
+      adminName: admin, columns, rows,
+      footerSummary: [
+        { label: "মোট চালান", value: bn(sales.length) },
+        { label: "মোট অগ্রিম ইট", value: bn(totalBricks) },
+      ],
+    });
+    setExporting(false);
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-3 flex flex-wrap gap-2 items-center">
+          <DatePicker value={from} onChange={setFrom} label="From" />
+          <span className="text-muted-foreground">→</span>
+          <DatePicker value={to} onChange={setTo} label="To" />
+          <Button size="sm" className="ml-auto" onClick={onExport} disabled={exporting || sales.length === 0}>
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} Export PDF
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">অগ্রিম চালান তালিকা</CardTitle>
+          <Badge variant="outline">{bn(sales.length)} টি · {bn(totalBricks)} ইট</Badge>
+        </CardHeader>
+        <CardContent className="p-0">
+          {q.isLoading ? <LoadingTable /> : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader><TableRow>
+                  <TableHead>তারিখ</TableHead><TableHead>চালান</TableHead><TableHead>গ্রাহক</TableHead>
+                  <TableHead>ইট</TableHead><TableHead className="text-right">পরিমাণ</TableHead><TableHead>স্ট্যাটাস</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {sales.length === 0 ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">কোনো অগ্রিম চালান নেই</TableCell></TableRow>
+                  : sales.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell className="text-xs">{bnDate(s.sale_date)}</TableCell>
+                      <TableCell className="font-mono text-xs">{s.challan_no}</TableCell>
+                      <TableCell className="font-medium">{s.customer?.name ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{s.brick_type?.name ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{bn(s.quantity)}</TableCell>
+                      <TableCell><Badge variant={s.status === "approved" ? "default" : s.status === "pending" ? "secondary" : "destructive"}>{s.status}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
