@@ -1,4 +1,7 @@
+import { Link } from "@tanstack/react-router";
+import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,9 +14,23 @@ interface Props {
   title?: string;
   subtitle?: string;
   limit?: number;
+  currentUserId?: string;
+  isAdmin?: boolean;
+  onDelete?: (row: SaleRow) => void;
 }
 
-export function RecentSalesTable({ entries, loading, title = "সাম্প্রতিক বিক্রয় এন্ট্রি", subtitle = "শেষ ১০টি চালান", limit = 10 }: Props) {
+export function RecentSalesTable({
+  entries,
+  loading,
+  title = "সাম্প্রতিক বিক্রয় এন্ট্রি",
+  subtitle = "শেষ ১০টি চালান",
+  limit = 10,
+  currentUserId,
+  isAdmin,
+  onDelete,
+}: Props) {
+  const showActions = Boolean(onDelete);
+  const colCount = showActions ? 10 : 9;
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -37,20 +54,23 @@ export function RecentSalesTable({ entries, loading, title = "সাম্প্
                 <TableHead>স্ট্যাটাস</TableHead>
                 <TableHead className="hidden md:table-cell">ম্যানেজার</TableHead>
                 <TableHead className="hidden sm:table-cell">তারিখ</TableHead>
+                {showActions && <TableHead className="text-right">অ্যাকশন</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 9 }).map((__, j) => (
+                      {Array.from({ length: colCount }).map((__, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 : entries.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">কোনো এন্ট্রি পাওয়া যায়নি।</TableCell></TableRow>
-                ) : entries.slice(0, limit).map((e) => (
+                  <TableRow><TableCell colSpan={colCount} className="py-10 text-center text-sm text-muted-foreground">কোনো এন্ট্রি পাওয়া যায়নি।</TableCell></TableRow>
+                ) : entries.slice(0, limit).map((e) => {
+                  const canEdit = e.status === "pending" && (isAdmin || e.created_by === currentUserId);
+                  return (
                     <TableRow key={e.id} className="hover:bg-muted/40">
                       <TableCell className="font-mono text-xs font-semibold">{e.challan_no}</TableCell>
                       <TableCell className="font-medium">{e.customer?.name ?? "—"}</TableCell>
@@ -75,8 +95,33 @@ export function RecentSalesTable({ entries, loading, title = "সাম্প্
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-muted-foreground">{e.manager_name}</TableCell>
                       <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{bnDate(e.sale_date)}</TableCell>
+                      {showActions && (
+                        <TableCell className="text-right">
+                          {canEdit ? (
+                            <div className="flex justify-end gap-1">
+                              <Button asChild size="icon" variant="ghost" className="h-8 w-8">
+                                <Link to="/entries/$id/edit" params={{ id: e.id }} aria-label="এডিট">
+                                  <Pencil className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={() => onDelete?.(e)}
+                                aria-label="ডিলেট"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
-                  ))}
+                  );
+                })}
             </TableBody>
           </Table>
         </div>
@@ -84,3 +129,4 @@ export function RecentSalesTable({ entries, loading, title = "সাম্প্
     </Card>
   );
 }
+
