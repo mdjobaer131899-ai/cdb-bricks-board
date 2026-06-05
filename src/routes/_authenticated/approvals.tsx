@@ -56,12 +56,7 @@ function ApprovalsPage() {
     if (!row) return;
 
     setBusy(true);
-    const update: Record<string, any> = {
-      status: action,
-      approved_by: me.user.id,
-      approved_at: new Date().toISOString(),
-    };
-
+    let error: { message: string } | null = null;
     if (action === "approved") {
       const raw = prices[id] ?? String(row.unit_price ?? "");
       const unit = Number(raw);
@@ -71,11 +66,22 @@ function ApprovalsPage() {
         toast.error(`চালান ${row.challan_no}: একক মূল্য দিন`);
         return;
       }
-      update.unit_price = unit;
-      update.total_amount = unit * Number(row.quantity);
+      const res = await supabase.from("sales_entries").update({
+        status: "approved",
+        approved_by: me.user.id,
+        approved_at: new Date().toISOString(),
+        unit_price: unit,
+        total_amount: unit * Number(row.quantity),
+      }).eq("id", id);
+      error = res.error;
+    } else {
+      const res = await supabase.from("sales_entries").update({
+        status: "rejected",
+        approved_by: me.user.id,
+        approved_at: new Date().toISOString(),
+      }).eq("id", id);
+      error = res.error;
     }
-
-    const { error } = await supabase.from("sales_entries").update(update).eq("id", id);
     setBusy(false);
     setConfirm(null);
     if (error) { toast.error(error.message); return; }
