@@ -170,6 +170,70 @@ function EditEntryPage() {
     navigate({ to: "/challans" });
   }
 
+  async function handleApprove() {
+    if (!entry || !me || !isAdmin) return;
+    const unit = Number(unitPrice) || 0;
+    if (unit <= 0) {
+      toast.error("একক মূল্য দিন");
+      setConfirmApprove(false);
+      return;
+    }
+    setBusy(true);
+    // Save edited fields first (customer + entry), then approve.
+    if (entry.customer_id) {
+      await supabase
+        .from("customers")
+        .update({ name: customerName.trim(), phone: customerPhone.trim() || null })
+        .eq("id", entry.customer_id);
+    }
+    const qty = Number(quantity) || 0;
+    const { error: upErr } = await supabase
+      .from("sales_entries")
+      .update({
+        challan_no: challanNo.trim(),
+        sale_date: saleDate,
+        brick_type_id: brickTypeId,
+        custom_brick_name: isOthers ? customBrickName.trim() : null,
+        quantity: qty,
+        driver_name: driverName || null,
+        vehicle_number: vehicleNumber || null,
+        notes: notes || null,
+      })
+      .eq("id", entry.id);
+    if (upErr) { setBusy(false); setConfirmApprove(false); toast.error(upErr.message); return; }
+
+    const { error } = await supabase
+      .from("sales_entries")
+      .update({
+        status: "approved",
+        approved_by: me.user.id,
+        approved_at: new Date().toISOString(),
+        unit_price: unit,
+        total_amount: unit * qty,
+      })
+      .eq("id", entry.id);
+    setBusy(false);
+    setConfirmApprove(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`চালান ${entry.challan_no} অনুমোদিত`);
+    qc.invalidateQueries({ queryKey: ["sales"] });
+    navigate({ to: "/approvals" });
+  }
+
+  async function handleDelete() {
+    if (!entry) return;
+    setBusy(true);
+    const { error } = await supabase.from("sales_entries").delete().eq("id", entry.id);
+    setBusy(false);
+    setConfirmDelete(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`চালান ${entry.challan_no} মুছে ফেলা হয়েছে`);
+    qc.invalidateQueries({ queryKey: ["sales"] });
+    navigate({ to: isAdmin && entry.status === "pending" ? "/approvals" : "/challans" });
+  }
+
+
+
   if (meLoading || entryQ.isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
