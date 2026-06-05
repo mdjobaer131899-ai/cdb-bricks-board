@@ -42,7 +42,7 @@ function CustomersPage() {
   const [deleting, setDeleting] = useState<Customer | null>(null);
   const [busy, setBusy] = useState(false);
   const q = useQuery({ queryKey: ["customers-all"], queryFn: fetchAllCustomers });
-  const isAdmin = me?.role === "admin";
+  const canManage = !!me;
 
   async function handleDelete() {
     if (!deleting) return;
@@ -63,7 +63,7 @@ function CustomersPage() {
           <h2 className="text-xl font-bold tracking-tight md:text-2xl">গ্রাহক ব্যবস্থাপনা</h2>
           <p className="text-sm text-muted-foreground">সব গ্রাহকের তালিকা</p>
         </div>
-        {isAdmin && (
+        {canManage && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" /> নতুন গ্রাহক</Button></DialogTrigger>
             <DialogContent>
@@ -84,23 +84,23 @@ function CustomersPage() {
                   <TableHead>ফোন</TableHead>
                   <TableHead>ঠিকানা</TableHead>
                   <TableHead className="hidden sm:table-cell">যোগ হয়েছে</TableHead>
-                  {isAdmin && <TableHead className="text-right">অ্যাকশন</TableHead>}
+                  {canManage && <TableHead className="text-right">অ্যাকশন</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {q.isLoading
                   ? Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>{Array.from({ length: isAdmin ? 5 : 4 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
+                      <TableRow key={i}>{Array.from({ length: canManage ? 5 : 4 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
                     ))
                   : (q.data ?? []).length === 0 ? (
-                    <TableRow><TableCell colSpan={isAdmin ? 5 : 4} className="py-10 text-center text-sm text-muted-foreground">কোনো গ্রাহক নেই</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={canManage ? 5 : 4} className="py-10 text-center text-sm text-muted-foreground">কোনো গ্রাহক নেই</TableCell></TableRow>
                   ) : (q.data ?? []).map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="text-muted-foreground">{c.phone || "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-xs">{c.address || "—"}</TableCell>
                       <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{bnDate(c.created_at)}</TableCell>
-                      {isAdmin && (
+                      {canManage && (
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(c as Customer)}>
@@ -160,11 +160,15 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { toast.error("নাম দিন"); return; }
+    if (!isEdit) {
+      if (!phone.trim()) { toast.error("মোবাইল নাম্বার দিন"); return; }
+      if (!address.trim()) { toast.error("ঠিকানা দিন"); return; }
+    }
     setBusy(true);
     const payload = {
       name: name.trim(),
-      phone: phone || null,
-      address: address || null,
+      phone: phone.trim() || null,
+      address: address.trim() || null,
       notes: notes || null,
     };
     const { error } = isEdit
@@ -181,8 +185,8 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <div className="space-y-1.5"><Label>নাম *</Label><Input value={name} onChange={(e) => setName(e.target.value)} required /></div>
-      <div className="space-y-1.5"><Label>ফোন</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-      <div className="space-y-1.5"><Label>ঠিকানা</Label><Input value={address} onChange={(e) => setAddress(e.target.value)} /></div>
+      <div className="space-y-1.5"><Label>মোবাইল {!isEdit && "*"}</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" required={!isEdit} /></div>
+      <div className="space-y-1.5"><Label>ঠিকানা {!isEdit && "*"}</Label><Input value={address} onChange={(e) => setAddress(e.target.value)} required={!isEdit} /></div>
       <div className="space-y-1.5"><Label>মন্তব্য</Label><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
       <Button type="submit" className="w-full" disabled={busy}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} সংরক্ষণ</Button>
     </form>

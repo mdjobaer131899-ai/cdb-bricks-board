@@ -72,7 +72,7 @@ export function AdminDashboard() {
           )}
       </div>
 
-      <RecentSalesTable entries={sales} loading={loading} />
+      <RecentSalesTable entries={sales} loading={loading} isAdmin />
     </div>
   );
 }

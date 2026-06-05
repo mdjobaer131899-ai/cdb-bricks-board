@@ -30,7 +30,8 @@ export function RecentSalesTable({
   onDelete,
 }: Props) {
   const showActions = Boolean(onDelete);
-  const colCount = showActions ? 10 : 9;
+  const showAmount = isAdmin === true;
+  const colCount = (showActions ? 1 : 0) + (showAmount ? 9 : 8);
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -49,7 +50,7 @@ export function RecentSalesTable({
                 <TableHead>গ্রাহক</TableHead>
                 <TableHead>ইটের ধরন</TableHead>
                 <TableHead className="text-right">পরিমাণ</TableHead>
-                <TableHead className="text-right">টাকা (৳)</TableHead>
+                {showAmount && <TableHead className="text-right">টাকা (৳)</TableHead>}
                 <TableHead>ধরন</TableHead>
                 <TableHead>স্ট্যাটাস</TableHead>
                 <TableHead className="hidden md:table-cell">ম্যানেজার</TableHead>
@@ -76,7 +77,7 @@ export function RecentSalesTable({
                       <TableCell className="font-medium">{e.customer?.name ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{e.brick_type?.name ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{bn(e.quantity)}</TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold">৳ {bn(e.total_amount)}</TableCell>
+                      {showAmount && <TableCell className="text-right tabular-nums font-semibold">৳ {bn(e.total_amount)}</TableCell>}
                       <TableCell>
                         {e.sale_type === "advance" ? (
                           <Badge className="bg-info/15 text-info hover:bg-info/20">অগ্রিম</Badge>
