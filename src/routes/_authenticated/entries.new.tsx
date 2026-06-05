@@ -236,66 +236,91 @@ function NewEntryPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">গ্রাহক</CardTitle>
-            <Dialog open={addCustOpen} onOpenChange={setAddCustOpen}>
-              <DialogTrigger asChild>
-                <Button type="button" size="sm" variant="outline">
-                  <Plus className="mr-1 h-4 w-4" /> নতুন গ্রাহক
-                </Button>
-              </DialogTrigger>
-              <AddCustomerDialog
-                onClose={() => setAddCustOpen(false)}
-                onCreated={(c) => {
-                  qc.invalidateQueries({ queryKey: ["customers-all"] });
-                  setCustomerId(c.id);
-                  setAddCustOpen(false);
-                }}
-              />
-            </Dialog>
+            {isAdmin && (
+              <Dialog open={addCustOpen} onOpenChange={setAddCustOpen}>
+                <DialogTrigger asChild>
+                  <Button type="button" size="sm" variant="outline">
+                    <Plus className="mr-1 h-4 w-4" /> নতুন গ্রাহক
+                  </Button>
+                </DialogTrigger>
+                <AddCustomerDialog
+                  onClose={() => setAddCustOpen(false)}
+                  onCreated={(c) => {
+                    qc.invalidateQueries({ queryKey: ["customers-all"] });
+                    setCustomerId(c.id);
+                    setAddCustOpen(false);
+                  }}
+                />
+              </Dialog>
+            )}
           </CardHeader>
           <CardContent>
-            <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  role="combobox"
-                  className="w-full justify-between font-normal"
-                >
-                  {selectedCustomer
-                    ? `${selectedCustomer.name}${selectedCustomer.phone ? ` — ${selectedCustomer.phone}` : ""}`
-                    : "গ্রাহক খুঁজুন বা নির্বাচন করুন..."}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[--radix-popover-trigger-width] p-0 pointer-events-auto" align="start">
-                <Command>
-                  <CommandInput placeholder="নাম বা ফোন দিয়ে খুঁজুন..." />
-                  <CommandList>
-                    <CommandEmpty>কোনো গ্রাহক পাওয়া যায়নি</CommandEmpty>
-                    <CommandGroup>
-                      {(customersQ.data ?? []).map((c) => (
-                        <CommandItem
-                          key={c.id}
-                          value={`${c.name} ${c.phone ?? ""} ${c.address ?? ""}`}
-                          onSelect={() => {
-                            setCustomerId(c.id);
-                            setCustomerOpen(false);
-                          }}
-                        >
-                          <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
-                          <div className="flex flex-col">
-                            <span>{c.name}</span>
-                            {c.phone && <span className="text-xs text-muted-foreground">{c.phone}</span>}
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            {isAdmin ? (
+              <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal"
+                  >
+                    {selectedCustomer
+                      ? `${selectedCustomer.name}${selectedCustomer.phone ? ` — ${selectedCustomer.phone}` : ""}`
+                      : "গ্রাহক খুঁজুন বা নির্বাচন করুন..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 pointer-events-auto" align="start">
+                  <Command>
+                    <CommandInput placeholder="নাম বা ফোন দিয়ে খুঁজুন..." />
+                    <CommandList>
+                      <CommandEmpty>কোনো গ্রাহক পাওয়া যায়নি</CommandEmpty>
+                      <CommandGroup>
+                        {(customersQ.data ?? []).map((c) => (
+                          <CommandItem
+                            key={c.id}
+                            value={`${c.name} ${c.phone ?? ""} ${c.address ?? ""}`}
+                            onSelect={() => {
+                              setCustomerId(c.id);
+                              setCustomerOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", customerId === c.id ? "opacity-100" : "opacity-0")} />
+                            <div className="flex flex-col">
+                              <span>{c.name}</span>
+                              {c.phone && <span className="text-xs text-muted-foreground">{c.phone}</span>}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>গ্রাহকের নাম</Label>
+                  <Input
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="যেমন: রহিম মিয়া"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>মোবাইল <span className="text-muted-foreground">(ঐচ্ছিক)</span></Label>
+                  <Input
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="01XXXXXXXXX"
+                  />
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
+
 
         {/* Delivery & Brick details */}
         <Card>
