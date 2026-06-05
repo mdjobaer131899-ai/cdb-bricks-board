@@ -121,8 +121,16 @@ function NewEntryPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!me) return;
-    if (!challanNo.trim() || !customerId || !brickTypeId || !quantity) {
+    if (!challanNo.trim() || !brickTypeId || !quantity) {
       toast.error("সকল প্রয়োজনীয় তথ্য পূরণ করুন");
+      return;
+    }
+    if (isAdmin && !customerId) {
+      toast.error("গ্রাহক নির্বাচন করুন");
+      return;
+    }
+    if (!isAdmin && !customerName.trim()) {
+      toast.error("গ্রাহকের নাম লিখুন");
       return;
     }
     if (isOthers && !customBrickName.trim()) {
@@ -134,19 +142,41 @@ function NewEntryPage() {
       return;
     }
     setBusy(true);
-    // Managers never set price — admins fill it during approval.
-    const finalUnitPrice = isAdmin && !isAdvance ? Number(unitPrice) : 0;
-    const finalTotal = isAdmin && !isAdvance ? totalAmount : 0;
+
+    // For managers: create a customer record on the fly from the typed name.
+    let finalCustomerId = customerId;
+    if (!isAdmin) {
+      const { data: newCust, error: custErr } = await supabase
+        .from("customers")
+        .insert({
+          name: customerName.trim(),
+          phone: customerPhone.trim() || null,
+          created_by: me.user.id,
+        })
+        .select("id")
+        .single();
+      if (custErr || !newCust) {
+        setBusy(false);
+        toast.error(custErr?.message ?? "গ্রাহক সংরক্ষণে সমস্যা হয়েছে");
+        return;
+      }
+      finalCustomerId = newCust.id;
+    }
+
+    // Managers never set price — admins fill it during approval. Managers cannot mark advance.
+    const advanceFlag = isAdmin ? isAdvance : false;
+    const finalUnitPrice = isAdmin && !advanceFlag ? Number(unitPrice) : 0;
+    const finalTotal = isAdmin && !advanceFlag ? totalAmount : 0;
 
     const { error } = await supabase.from("sales_entries").insert({
       challan_no: challanNo.trim(),
-      customer_id: customerId,
+      customer_id: finalCustomerId,
       brick_type_id: brickTypeId,
       custom_brick_name: isOthers ? customBrickName.trim() : null,
       quantity: Number(quantity),
       unit_price: finalUnitPrice,
       total_amount: finalTotal,
-      sale_type: isAdvance ? "advance" : "regular",
+      sale_type: advanceFlag ? "advance" : "regular",
       status: "pending",
       sale_date: saleDate,
       driver_name: driverName || null,
@@ -164,6 +194,7 @@ function NewEntryPage() {
     qc.invalidateQueries({ queryKey: ["customers-all"] });
     navigate({ to: "/challans" });
   }
+
 
   if (meLoading) {
     return (
