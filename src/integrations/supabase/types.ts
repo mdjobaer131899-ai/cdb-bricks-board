@@ -110,6 +110,7 @@ export type Database = {
           created_at: string
           created_by: string
           customer_id: string
+          driver_name: string | null
           id: string
           notes: string | null
           quantity: number
@@ -119,6 +120,7 @@ export type Database = {
           total_amount: number
           unit_price: number
           updated_at: string
+          vehicle_number: string | null
         }
         Insert: {
           approved_at?: string | null
@@ -128,6 +130,7 @@ export type Database = {
           created_at?: string
           created_by: string
           customer_id: string
+          driver_name?: string | null
           id?: string
           notes?: string | null
           quantity: number
@@ -137,6 +140,7 @@ export type Database = {
           total_amount: number
           unit_price: number
           updated_at?: string
+          vehicle_number?: string | null
         }
         Update: {
           approved_at?: string | null
@@ -146,6 +150,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           customer_id?: string
+          driver_name?: string | null
           id?: string
           notes?: string | null
           quantity?: number
@@ -155,6 +160,7 @@ export type Database = {
           total_amount?: number
           unit_price?: number
           updated_at?: string
+          vehicle_number?: string | null
         }
         Relationships: [
           {
