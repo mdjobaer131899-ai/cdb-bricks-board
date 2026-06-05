@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fetchSales } from "@/lib/sales-queries";
 import { bn, isoDate } from "@/lib/format";
 import { supabase } from "@/integrations/supabase/client";
+import { AiAssistantFab } from "@/components/ai-assistant-fab";
 
 export function AdminDashboard() {
   const [range, setRange] = useState<DateRange>({ from: new Date(), to: new Date() });
@@ -73,6 +74,7 @@ export function AdminDashboard() {
       </div>
 
       <RecentSalesTable entries={sales} loading={loading} isAdmin />
+      <AiAssistantFab />
     </div>
   );
 }
