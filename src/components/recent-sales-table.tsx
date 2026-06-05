@@ -1,0 +1,86 @@
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { SaleRow } from "@/lib/sales-queries";
+import { bn, bnDate } from "@/lib/format";
+
+interface Props {
+  entries: SaleRow[];
+  loading?: boolean;
+  title?: string;
+  subtitle?: string;
+  limit?: number;
+}
+
+export function RecentSalesTable({ entries, loading, title = "সাম্প্রতিক বিক্রয় এন্ট্রি", subtitle = "শেষ ১০টি চালান", limit = 10 }: Props) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-base">{title}</CardTitle>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        <Badge variant="outline" className="hidden sm:inline-flex">মোট {bn(entries.length)}</Badge>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>চালান নং</TableHead>
+                <TableHead>গ্রাহক</TableHead>
+                <TableHead>ইটের ধরন</TableHead>
+                <TableHead className="text-right">পরিমাণ</TableHead>
+                <TableHead className="text-right">টাকা (৳)</TableHead>
+                <TableHead>ধরন</TableHead>
+                <TableHead>স্ট্যাটাস</TableHead>
+                <TableHead className="hidden md:table-cell">ম্যানেজার</TableHead>
+                <TableHead className="hidden sm:table-cell">তারিখ</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading
+                ? Array.from({ length: 6 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 9 }).map((__, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                : entries.length === 0 ? (
+                  <TableRow><TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">কোনো এন্ট্রি পাওয়া যায়নি।</TableCell></TableRow>
+                ) : entries.slice(0, limit).map((e) => (
+                    <TableRow key={e.id} className="hover:bg-muted/40">
+                      <TableCell className="font-mono text-xs font-semibold">{e.challan_no}</TableCell>
+                      <TableCell className="font-medium">{e.customer?.name ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">{e.brick_type?.name ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{bn(e.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">৳ {bn(e.total_amount)}</TableCell>
+                      <TableCell>
+                        {e.sale_type === "advance" ? (
+                          <Badge className="bg-info/15 text-info hover:bg-info/20">অগ্রিম</Badge>
+                        ) : (
+                          <Badge variant="secondary">নিয়মিত</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {e.status === "approved" ? (
+                          <Badge className="bg-success/15 text-success hover:bg-success/20">অনুমোদিত</Badge>
+                        ) : e.status === "rejected" ? (
+                          <Badge variant="destructive">প্রত্যাখ্যাত</Badge>
+                        ) : (
+                          <Badge className="bg-warning/20 text-warning-foreground hover:bg-warning/30">অপেক্ষমাণ</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell text-muted-foreground">{e.manager_name}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{bnDate(e.sale_date)}</TableCell>
+                    </TableRow>
+                  ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

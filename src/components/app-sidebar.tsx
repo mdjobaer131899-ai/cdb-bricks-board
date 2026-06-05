@@ -12,18 +12,23 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useCurrentUser } from "@/lib/use-current-user";
 
-const items = [
-  { title: "ড্যাশবোর্ড", url: "/", icon: LayoutDashboard },
-  { title: "চালান এন্ট্রি", url: "/challans", icon: FileText },
-  { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck },
-  { title: "গ্রাহক", url: "/customers", icon: Users },
-  { title: "রিপোর্ট", url: "/reports", icon: BarChart3 },
-  { title: "সেটিংস", url: "/settings", icon: Settings },
+const ALL_ITEMS = [
+  { title: "ড্যাশবোর্ড", url: "/", icon: LayoutDashboard, roles: ["admin", "manager"] as const },
+  { title: "চালান এন্ট্রি", url: "/challans", icon: FileText, roles: ["admin", "manager"] as const },
+  { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck, roles: ["admin"] as const },
+  { title: "গ্রাহক", url: "/customers", icon: Users, roles: ["admin", "manager"] as const },
+  { title: "রিপোর্ট", url: "/reports", icon: BarChart3, roles: ["admin", "manager"] as const },
+  { title: "সেটিংস", url: "/settings", icon: Settings, roles: ["admin", "manager"] as const },
 ];
 
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const { data } = useCurrentUser();
+  const role = data?.role ?? "manager";
+  const items = ALL_ITEMS.filter((i) => (i.roles as readonly string[]).includes(role));
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>

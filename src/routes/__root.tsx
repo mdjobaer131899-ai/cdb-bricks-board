@@ -1,12 +1,10 @@
-import { Outlet, createRootRouteWithContext, HeadContent, Scripts } from "@tanstack/react-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Outlet, createRootRouteWithContext, HeadContent, Scripts, useRouter } from "@tanstack/react-router";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import appCss from "../styles.css?url";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { AppHeader } from "@/components/app-header";
-import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { Toaster } from "@/components/ui/sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -25,6 +23,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   }),
   shellComponent: RootShell,
   component: RootComponent,
+  notFoundComponent: () => (
+    <div className="flex min-h-screen items-center justify-center p-6 text-center">
+      <div>
+        <h1 className="text-2xl font-bold">৪০৪ — পেজ পাওয়া যায়নি</h1>
+        <p className="mt-2 text-sm text-muted-foreground">অনুরোধ করা পৃষ্ঠাটি বিদ্যমান নেই।</p>
+      </div>
+    </div>
+  ),
 });
 
 function RootShell({ children }: { children: ReactNode }) {
@@ -36,25 +42,27 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function AuthSync() {
+  const router = useRouter();
+  const qc = useQueryClient();
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      router.invalidate();
+      if (event !== "SIGNED_OUT") qc.invalidateQueries();
+    });
+    return () => subscription.unsubscribe();
+  }, [router, qc]);
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
-          <div className="hidden md:block">
-            <AppSidebar />
-          </div>
-          <SidebarInset className="flex min-w-0 flex-1 flex-col">
-            <AppHeader />
-            <main className="flex-1 p-3 pb-20 md:p-6 md:pb-6">
-              <Outlet />
-            </main>
-          </SidebarInset>
-        </div>
-        <MobileBottomNav />
-        <Toaster />
-      </SidebarProvider>
+      <AuthSync />
+      <Outlet />
+      <Toaster />
     </QueryClientProvider>
   );
 }
