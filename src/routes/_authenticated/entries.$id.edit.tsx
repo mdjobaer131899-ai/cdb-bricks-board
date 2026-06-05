@@ -352,14 +352,76 @@ function EditEntryPage() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:flex-wrap">
           <Button type="button" variant="outline" onClick={() => navigate({ to: "/challans" })}>বাতিল</Button>
-          <Button type="submit" disabled={busy}>
+          {isAdmin && (
+            <Button
+              type="button"
+              variant="outline"
+              className="text-destructive border-destructive/40 hover:bg-destructive/10"
+              disabled={busy}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> ডিলেট
+            </Button>
+          )}
+          <Button type="submit" disabled={busy} variant="secondary">
             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            পরিবর্তন সংরক্ষণ করুন
+            পরিবর্তন সংরক্ষণ
           </Button>
+          {isAdmin && entry.status === "pending" && (
+            <Button
+              type="button"
+              disabled={busy || !(Number(unitPrice) > 0)}
+              onClick={() => setConfirmApprove(true)}
+              className="bg-success text-success-foreground hover:bg-success/90"
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" /> কনফার্ম ও অনুমোদন
+            </Button>
+          )}
         </div>
       </form>
+
+      <AlertDialog open={confirmApprove} onOpenChange={(o) => !o && setConfirmApprove(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>অনুমোদন নিশ্চিত করুন</AlertDialogTitle>
+            <AlertDialogDescription>
+              চালান <span className="font-semibold">{entry.challan_no}</span> অনুমোদিত হবে এবং একক মূল্য সংরক্ষিত হবে।
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>বাতিল</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleApprove(); }}
+              disabled={busy}
+            >
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} অনুমোদন করুন
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>চালান মুছে ফেলবেন?</AlertDialogTitle>
+            <AlertDialogDescription>
+              চালান নং <span className="font-semibold">{entry.challan_no}</span> স্থায়ীভাবে মুছে যাবে।
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>বাতিল</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              disabled={busy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} মুছে ফেলুন
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
