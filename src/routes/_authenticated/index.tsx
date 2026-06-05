@@ -1,0 +1,31 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useCurrentUser } from "@/lib/use-current-user";
+import { AdminDashboard } from "@/components/admin-dashboard";
+import { ManagerDashboard } from "@/components/manager-dashboard";
+import { Skeleton } from "@/components/ui/skeleton";
+
+export const Route = createFileRoute("/_authenticated/")({
+  head: () => ({
+    meta: [
+      { title: "ড্যাশবোর্ড — CDB Bricks" },
+      { name: "description", content: "CDB Bricks বিক্রয় ব্যবস্থাপনা ড্যাশবোর্ড।" },
+    ],
+  }),
+  component: Index,
+});
+
+function Index() {
+  const { data, loading } = useCurrentUser();
+  if (loading || !data) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-16 w-full" />
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
+        </div>
+      </div>
+    );
+  }
+  return data.role === "admin" ? <AdminDashboard /> : <ManagerDashboard />;
+}
