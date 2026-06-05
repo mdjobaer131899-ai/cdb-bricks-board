@@ -183,15 +183,14 @@ function NewEntryPage() {
           <CardHeader className="pb-3"><CardTitle className="text-base">চালান তথ্য</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>চালান নং {isAdmin ? "" : "(স্বয়ংক্রিয়)"}</Label>
+              <Label>চালান নং</Label>
               <Input
                 value={challanNo}
                 onChange={(e) => setChallanNo(e.target.value)}
-                readOnly={!isAdmin}
-                className={cn(!isAdmin && "bg-muted/50")}
                 required
               />
             </div>
+
             <div className="space-y-1.5">
               <Label>তারিখ</Label>
               <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} required />
