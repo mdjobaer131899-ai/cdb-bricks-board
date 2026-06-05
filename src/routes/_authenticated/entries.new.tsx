@@ -82,6 +82,8 @@ function NewEntryPage() {
   const [saleDate, setSaleDate] = useState(isoDate(new Date()));
   const [customerId, setCustomerId] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [driverName, setDriverName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [brickTypeId, setBrickTypeId] = useState("");
@@ -92,6 +94,7 @@ function NewEntryPage() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [addCustOpen, setAddCustOpen] = useState(false);
+
 
   useEffect(() => {
     generateNextChallanNo().then(setChallanNo);
