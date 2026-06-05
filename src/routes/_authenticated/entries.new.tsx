@@ -284,9 +284,6 @@ function NewEntryPage() {
                   {orderedBricks.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
                       {b.name}
-                      {isAdmin && b.name !== OTHERS_NAME && b.default_unit_price > 0
-                        ? ` — ৳${bn(b.default_unit_price)}`
-                        : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
