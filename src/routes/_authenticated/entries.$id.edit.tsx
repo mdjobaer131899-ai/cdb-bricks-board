@@ -335,7 +335,7 @@ function EditEntryPage() {
         {isAdmin && (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">টাকার পরিমান</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>টাকার পরিমান (৳)</Label>
                 <Input
@@ -346,6 +346,17 @@ function EditEntryPage() {
                   onChange={(e) => setAmount(e.target.value)}
                   className="font-semibold text-primary"
                   placeholder="০"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>একক মূল্য (৳ / {isAdla ? "ফুট" : "পিস"})</Label>
+                <Input
+                  disabled
+                  value={
+                    Number(quantity) > 0
+                      ? (Number(amount) / Number(quantity)).toFixed(2)
+                      : "0.00"
+                  }
                 />
               </div>
             </CardContent>
