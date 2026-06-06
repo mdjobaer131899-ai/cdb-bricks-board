@@ -76,7 +76,7 @@ function EditEntryPage() {
   const [brickTypeId, setBrickTypeId] = useState("");
   const [customBrickName, setCustomBrickName] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [amount, setAmount] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
