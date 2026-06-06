@@ -386,7 +386,7 @@ function EditEntryPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>অনুমোদন নিশ্চিত করুন</AlertDialogTitle>
             <AlertDialogDescription>
-              চালান <span className="font-semibold">{entry.challan_no}</span> অনুমোদিত হবে এবং একক মূল্য সংরক্ষিত হবে।
+              চালান <span className="font-semibold">{entry.challan_no}</span> অনুমোদিত হবে এবং টাকার পরিমান সংরক্ষিত হবে।
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
