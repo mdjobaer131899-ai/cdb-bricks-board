@@ -233,7 +233,6 @@ function CustomerDetailPage() {
               </div>
             </div>
           ))}
-          </div>
         </CardContent>
       </Card>
     </div>
