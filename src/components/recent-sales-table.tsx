@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ export function RecentSalesTable({
   isAdmin,
   onDelete,
 }: Props) {
+  const navigate = useNavigate();
   const showActions = Boolean(onDelete);
   const showAmount = isAdmin === true;
   const colCount = (showActions ? 1 : 0) + (showAmount ? 9 : 8);
@@ -71,8 +72,13 @@ export function RecentSalesTable({
                   <TableRow><TableCell colSpan={colCount} className="py-10 text-center text-sm text-muted-foreground">কোনো এন্ট্রি পাওয়া যায়নি।</TableCell></TableRow>
                 ) : entries.slice(0, limit).map((e) => {
                   const canEdit = isAdmin || (e.status === "pending" && e.created_by === currentUserId);
+                  const isApproved = e.status === "approved";
                   return (
-                    <TableRow key={e.id} className="hover:bg-muted/40">
+                    <TableRow
+                      key={e.id}
+                      className={`hover:bg-muted/40 ${isApproved ? "cursor-pointer" : ""}`}
+                      onClick={isApproved ? () => navigate({ to: "/challans/$id", params: { id: e.id } }) : undefined}
+                    >
                       <TableCell className="font-mono text-xs font-semibold">{e.challan_no}</TableCell>
                       <TableCell className="font-medium">{e.customer?.name ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{e.brick_type?.name ?? "—"}</TableCell>
@@ -99,7 +105,7 @@ export function RecentSalesTable({
                       {showActions && (
                         <TableCell className="text-right">
                           {canEdit ? (
-                            <div className="flex justify-end gap-1">
+                            <div className="flex justify-end gap-1" onClick={(ev) => ev.stopPropagation()}>
                               <Button asChild size="icon" variant="ghost" className="h-8 w-8">
                                 <Link to="/entries/$id/edit" params={{ id: e.id }} aria-label="এডিট">
                                   <Pencil className="h-4 w-4" />
@@ -109,7 +115,7 @@ export function RecentSalesTable({
                                 size="icon"
                                 variant="ghost"
                                 className="h-8 w-8 text-destructive hover:text-destructive"
-                                onClick={() => onDelete?.(e)}
+                                onClick={(ev) => { ev.stopPropagation(); onDelete?.(e); }}
                                 aria-label="ডিলেট"
                               >
                                 <Trash2 className="h-4 w-4" />
