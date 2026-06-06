@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Loader2, Pencil, Trash2 } from "lucide-react";
@@ -36,6 +36,7 @@ type Customer = {
 
 function CustomersPage() {
   const { data: me } = useCurrentUser();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
@@ -95,9 +96,21 @@ function CustomersPage() {
                   : (q.data ?? []).length === 0 ? (
                     <TableRow><TableCell colSpan={canManage ? 5 : 4} className="py-10 text-center text-sm text-muted-foreground">কোনো গ্রাহক নেই</TableCell></TableRow>
                   ) : (q.data ?? []).map((c) => (
-                    <TableRow key={c.id}>
+                    <TableRow
+                      key={c.id}
+                      role="link"
+                      tabIndex={0}
+                      className="cursor-pointer"
+                      onClick={() => navigate({ to: "/customers/$id", params: { id: c.id } })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          navigate({ to: "/customers/$id", params: { id: c.id } });
+                        }
+                      }}
+                    >
                       <TableCell className="font-medium">
-                        <Link to="/customers/$id" params={{ id: c.id }} className="text-primary underline-offset-2 hover:underline">
+                        <Link to="/customers/$id" params={{ id: c.id }} className="block w-full text-primary underline-offset-2 hover:underline">
                           {c.name}
                         </Link>
                       </TableCell>
@@ -108,10 +121,10 @@ function CustomersPage() {
                       {canManage && (
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(c as Customer)}>
+                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setEditing(c as Customer); }}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleting(c as Customer)}>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleting(c as Customer); }}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
