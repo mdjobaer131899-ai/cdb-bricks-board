@@ -1,8 +1,9 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Printer, Share2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,6 +22,7 @@ function CustomerDetailPage() {
   const navigate = useNavigate();
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
+  const [selectedDate, setSelectedDate] = useState("");
 
   const customerQ = useQuery({
     queryKey: ["customer", id],
@@ -50,15 +52,35 @@ function CustomerDetailPage() {
   });
 
   const rows = txQ.data ?? [];
+  const filteredRows = useMemo(
+    () => rows.filter((row) => (selectedDate ? row.sale_date === selectedDate : true)),
+    [rows, selectedDate],
+  );
+
+  const groupedRows = useMemo(() => {
+    const groups = new Map<string, typeof filteredRows>();
+    for (const row of filteredRows) {
+      const current = groups.get(row.sale_date) ?? [];
+      current.push(row);
+      groups.set(row.sale_date, current);
+    }
+    return Array.from(groups.entries()).map(([date, entries]) => ({
+      date,
+      entries,
+      totalQuantity: entries.reduce((sum, entry) => sum + (Number(entry.quantity) || 0), 0),
+      totalAmount: entries.reduce((sum, entry) => sum + (Number(entry.total_amount) || 0), 0),
+    }));
+  }, [filteredRows]);
+
   const totals = useMemo(() => {
     let approved = 0, pending = 0, count = 0;
-    for (const r of rows) {
+    for (const r of filteredRows) {
       count += 1;
       if (r.status === "approved") approved += Number(r.total_amount) || 0;
       if (r.status === "pending") pending += Number(r.total_amount) || 0;
     }
     return { approved, pending, count };
-  }, [rows]);
+  }, [filteredRows]);
 
   if (me && !isAdmin) {
     return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">এই পৃষ্ঠা শুধুমাত্র অ্যাডমিনদের জন্য।</CardContent></Card>;
@@ -83,7 +105,7 @@ function CustomerDetailPage() {
       customer.address ? `ঠিকানা: ${customer.address}` : null,
       "",
       "লেনদেন:",
-      ...rows.map((r) => {
+        ...filteredRows.map((r) => {
         const brick = r.brick_type?.name === "অন্যান্য" ? (r.custom_brick_name || "অন্যান্য") : (r.brick_type?.name ?? "—");
         return `${bnDate(r.sale_date)} • ${r.challan_no} • ${brick} • পরিমাণ ${bn(r.quantity)} • ৳${bn(Number(r.total_amount))} (${r.status === "approved" ? "অনুমোদিত" : r.status === "pending" ? "অপেক্ষমাণ" : "প্রত্যাখ্যাত"})`;
       }),
@@ -146,42 +168,71 @@ function CustomerDetailPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">লেনদেনের তালিকা (তারিখ অনুসারে)</CardTitle></CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>তারিখ</TableHead>
-                  <TableHead>চালান #</TableHead>
-                  <TableHead>ইটের ধরন</TableHead>
-                  <TableHead className="text-right">পরিমাণ</TableHead>
-                  <TableHead className="text-right">টাকার পরিমান (৳)</TableHead>
-                  <TableHead>অবস্থা</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">কোনো লেনদেন নেই</TableCell></TableRow>
-                ) : rows.map((r) => {
-                  const brick = r.brick_type?.name === "অন্যান্য" ? (r.custom_brick_name || "অন্যান্য") : (r.brick_type?.name ?? "—");
-                  return (
-                    <TableRow key={r.id}>
-                      <TableCell className="text-xs">{bnDate(r.sale_date)}</TableCell>
-                      <TableCell className="font-mono text-xs">{r.challan_no}</TableCell>
-                      <TableCell className="text-muted-foreground">{brick}</TableCell>
-                      <TableCell className="text-right tabular-nums">{bn(r.quantity)}</TableCell>
-                      <TableCell className="text-right tabular-nums font-semibold">৳ {bn(Number(r.total_amount))}</TableCell>
-                      <TableCell>
-                        <Badge variant={r.status === "approved" ? "default" : r.status === "pending" ? "outline" : "destructive"}>
-                          {r.status === "approved" ? "অনুমোদিত" : r.status === "pending" ? "অপেক্ষমাণ" : "প্রত্যাখ্যাত"}
-                        </Badge>
-                      </TableCell>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <CardTitle className="text-base">তারিখ অনুযায়ী ইনভয়েস</CardTitle>
+              <p className="text-sm text-muted-foreground">একটি তারিখ বেছে নিলে ওই দিনের সব পণ্য ও টাকার হিসাব দেখা যাবে।</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full sm:w-[180px]" />
+              {selectedDate && (
+                <Button type="button" variant="outline" onClick={() => setSelectedDate("")}>সব তারিখ</Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {groupedRows.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">এই তারিখে কোনো ইনভয়েস নেই</div>
+          ) : groupedRows.map((group) => (
+            <div key={group.date} className="overflow-hidden rounded-lg border">
+              <div className="flex flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="font-semibold">{bnDate(group.date)}</div>
+                  <div className="text-xs text-muted-foreground">মোট পণ্য: {bn(group.totalQuantity)} • মোট টাকা: ৳ {bn(group.totalAmount)}</div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>চালান #</TableHead>
+                      <TableHead>পণ্যের নাম</TableHead>
+                      <TableHead className="text-right">পরিমাণ</TableHead>
+                      <TableHead className="text-right">টাকার পরিমান (৳)</TableHead>
+                      <TableHead>অবস্থা</TableHead>
+                      <TableHead className="text-right">ইনভয়েস</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {group.entries.map((r) => {
+                      const brick = r.brick_type?.name === "অন্যান্য" ? (r.custom_brick_name || "অন্যান্য") : (r.brick_type?.name ?? "—");
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell className="font-mono text-xs">{r.challan_no}</TableCell>
+                          <TableCell className="text-muted-foreground">{brick}</TableCell>
+                          <TableCell className="text-right tabular-nums">{bn(r.quantity)}</TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold">৳ {bn(Number(r.total_amount))}</TableCell>
+                          <TableCell>
+                            <Badge variant={r.status === "approved" ? "default" : r.status === "pending" ? "outline" : "destructive"}>
+                              {r.status === "approved" ? "অনুমোদিত" : r.status === "pending" ? "অপেক্ষমাণ" : "প্রত্যাখ্যাত"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button asChild variant="outline" size="sm">
+                              <Link to="/entries/$id/edit" params={{ id: r.id }}>খুলুন</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ))}
           </div>
         </CardContent>
       </Card>
