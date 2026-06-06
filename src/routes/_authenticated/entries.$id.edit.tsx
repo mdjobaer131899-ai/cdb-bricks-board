@@ -182,21 +182,22 @@ function EditEntryPage() {
 
   async function handleApprove() {
     if (!entry || !me || !isAdmin) return;
-    const amt = Number(amount) || 0;
-    if (amt <= 0) {
-      toast.error("টাকার পরিমান দিন");
+    const qty = Number(quantity) || 1;
+    const unit = Number(unitPrice) || 0;
+    const amt = unit * qty;
+    if (unit <= 0) {
+      toast.error("একক মূল্য দিন");
       setConfirmApprove(false);
       return;
     }
     setBusy(true);
-    const qty = Number(quantity) || 1;
     const { error } = await supabase
       .from("sales_entries")
       .update({
         status: "approved",
         approved_by: me.user.id,
         approved_at: new Date().toISOString(),
-        unit_price: amt / qty,
+        unit_price: unit,
         total_amount: amt,
       })
       .eq("id", entry.id);
