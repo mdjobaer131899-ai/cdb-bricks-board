@@ -390,7 +390,7 @@ function EditEntryPage() {
           {isAdmin && entry.status === "pending" && (
             <Button
               type="button"
-              disabled={busy || !(Number(amount) > 0)}
+              disabled={busy || !(Number(unitPrice) > 0)}
               onClick={() => setConfirmApprove(true)}
               className="bg-success text-success-foreground hover:bg-success/90"
             >
