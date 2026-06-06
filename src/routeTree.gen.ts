@@ -20,6 +20,7 @@ import { Route as AuthenticatedCustomersRouteImport } from './routes/_authentica
 import { Route as AuthenticatedChallansRouteImport } from './routes/_authenticated/challans'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
 import { Route as AuthenticatedEntriesNewRouteImport } from './routes/_authenticated/entries.new'
+import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
 import { Route as AuthenticatedEntriesIdEditRouteImport } from './routes/_authenticated/entries.$id.edit'
 
 const AuthRoute = AuthRouteImport.update({
@@ -76,6 +77,12 @@ const AuthenticatedEntriesNewRoute = AuthenticatedEntriesNewRouteImport.update({
   path: '/entries/new',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCustomersIdRoute =
+  AuthenticatedCustomersIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedCustomersRoute,
+  } as any)
 const AuthenticatedEntriesIdEditRoute =
   AuthenticatedEntriesIdEditRouteImport.update({
     id: '/entries/$id/edit',
@@ -88,11 +95,12 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/challans': typeof AuthenticatedChallansRoute
-  '/customers': typeof AuthenticatedCustomersRoute
+  '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/reports': typeof AuthenticatedReportsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/api/chat': typeof ApiChatRoute
+  '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
   '/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
@@ -100,12 +108,13 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/challans': typeof AuthenticatedChallansRoute
-  '/customers': typeof AuthenticatedCustomersRoute
+  '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/reports': typeof AuthenticatedReportsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/api/chat': typeof ApiChatRoute
   '/': typeof AuthenticatedIndexRoute
+  '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
   '/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
@@ -115,12 +124,13 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRoute
   '/_authenticated/challans': typeof AuthenticatedChallansRoute
-  '/_authenticated/customers': typeof AuthenticatedCustomersRoute
+  '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/api/chat': typeof ApiChatRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/_authenticated/entries/new': typeof AuthenticatedEntriesNewRoute
   '/_authenticated/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/users'
     | '/api/chat'
+    | '/customers/$id'
     | '/entries/new'
     | '/entries/$id/edit'
   fileRoutesByTo: FileRoutesByTo
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/users'
     | '/api/chat'
     | '/'
+    | '/customers/$id'
     | '/entries/new'
     | '/entries/$id/edit'
   id:
@@ -163,6 +175,7 @@ export interface FileRouteTypes {
     | '/_authenticated/users'
     | '/api/chat'
     | '/_authenticated/'
+    | '/_authenticated/customers/$id'
     | '/_authenticated/entries/new'
     | '/_authenticated/entries/$id/edit'
   fileRoutesById: FileRoutesById
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEntriesNewRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/customers/$id': {
+      id: '/_authenticated/customers/$id'
+      path: '/$id'
+      fullPath: '/customers/$id'
+      preLoaderRoute: typeof AuthenticatedCustomersIdRouteImport
+      parentRoute: typeof AuthenticatedCustomersRoute
+    }
     '/_authenticated/entries/$id/edit': {
       id: '/_authenticated/entries/$id/edit'
       path: '/entries/$id/edit'
@@ -262,10 +282,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedCustomersRouteChildren {
+  AuthenticatedCustomersIdRoute: typeof AuthenticatedCustomersIdRoute
+}
+
+const AuthenticatedCustomersRouteChildren: AuthenticatedCustomersRouteChildren =
+  {
+    AuthenticatedCustomersIdRoute: AuthenticatedCustomersIdRoute,
+  }
+
+const AuthenticatedCustomersRouteWithChildren =
+  AuthenticatedCustomersRoute._addFileChildren(
+    AuthenticatedCustomersRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRoute
   AuthenticatedChallansRoute: typeof AuthenticatedChallansRoute
-  AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRoute
+  AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
@@ -277,7 +311,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRoute,
   AuthenticatedChallansRoute: AuthenticatedChallansRoute,
-  AuthenticatedCustomersRoute: AuthenticatedCustomersRoute,
+  AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
