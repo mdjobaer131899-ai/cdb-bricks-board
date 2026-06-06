@@ -72,8 +72,13 @@ export function RecentSalesTable({
                   <TableRow><TableCell colSpan={colCount} className="py-10 text-center text-sm text-muted-foreground">কোনো এন্ট্রি পাওয়া যায়নি।</TableCell></TableRow>
                 ) : entries.slice(0, limit).map((e) => {
                   const canEdit = isAdmin || (e.status === "pending" && e.created_by === currentUserId);
+                  const isApproved = e.status === "approved";
                   return (
-                    <TableRow key={e.id} className="hover:bg-muted/40">
+                    <TableRow
+                      key={e.id}
+                      className={`hover:bg-muted/40 ${isApproved ? "cursor-pointer" : ""}`}
+                      onClick={isApproved ? () => navigate({ to: "/challans/$id", params: { id: e.id } }) : undefined}
+                    >
                       <TableCell className="font-mono text-xs font-semibold">{e.challan_no}</TableCell>
                       <TableCell className="font-medium">{e.customer?.name ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{e.brick_type?.name ?? "—"}</TableCell>
