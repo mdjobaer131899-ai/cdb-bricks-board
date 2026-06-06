@@ -95,7 +95,7 @@ function ApprovalsPage() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold tracking-tight md:text-2xl">অনুমোদন হাব</h2>
-        <p className="text-sm text-muted-foreground">প্রতিটি এন্ট্রির একক মূল্য বসিয়ে অনুমোদন করুন</p>
+        <p className="text-sm text-muted-foreground">প্রতিটি এন্ট্রির টাকার পরিমান বসিয়ে অনুমোদন করুন</p>
       </div>
 
       <Card>
