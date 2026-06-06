@@ -76,7 +76,7 @@ function EditEntryPage() {
   const [brickTypeId, setBrickTypeId] = useState("");
   const [customBrickName, setCustomBrickName] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [amount, setAmount] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -94,7 +94,7 @@ function EditEntryPage() {
     setBrickTypeId(e.brick_type_id);
     setCustomBrickName(e.custom_brick_name ?? "");
     setQuantity(String(e.quantity));
-    setAmount(String(e.total_amount ?? 0));
+    setUnitPrice(String(e.unit_price ?? 0));
     setNotes(e.notes ?? "");
     setLoaded(true);
   }, [entryQ.data, loaded]);
@@ -149,8 +149,8 @@ function EditEntryPage() {
     }
 
     const qty = Number(quantity) || 1;
-    const finalAmount = isAdmin ? (Number(amount) || 0) : Number(entry.total_amount);
-    const finalUnit = isAdmin ? finalAmount / qty : Number(entry.unit_price);
+    const finalUnit = isAdmin ? (Number(unitPrice) || 0) : Number(entry.unit_price);
+    const finalAmount = isAdmin ? finalUnit * qty : Number(entry.total_amount);
 
     const { error } = await supabase
       .from("sales_entries")
@@ -182,21 +182,22 @@ function EditEntryPage() {
 
   async function handleApprove() {
     if (!entry || !me || !isAdmin) return;
-    const amt = Number(amount) || 0;
-    if (amt <= 0) {
-      toast.error("টাকার পরিমান দিন");
+    const qty = Number(quantity) || 1;
+    const unit = Number(unitPrice) || 0;
+    const amt = unit * qty;
+    if (unit <= 0) {
+      toast.error("একক মূল্য দিন");
       setConfirmApprove(false);
       return;
     }
     setBusy(true);
-    const qty = Number(quantity) || 1;
     const { error } = await supabase
       .from("sales_entries")
       .update({
         status: "approved",
         approved_by: me.user.id,
         approved_at: new Date().toISOString(),
-        unit_price: amt / qty,
+        unit_price: unit,
         total_amount: amt,
       })
       .eq("id", entry.id);
@@ -337,26 +338,23 @@ function EditEntryPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">টাকার পরিমান</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>টাকার পরিমান (৳)</Label>
+                <Label>একক মূল্য (৳ / {isAdla ? "ফুট" : "পিস"})</Label>
                 <Input
                   type="number"
                   min={0}
                   step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  value={unitPrice}
+                  onChange={(e) => setUnitPrice(e.target.value)}
                   className="font-semibold text-primary"
                   placeholder="০"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>একক মূল্য (৳ / {isAdla ? "ফুট" : "পিস"})</Label>
+                <Label>মোট টাকার পরিমান (৳)</Label>
                 <Input
                   disabled
-                  value={
-                    Number(quantity) > 0
-                      ? (Number(amount) / Number(quantity)).toFixed(2)
-                      : "0.00"
-                  }
+                  value={((Number(unitPrice) || 0) * (Number(quantity) || 0)).toFixed(2)}
+                  className="font-semibold"
                 />
               </div>
             </CardContent>
@@ -392,7 +390,7 @@ function EditEntryPage() {
           {isAdmin && entry.status === "pending" && (
             <Button
               type="button"
-              disabled={busy || !(Number(amount) > 0)}
+              disabled={busy || !(Number(unitPrice) > 0)}
               onClick={() => setConfirmApprove(true)}
               className="bg-success text-success-foreground hover:bg-success/90"
             >
