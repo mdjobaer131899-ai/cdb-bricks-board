@@ -29,7 +29,7 @@ function ApprovalsPage() {
   const { data: me } = useCurrentUser();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [prices, setPrices] = useState<Record<string, string>>({});
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<{ id: string; action: Pending } | null>(null);
 
   const q = useQuery({
@@ -46,8 +46,8 @@ function ApprovalsPage() {
     return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">এই পৃষ্ঠা শুধুমাত্র অ্যাডমিনদের জন্য।</CardContent></Card>;
   }
 
-  function setPrice(id: string, v: string) {
-    setPrices((p) => ({ ...p, [id]: v }));
+  function setAmount(id: string, v: string) {
+    setAmounts((p) => ({ ...p, [id]: v }));
   }
 
   async function performAction(id: string, action: Pending) {
@@ -58,22 +58,24 @@ function ApprovalsPage() {
     setBusy(true);
     let error: { message: string } | null = null;
     if (action === "approved") {
-      const raw = prices[id] ?? String(row.unit_price ?? "");
-      const unit = Number(raw);
-      if (!unit || unit <= 0) {
+      const raw = amounts[id] ?? String(row.total_amount ?? "");
+      const amount = Number(raw);
+      if (!amount || amount <= 0) {
         setBusy(false);
         setConfirm(null);
-        toast.error(`চালান ${row.challan_no}: একক মূল্য দিন`);
+        toast.error(`চালান ${row.challan_no}: টাকার পরিমান দিন`);
         return;
       }
+      const qty = Number(row.quantity) || 1;
       const res = await supabase.from("sales_entries").update({
         status: "approved",
         approved_by: me.user.id,
         approved_at: new Date().toISOString(),
-        unit_price: unit,
-        total_amount: unit * Number(row.quantity),
+        unit_price: amount / qty,
+        total_amount: amount,
       }).eq("id", id);
       error = res.error;
+
     } else {
       const res = await supabase.from("sales_entries").update({
         status: "rejected",
