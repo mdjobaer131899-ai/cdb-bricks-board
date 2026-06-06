@@ -105,7 +105,7 @@ export function RecentSalesTable({
                       {showActions && (
                         <TableCell className="text-right">
                           {canEdit ? (
-                            <div className="flex justify-end gap-1">
+                            <div className="flex justify-end gap-1" onClick={(ev) => ev.stopPropagation()}>
                               <Button asChild size="icon" variant="ghost" className="h-8 w-8">
                                 <Link to="/entries/$id/edit" params={{ id: e.id }} aria-label="এডিট">
                                   <Pencil className="h-4 w-4" />
@@ -115,7 +115,7 @@ export function RecentSalesTable({
                                 size="icon"
                                 variant="ghost"
                                 className="h-8 w-8 text-destructive hover:text-destructive"
-                                onClick={() => onDelete?.(e)}
+                                onClick={(ev) => { ev.stopPropagation(); onDelete?.(e); }}
                                 aria-label="ডিলেট"
                               >
                                 <Trash2 className="h-4 w-4" />
