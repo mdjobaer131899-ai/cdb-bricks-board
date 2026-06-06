@@ -76,7 +76,7 @@ function EditEntryPage() {
   const [brickTypeId, setBrickTypeId] = useState("");
   const [customBrickName, setCustomBrickName] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [unitPrice, setUnitPrice] = useState("");
+  const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -94,7 +94,7 @@ function EditEntryPage() {
     setBrickTypeId(e.brick_type_id);
     setCustomBrickName(e.custom_brick_name ?? "");
     setQuantity(String(e.quantity));
-    setUnitPrice(String(e.unit_price ?? 0));
+    setAmount(String(e.total_amount ?? 0));
     setNotes(e.notes ?? "");
     setLoaded(true);
   }, [entryQ.data, loaded]);
@@ -104,17 +104,27 @@ function EditEntryPage() {
   const isAdla = selectedBrick ? ADLA_NAMES.has(selectedBrick.name) : false;
   const isOthers = selectedBrick?.name === OTHERS_NAME;
   const quantityLabel = isAdla ? "মোট পরিমাণ (ফুট) / Total Quantity (Feet)" : "মোট ইট (পিস)";
-  const totalAmount = (Number(quantity) || 0) * (Number(unitPrice) || 0);
 
   const canEdit =
     !!entry &&
     (isAdmin || (entry.status === "pending" && entry.created_by === me?.user.id));
+
+  // Admin viewing a pending entry: only "Amount" is editable; other fields locked.
+  // After approval, admin can edit everything again.
+  const isPending = entry?.status === "pending";
+  const lockedForAdminApproval = isAdmin && isPending;
+  const fieldsDisabled = !canEdit || lockedForAdminApproval;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!entry || !me) return;
     if (!canEdit) {
       toast.error("এই এন্ট্রি এডিট করা যাবে না");
+      return;
+    }
+    // Pending entry for admin: blocked from save — must approve first.
+    if (lockedForAdminApproval) {
+      toast.error("পরিবর্তনের জন্য আগে অনুমোদন করুন");
       return;
     }
     if (!challanNo.trim() || !brickTypeId || !quantity) {
@@ -131,7 +141,6 @@ function EditEntryPage() {
     }
     setBusy(true);
 
-    // Update linked customer name/phone (managers commonly entered them inline).
     if (entry.customer_id) {
       await supabase
         .from("customers")
@@ -139,8 +148,9 @@ function EditEntryPage() {
         .eq("id", entry.customer_id);
     }
 
-    const finalUnitPrice = isAdmin ? Number(unitPrice) || 0 : entry.unit_price;
-    const finalTotal = isAdmin ? totalAmount : entry.total_amount;
+    const qty = Number(quantity) || 1;
+    const finalAmount = isAdmin ? (Number(amount) || 0) : Number(entry.total_amount);
+    const finalUnit = isAdmin ? finalAmount / qty : Number(entry.unit_price);
 
     const { error } = await supabase
       .from("sales_entries")
@@ -149,9 +159,9 @@ function EditEntryPage() {
         sale_date: saleDate,
         brick_type_id: brickTypeId,
         custom_brick_name: isOthers ? customBrickName.trim() : null,
-        quantity: Number(quantity),
-        unit_price: finalUnitPrice,
-        total_amount: finalTotal,
+        quantity: qty,
+        unit_price: finalUnit,
+        total_amount: finalAmount,
         driver_name: driverName || null,
         vehicle_number: vehicleNumber || null,
         notes: notes || null,
@@ -168,6 +178,7 @@ function EditEntryPage() {
     qc.invalidateQueries({ queryKey: ["customers-all"] });
     navigate({ to: "/challans" });
   }
+
 
   async function handleApprove() {
     if (!entry || !me || !isAdmin) return;
