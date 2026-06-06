@@ -19,6 +19,7 @@ import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedChallansRouteImport } from './routes/_authenticated/challans'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
+import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers.index'
 import { Route as AuthenticatedEntriesNewRouteImport } from './routes/_authenticated/entries.new'
 import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
 import { Route as AuthenticatedEntriesIdEditRouteImport } from './routes/_authenticated/entries.$id.edit'
@@ -72,6 +73,12 @@ const AuthenticatedApprovalsRoute = AuthenticatedApprovalsRouteImport.update({
   path: '/approvals',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCustomersIndexRoute =
+  AuthenticatedCustomersIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedCustomersRoute,
+  } as any)
 const AuthenticatedEntriesNewRoute = AuthenticatedEntriesNewRouteImport.update({
   id: '/entries/new',
   path: '/entries/new',
@@ -102,13 +109,13 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/customers/': typeof AuthenticatedCustomersIndexRoute
   '/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/challans': typeof AuthenticatedChallansRoute
-  '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/reports': typeof AuthenticatedReportsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/customers': typeof AuthenticatedCustomersIndexRoute
   '/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
 export interface FileRoutesById {
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/_authenticated/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
   '/_authenticated/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
 export interface FileRouteTypes {
@@ -148,13 +157,13 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/customers/$id'
     | '/entries/new'
+    | '/customers/'
     | '/entries/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
     | '/approvals'
     | '/challans'
-    | '/customers'
     | '/reports'
     | '/settings'
     | '/users'
@@ -162,6 +171,7 @@ export interface FileRouteTypes {
     | '/'
     | '/customers/$id'
     | '/entries/new'
+    | '/customers'
     | '/entries/$id/edit'
   id:
     | '__root__'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/customers/$id'
     | '/_authenticated/entries/new'
+    | '/_authenticated/customers/'
     | '/_authenticated/entries/$id/edit'
   fileRoutesById: FileRoutesById
 }
@@ -258,6 +269,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApprovalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/customers/': {
+      id: '/_authenticated/customers/'
+      path: '/'
+      fullPath: '/customers/'
+      preLoaderRoute: typeof AuthenticatedCustomersIndexRouteImport
+      parentRoute: typeof AuthenticatedCustomersRoute
+    }
     '/_authenticated/entries/new': {
       id: '/_authenticated/entries/new'
       path: '/entries/new'
@@ -284,11 +302,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedCustomersRouteChildren {
   AuthenticatedCustomersIdRoute: typeof AuthenticatedCustomersIdRoute
+  AuthenticatedCustomersIndexRoute: typeof AuthenticatedCustomersIndexRoute
 }
 
 const AuthenticatedCustomersRouteChildren: AuthenticatedCustomersRouteChildren =
   {
     AuthenticatedCustomersIdRoute: AuthenticatedCustomersIdRoute,
+    AuthenticatedCustomersIndexRoute: AuthenticatedCustomersIndexRoute,
   }
 
 const AuthenticatedCustomersRouteWithChildren =
@@ -331,3 +351,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
