@@ -182,44 +182,22 @@ function EditEntryPage() {
 
   async function handleApprove() {
     if (!entry || !me || !isAdmin) return;
-    const unit = Number(unitPrice) || 0;
-    if (unit <= 0) {
-      toast.error("একক মূল্য দিন");
+    const amt = Number(amount) || 0;
+    if (amt <= 0) {
+      toast.error("টাকার পরিমান দিন");
       setConfirmApprove(false);
       return;
     }
     setBusy(true);
-    // Save edited fields first (customer + entry), then approve.
-    if (entry.customer_id) {
-      await supabase
-        .from("customers")
-        .update({ name: customerName.trim() })
-        .eq("id", entry.customer_id);
-    }
-    const qty = Number(quantity) || 0;
-    const { error: upErr } = await supabase
-      .from("sales_entries")
-      .update({
-        challan_no: challanNo.trim(),
-        sale_date: saleDate,
-        brick_type_id: brickTypeId,
-        custom_brick_name: isOthers ? customBrickName.trim() : null,
-        quantity: qty,
-        driver_name: driverName || null,
-        vehicle_number: vehicleNumber || null,
-        notes: notes || null,
-      })
-      .eq("id", entry.id);
-    if (upErr) { setBusy(false); setConfirmApprove(false); toast.error(upErr.message); return; }
-
+    const qty = Number(quantity) || 1;
     const { error } = await supabase
       .from("sales_entries")
       .update({
         status: "approved",
         approved_by: me.user.id,
         approved_at: new Date().toISOString(),
-        unit_price: unit,
-        total_amount: unit * qty,
+        unit_price: amt / qty,
+        total_amount: amt,
       })
       .eq("id", entry.id);
     setBusy(false);
@@ -231,6 +209,7 @@ function EditEntryPage() {
     qc.invalidateQueries({ queryKey: ["customers-all"] });
     navigate({ to: "/approvals" });
   }
+
 
   async function handleDelete() {
     if (!entry) return;
