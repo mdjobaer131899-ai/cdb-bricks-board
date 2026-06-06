@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Loader2, Pencil, Trash2 } from "lucide-react";
@@ -96,7 +96,12 @@ function CustomersPage() {
                     <TableRow><TableCell colSpan={canManage ? 5 : 4} className="py-10 text-center text-sm text-muted-foreground">কোনো গ্রাহক নেই</TableCell></TableRow>
                   ) : (q.data ?? []).map((c) => (
                     <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link to="/customers/$id" params={{ id: c.id }} className="text-primary underline-offset-2 hover:underline">
+                          {c.name}
+                        </Link>
+                      </TableCell>
+
                       <TableCell className="text-muted-foreground">{c.phone || "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-xs">{c.address || "—"}</TableCell>
                       <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{bnDate(c.created_at)}</TableCell>

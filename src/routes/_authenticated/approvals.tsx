@@ -29,7 +29,7 @@ function ApprovalsPage() {
   const { data: me } = useCurrentUser();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [prices, setPrices] = useState<Record<string, string>>({});
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<{ id: string; action: Pending } | null>(null);
 
   const q = useQuery({
@@ -46,8 +46,8 @@ function ApprovalsPage() {
     return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">এই পৃষ্ঠা শুধুমাত্র অ্যাডমিনদের জন্য।</CardContent></Card>;
   }
 
-  function setPrice(id: string, v: string) {
-    setPrices((p) => ({ ...p, [id]: v }));
+  function setAmount(id: string, v: string) {
+    setAmounts((p) => ({ ...p, [id]: v }));
   }
 
   async function performAction(id: string, action: Pending) {
@@ -58,22 +58,24 @@ function ApprovalsPage() {
     setBusy(true);
     let error: { message: string } | null = null;
     if (action === "approved") {
-      const raw = prices[id] ?? String(row.unit_price ?? "");
-      const unit = Number(raw);
-      if (!unit || unit <= 0) {
+      const raw = amounts[id] ?? String(row.total_amount ?? "");
+      const amount = Number(raw);
+      if (!amount || amount <= 0) {
         setBusy(false);
         setConfirm(null);
-        toast.error(`চালান ${row.challan_no}: একক মূল্য দিন`);
+        toast.error(`চালান ${row.challan_no}: টাকার পরিমান দিন`);
         return;
       }
+      const qty = Number(row.quantity) || 1;
       const res = await supabase.from("sales_entries").update({
         status: "approved",
         approved_by: me.user.id,
         approved_at: new Date().toISOString(),
-        unit_price: unit,
-        total_amount: unit * Number(row.quantity),
+        unit_price: amount / qty,
+        total_amount: amount,
       }).eq("id", id);
       error = res.error;
+
     } else {
       const res = await supabase.from("sales_entries").update({
         status: "rejected",
@@ -93,7 +95,7 @@ function ApprovalsPage() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold tracking-tight md:text-2xl">অনুমোদন হাব</h2>
-        <p className="text-sm text-muted-foreground">প্রতিটি এন্ট্রির একক মূল্য বসিয়ে অনুমোদন করুন</p>
+        <p className="text-sm text-muted-foreground">প্রতিটি এন্ট্রির টাকার পরিমান বসিয়ে অনুমোদন করুন</p>
       </div>
 
       <Card>
@@ -113,8 +115,7 @@ function ApprovalsPage() {
                   <TableHead>গ্রাহক</TableHead>
                   <TableHead>ইটের ধরন</TableHead>
                   <TableHead className="text-right">পরিমাণ</TableHead>
-                  <TableHead className="text-right w-32">একক মূল্য (৳)</TableHead>
-                  <TableHead className="text-right">মোট (৳)</TableHead>
+                  <TableHead className="text-right w-36">টাকার পরিমান (৳)</TableHead>
                   <TableHead>তৈরি করেছেন</TableHead>
                   <TableHead className="text-right">অ্যাকশন</TableHead>
                 </TableRow>
@@ -122,14 +123,13 @@ function ApprovalsPage() {
               <TableBody>
                 {q.isLoading
                   ? Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>{Array.from({ length: 9 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
+                      <TableRow key={i}>{Array.from({ length: 8 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
                     ))
                   : rows.length === 0 ? (
-                    <TableRow><TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">কোনো অপেক্ষমাণ এন্ট্রি নেই 🎉</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">কোনো অপেক্ষমাণ এন্ট্রি নেই 🎉</TableCell></TableRow>
                   ) : rows.map((r) => {
-                    const raw = prices[r.id] ?? (r.unit_price ? String(r.unit_price) : "");
-                    const unit = Number(raw) || 0;
-                    const total = unit * Number(r.quantity);
+                    const raw = amounts[r.id] ?? (r.total_amount ? String(r.total_amount) : "");
+                    const amount = Number(raw) || 0;
                     return (
                       <TableRow key={r.id}>
                         <TableCell className="font-mono text-xs">{r.challan_no}</TableCell>
@@ -152,16 +152,15 @@ function ApprovalsPage() {
                             step="0.01"
                             className="h-8 text-right tabular-nums"
                             value={raw}
-                            onChange={(e) => setPrice(r.id, e.target.value)}
+                            onChange={(e) => setAmount(r.id, e.target.value)}
                             placeholder="০"
                           />
                         </TableCell>
-                        <TableCell className="text-right tabular-nums font-semibold">৳ {bn(total)}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">{r.manager_name}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button size="sm" variant="outline" className="h-8 text-success border-success/40 hover:bg-success/10"
-                              disabled={busy || unit <= 0}
+                              disabled={busy || amount <= 0}
                               onClick={() => setConfirm({ id: r.id, action: "approved" })}>
                               <CheckCircle2 className="h-3.5 w-3.5" />
                             </Button>
@@ -175,6 +174,7 @@ function ApprovalsPage() {
                       </TableRow>
                     );
                   })}
+
               </TableBody>
             </Table>
           </div>

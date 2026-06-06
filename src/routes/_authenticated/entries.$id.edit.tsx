@@ -76,7 +76,7 @@ function EditEntryPage() {
   const [brickTypeId, setBrickTypeId] = useState("");
   const [customBrickName, setCustomBrickName] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [unitPrice, setUnitPrice] = useState("");
+  const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -94,7 +94,7 @@ function EditEntryPage() {
     setBrickTypeId(e.brick_type_id);
     setCustomBrickName(e.custom_brick_name ?? "");
     setQuantity(String(e.quantity));
-    setUnitPrice(String(e.unit_price ?? 0));
+    setAmount(String(e.total_amount ?? 0));
     setNotes(e.notes ?? "");
     setLoaded(true);
   }, [entryQ.data, loaded]);
@@ -104,17 +104,27 @@ function EditEntryPage() {
   const isAdla = selectedBrick ? ADLA_NAMES.has(selectedBrick.name) : false;
   const isOthers = selectedBrick?.name === OTHERS_NAME;
   const quantityLabel = isAdla ? "মোট পরিমাণ (ফুট) / Total Quantity (Feet)" : "মোট ইট (পিস)";
-  const totalAmount = (Number(quantity) || 0) * (Number(unitPrice) || 0);
 
   const canEdit =
     !!entry &&
     (isAdmin || (entry.status === "pending" && entry.created_by === me?.user.id));
+
+  // Admin viewing a pending entry: only "Amount" is editable; other fields locked.
+  // After approval, admin can edit everything again.
+  const isPending = entry?.status === "pending";
+  const lockedForAdminApproval = isAdmin && isPending;
+  const fieldsDisabled = !canEdit || lockedForAdminApproval;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!entry || !me) return;
     if (!canEdit) {
       toast.error("এই এন্ট্রি এডিট করা যাবে না");
+      return;
+    }
+    // Pending entry for admin: blocked from save — must approve first.
+    if (lockedForAdminApproval) {
+      toast.error("পরিবর্তনের জন্য আগে অনুমোদন করুন");
       return;
     }
     if (!challanNo.trim() || !brickTypeId || !quantity) {
@@ -131,7 +141,6 @@ function EditEntryPage() {
     }
     setBusy(true);
 
-    // Update linked customer name/phone (managers commonly entered them inline).
     if (entry.customer_id) {
       await supabase
         .from("customers")
@@ -139,8 +148,9 @@ function EditEntryPage() {
         .eq("id", entry.customer_id);
     }
 
-    const finalUnitPrice = isAdmin ? Number(unitPrice) || 0 : entry.unit_price;
-    const finalTotal = isAdmin ? totalAmount : entry.total_amount;
+    const qty = Number(quantity) || 1;
+    const finalAmount = isAdmin ? (Number(amount) || 0) : Number(entry.total_amount);
+    const finalUnit = isAdmin ? finalAmount / qty : Number(entry.unit_price);
 
     const { error } = await supabase
       .from("sales_entries")
@@ -149,9 +159,9 @@ function EditEntryPage() {
         sale_date: saleDate,
         brick_type_id: brickTypeId,
         custom_brick_name: isOthers ? customBrickName.trim() : null,
-        quantity: Number(quantity),
-        unit_price: finalUnitPrice,
-        total_amount: finalTotal,
+        quantity: qty,
+        unit_price: finalUnit,
+        total_amount: finalAmount,
         driver_name: driverName || null,
         vehicle_number: vehicleNumber || null,
         notes: notes || null,
@@ -169,46 +179,25 @@ function EditEntryPage() {
     navigate({ to: "/challans" });
   }
 
+
   async function handleApprove() {
     if (!entry || !me || !isAdmin) return;
-    const unit = Number(unitPrice) || 0;
-    if (unit <= 0) {
-      toast.error("একক মূল্য দিন");
+    const amt = Number(amount) || 0;
+    if (amt <= 0) {
+      toast.error("টাকার পরিমান দিন");
       setConfirmApprove(false);
       return;
     }
     setBusy(true);
-    // Save edited fields first (customer + entry), then approve.
-    if (entry.customer_id) {
-      await supabase
-        .from("customers")
-        .update({ name: customerName.trim() })
-        .eq("id", entry.customer_id);
-    }
-    const qty = Number(quantity) || 0;
-    const { error: upErr } = await supabase
-      .from("sales_entries")
-      .update({
-        challan_no: challanNo.trim(),
-        sale_date: saleDate,
-        brick_type_id: brickTypeId,
-        custom_brick_name: isOthers ? customBrickName.trim() : null,
-        quantity: qty,
-        driver_name: driverName || null,
-        vehicle_number: vehicleNumber || null,
-        notes: notes || null,
-      })
-      .eq("id", entry.id);
-    if (upErr) { setBusy(false); setConfirmApprove(false); toast.error(upErr.message); return; }
-
+    const qty = Number(quantity) || 1;
     const { error } = await supabase
       .from("sales_entries")
       .update({
         status: "approved",
         approved_by: me.user.id,
         approved_at: new Date().toISOString(),
-        unit_price: unit,
-        total_amount: unit * qty,
+        unit_price: amt / qty,
+        total_amount: amt,
       })
       .eq("id", entry.id);
     setBusy(false);
@@ -220,6 +209,7 @@ function EditEntryPage() {
     qc.invalidateQueries({ queryKey: ["customers-all"] });
     navigate({ to: "/approvals" });
   }
+
 
   async function handleDelete() {
     if (!entry) return;
@@ -264,7 +254,11 @@ function EditEntryPage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
         <h2 className="text-xl font-bold tracking-tight md:text-2xl">এন্ট্রি এডিট</h2>
-        <p className="text-sm text-muted-foreground">এডমিন অনুমোদনের আগ পর্যন্ত পরিবর্তন করা যাবে</p>
+        <p className="text-sm text-muted-foreground">
+          {lockedForAdminApproval
+            ? "অনুমোদনের জন্য শুধু টাকার পরিমান বসান। অনুমোদনের পরে সব ফিল্ড পরিবর্তন করা যাবে।"
+            : "এডমিন অনুমোদনের আগ পর্যন্ত পরিবর্তন করা যাবে"}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -273,11 +267,11 @@ function EditEntryPage() {
           <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>চালান নং</Label>
-              <Input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} required />
+              <Input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} required disabled={fieldsDisabled} />
             </div>
             <div className="space-y-1.5">
               <Label>তারিখ</Label>
-              <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} required />
+              <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} required disabled={fieldsDisabled} />
             </div>
           </CardContent>
         </Card>
@@ -287,7 +281,7 @@ function EditEntryPage() {
           <CardContent>
             <div className="space-y-1.5">
               <Label>গ্রাহকের নাম</Label>
-              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
+              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required disabled={fieldsDisabled} />
             </div>
           </CardContent>
         </Card>
@@ -297,15 +291,15 @@ function EditEntryPage() {
           <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>ড্রাইভারের নাম</Label>
-              <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+              <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} disabled={fieldsDisabled} />
             </div>
             <div className="space-y-1.5">
               <Label>গাড়ির নম্বর <span className="text-muted-foreground">(ঐচ্ছিক)</span></Label>
-              <Input value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
+              <Input value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} disabled={fieldsDisabled} />
             </div>
             <div className="space-y-1.5">
               <Label>ইটের ধরন</Label>
-              <Select value={brickTypeId} onValueChange={setBrickTypeId}>
+              <Select value={brickTypeId} onValueChange={setBrickTypeId} disabled={fieldsDisabled}>
                 <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
                 <SelectContent>
                   {orderedBricks.map((b) => (
@@ -316,12 +310,12 @@ function EditEntryPage() {
             </div>
             <div className="space-y-1.5">
               <Label>{quantityLabel}</Label>
-              <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+              <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required disabled={fieldsDisabled} />
             </div>
             {isOthers && (
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>ইটের ধরনের নাম লিখুন</Label>
-                <Input value={customBrickName} onChange={(e) => setCustomBrickName(e.target.value)} required />
+                <Input value={customBrickName} onChange={(e) => setCustomBrickName(e.target.value)} required disabled={fieldsDisabled} />
               </div>
             )}
           </CardContent>
@@ -329,15 +323,19 @@ function EditEntryPage() {
 
         {isAdmin && (
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">মূল্য</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CardHeader className="pb-3"><CardTitle className="text-base">টাকার পরিমান</CardTitle></CardHeader>
+            <CardContent>
               <div className="space-y-1.5">
-                <Label>একক মূল্য (৳)</Label>
-                <Input type="number" min={0} step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>মোট পরিমাণ (৳)</Label>
-                <Input value={bn(totalAmount)} disabled className="font-semibold text-primary" />
+                <Label>টাকার পরিমান (৳)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="font-semibold text-primary"
+                  placeholder="০"
+                />
               </div>
             </CardContent>
           </Card>
@@ -346,7 +344,7 @@ function EditEntryPage() {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">মন্তব্য</CardTitle></CardHeader>
           <CardContent>
-            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={fieldsDisabled} />
           </CardContent>
         </Card>
 
@@ -363,14 +361,16 @@ function EditEntryPage() {
               <Trash2 className="mr-2 h-4 w-4" /> ডিলেট
             </Button>
           )}
-          <Button type="submit" disabled={busy} variant="secondary">
-            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            পরিবর্তন সংরক্ষণ
-          </Button>
+          {!lockedForAdminApproval && (
+            <Button type="submit" disabled={busy} variant="secondary">
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              পরিবর্তন সংরক্ষণ
+            </Button>
+          )}
           {isAdmin && entry.status === "pending" && (
             <Button
               type="button"
-              disabled={busy || !(Number(unitPrice) > 0)}
+              disabled={busy || !(Number(amount) > 0)}
               onClick={() => setConfirmApprove(true)}
               className="bg-success text-success-foreground hover:bg-success/90"
             >
@@ -380,12 +380,13 @@ function EditEntryPage() {
         </div>
       </form>
 
+
       <AlertDialog open={confirmApprove} onOpenChange={(o) => !o && setConfirmApprove(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>অনুমোদন নিশ্চিত করুন</AlertDialogTitle>
             <AlertDialogDescription>
-              চালান <span className="font-semibold">{entry.challan_no}</span> অনুমোদিত হবে এবং একক মূল্য সংরক্ষিত হবে।
+              চালান <span className="font-semibold">{entry.challan_no}</span> অনুমোদিত হবে এবং টাকার পরিমান সংরক্ষিত হবে।
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
