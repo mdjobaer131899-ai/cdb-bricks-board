@@ -29,6 +29,7 @@ export function RecentSalesTable({
   isAdmin,
   onDelete,
 }: Props) {
+  const navigate = useNavigate();
   const showActions = Boolean(onDelete);
   const showAmount = isAdmin === true;
   const colCount = (showActions ? 1 : 0) + (showAmount ? 9 : 8);
