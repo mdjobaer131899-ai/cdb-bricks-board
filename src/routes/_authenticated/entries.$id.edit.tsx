@@ -299,23 +299,34 @@ function EditEntryPage() {
             </div>
             <div className="space-y-1.5">
               <Label>ইটের ধরন</Label>
-              <Select value={brickTypeId} onValueChange={setBrickTypeId} disabled={fieldsDisabled}>
-                <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
-                <SelectContent>
-                  {orderedBricks.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {fieldsDisabled ? (
+                <Input
+                  value={
+                    selectedBrick?.name === OTHERS_NAME
+                      ? (customBrickName || OTHERS_NAME)
+                      : (selectedBrick?.name ?? entry.custom_brick_name ?? "—")
+                  }
+                  disabled
+                />
+              ) : (
+                <Select value={brickTypeId} onValueChange={setBrickTypeId}>
+                  <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
+                  <SelectContent>
+                    {orderedBricks.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>{quantityLabel}</Label>
               <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required disabled={fieldsDisabled} />
             </div>
-            {isOthers && (
+            {isOthers && !fieldsDisabled && (
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>ইটের ধরনের নাম লিখুন</Label>
-                <Input value={customBrickName} onChange={(e) => setCustomBrickName(e.target.value)} required disabled={fieldsDisabled} />
+                <Input value={customBrickName} onChange={(e) => setCustomBrickName(e.target.value)} required />
               </div>
             )}
           </CardContent>
@@ -324,7 +335,7 @@ function EditEntryPage() {
         {isAdmin && (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">টাকার পরিমান</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>টাকার পরিমান (৳)</Label>
                 <Input
@@ -335,6 +346,17 @@ function EditEntryPage() {
                   onChange={(e) => setAmount(e.target.value)}
                   className="font-semibold text-primary"
                   placeholder="০"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>একক মূল্য (৳ / {isAdla ? "ফুট" : "পিস"})</Label>
+                <Input
+                  disabled
+                  value={
+                    Number(quantity) > 0
+                      ? (Number(amount) / Number(quantity)).toFixed(2)
+                      : "0.00"
+                  }
                 />
               </div>
             </CardContent>
