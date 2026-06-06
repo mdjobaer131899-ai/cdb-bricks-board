@@ -94,7 +94,7 @@ function EditEntryPage() {
     setBrickTypeId(e.brick_type_id);
     setCustomBrickName(e.custom_brick_name ?? "");
     setQuantity(String(e.quantity));
-    setAmount(String(e.total_amount ?? 0));
+    setUnitPrice(String(e.unit_price ?? 0));
     setNotes(e.notes ?? "");
     setLoaded(true);
   }, [entryQ.data, loaded]);
