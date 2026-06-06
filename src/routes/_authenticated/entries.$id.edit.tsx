@@ -254,7 +254,11 @@ function EditEntryPage() {
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
         <h2 className="text-xl font-bold tracking-tight md:text-2xl">এন্ট্রি এডিট</h2>
-        <p className="text-sm text-muted-foreground">এডমিন অনুমোদনের আগ পর্যন্ত পরিবর্তন করা যাবে</p>
+        <p className="text-sm text-muted-foreground">
+          {lockedForAdminApproval
+            ? "অনুমোদনের জন্য শুধু টাকার পরিমান বসান। অনুমোদনের পরে সব ফিল্ড পরিবর্তন করা যাবে।"
+            : "এডমিন অনুমোদনের আগ পর্যন্ত পরিবর্তন করা যাবে"}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -263,11 +267,11 @@ function EditEntryPage() {
           <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>চালান নং</Label>
-              <Input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} required />
+              <Input value={challanNo} onChange={(e) => setChallanNo(e.target.value)} required disabled={fieldsDisabled} />
             </div>
             <div className="space-y-1.5">
               <Label>তারিখ</Label>
-              <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} required />
+              <Input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} required disabled={fieldsDisabled} />
             </div>
           </CardContent>
         </Card>
@@ -277,7 +281,7 @@ function EditEntryPage() {
           <CardContent>
             <div className="space-y-1.5">
               <Label>গ্রাহকের নাম</Label>
-              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
+              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required disabled={fieldsDisabled} />
             </div>
           </CardContent>
         </Card>
@@ -287,15 +291,15 @@ function EditEntryPage() {
           <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>ড্রাইভারের নাম</Label>
-              <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+              <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} disabled={fieldsDisabled} />
             </div>
             <div className="space-y-1.5">
               <Label>গাড়ির নম্বর <span className="text-muted-foreground">(ঐচ্ছিক)</span></Label>
-              <Input value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
+              <Input value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} disabled={fieldsDisabled} />
             </div>
             <div className="space-y-1.5">
               <Label>ইটের ধরন</Label>
-              <Select value={brickTypeId} onValueChange={setBrickTypeId}>
+              <Select value={brickTypeId} onValueChange={setBrickTypeId} disabled={fieldsDisabled}>
                 <SelectTrigger><SelectValue placeholder="নির্বাচন করুন" /></SelectTrigger>
                 <SelectContent>
                   {orderedBricks.map((b) => (
@@ -306,12 +310,12 @@ function EditEntryPage() {
             </div>
             <div className="space-y-1.5">
               <Label>{quantityLabel}</Label>
-              <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+              <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required disabled={fieldsDisabled} />
             </div>
             {isOthers && (
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>ইটের ধরনের নাম লিখুন</Label>
-                <Input value={customBrickName} onChange={(e) => setCustomBrickName(e.target.value)} required />
+                <Input value={customBrickName} onChange={(e) => setCustomBrickName(e.target.value)} required disabled={fieldsDisabled} />
               </div>
             )}
           </CardContent>
@@ -319,15 +323,19 @@ function EditEntryPage() {
 
         {isAdmin && (
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">মূল্য</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <CardHeader className="pb-3"><CardTitle className="text-base">টাকার পরিমান</CardTitle></CardHeader>
+            <CardContent>
               <div className="space-y-1.5">
-                <Label>একক মূল্য (৳)</Label>
-                <Input type="number" min={0} step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>মোট পরিমাণ (৳)</Label>
-                <Input value={bn(totalAmount)} disabled className="font-semibold text-primary" />
+                <Label>টাকার পরিমান (৳)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="font-semibold text-primary"
+                  placeholder="০"
+                />
               </div>
             </CardContent>
           </Card>
@@ -336,7 +344,7 @@ function EditEntryPage() {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">মন্তব্য</CardTitle></CardHeader>
           <CardContent>
-            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={fieldsDisabled} />
           </CardContent>
         </Card>
 
@@ -353,14 +361,16 @@ function EditEntryPage() {
               <Trash2 className="mr-2 h-4 w-4" /> ডিলেট
             </Button>
           )}
-          <Button type="submit" disabled={busy} variant="secondary">
-            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            পরিবর্তন সংরক্ষণ
-          </Button>
+          {!lockedForAdminApproval && (
+            <Button type="submit" disabled={busy} variant="secondary">
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              পরিবর্তন সংরক্ষণ
+            </Button>
+          )}
           {isAdmin && entry.status === "pending" && (
             <Button
               type="button"
-              disabled={busy || !(Number(unitPrice) > 0)}
+              disabled={busy || !(Number(amount) > 0)}
               onClick={() => setConfirmApprove(true)}
               className="bg-success text-success-foreground hover:bg-success/90"
             >
@@ -369,6 +379,7 @@ function EditEntryPage() {
           )}
         </div>
       </form>
+
 
       <AlertDialog open={confirmApprove} onOpenChange={(o) => !o && setConfirmApprove(false)}>
         <AlertDialogContent>
