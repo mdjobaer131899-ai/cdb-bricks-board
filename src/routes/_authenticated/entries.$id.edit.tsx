@@ -149,8 +149,8 @@ function EditEntryPage() {
     }
 
     const qty = Number(quantity) || 1;
-    const finalAmount = isAdmin ? (Number(amount) || 0) : Number(entry.total_amount);
-    const finalUnit = isAdmin ? finalAmount / qty : Number(entry.unit_price);
+    const finalUnit = isAdmin ? (Number(unitPrice) || 0) : Number(entry.unit_price);
+    const finalAmount = isAdmin ? finalUnit * qty : Number(entry.total_amount);
 
     const { error } = await supabase
       .from("sales_entries")
