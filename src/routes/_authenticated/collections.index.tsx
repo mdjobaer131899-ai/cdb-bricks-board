@@ -365,6 +365,21 @@ function StatMini({ label, value, icon: Icon }: { label: string; value: string; 
   );
 }
 
+function MiniLedgerStat({ label, value, tone }: { label: string; value: string; tone?: "due" | "advance" }) {
+  const toneCls =
+    tone === "due"
+      ? "text-destructive"
+      : tone === "advance"
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-foreground";
+  return (
+    <div className="rounded-md border bg-muted/30 p-2.5">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`text-sm font-bold ${toneCls}`}>{value}</div>
+    </div>
+  );
+}
+
 function AddCollectionDialog() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
