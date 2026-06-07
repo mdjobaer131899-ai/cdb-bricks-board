@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save, CheckCircle2, Trash2, Calculator } from "lucide-react";
+import { Loader2, Save, CheckCircle2, Trash2, Calculator, FileText, Lock, Wallet } from "lucide-react";
 import { ProcessStepBar } from "@/components/process-step-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -18,6 +19,13 @@ import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { isoDate, bn } from "@/lib/format";
 import { toast } from "sonner";
+
+const CASH_VALUE = "__cash__";
+const CONTRACT_TYPE_LABEL: Record<string, string> = {
+  yearly_fixed: "বার্ষিক ফিক্সড",
+  short_term: "শর্ট-টার্ম",
+  cash: "ক্যাশ",
+};
 
 export const Route = createFileRoute("/_authenticated/entries/$id/edit")({
   head: () => ({ meta: [{ title: "এন্ট্রি এডিট — CDB Bricks" }] }),
