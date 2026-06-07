@@ -204,6 +204,7 @@ function EditEntryPage() {
         driver_name: driverName || null,
         vehicle_number: vehicleNumber || null,
         notes: notes || null,
+        ...(isAdmin ? { contract_id: contractId && contractId !== CASH_VALUE ? contractId : null } : {}),
       })
       .eq("id", entry.id);
     setBusy(false);
