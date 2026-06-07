@@ -27,6 +27,7 @@ import { Route as AuthenticatedChallansIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedEntriesNewRouteImport } from './routes/_authenticated/entries.new'
 import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
 import { Route as AuthenticatedContractsNewRouteImport } from './routes/_authenticated/contracts.new'
+import { Route as AuthenticatedContractsIdRouteImport } from './routes/_authenticated/contracts.$id'
 import { Route as AuthenticatedChallansIdRouteImport } from './routes/_authenticated/challans.$id'
 import { Route as AuthenticatedEntriesIdEditRouteImport } from './routes/_authenticated/entries.$id.edit'
 
@@ -124,6 +125,12 @@ const AuthenticatedContractsNewRoute =
     path: '/new',
     getParentRoute: () => AuthenticatedContractsRoute,
   } as any)
+const AuthenticatedContractsIdRoute =
+  AuthenticatedContractsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedContractsRoute,
+  } as any)
 const AuthenticatedChallansIdRoute = AuthenticatedChallansIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/users': typeof AuthenticatedUsersRoute
   '/api/chat': typeof ApiChatRoute
   '/challans/$id': typeof AuthenticatedChallansIdRoute
+  '/contracts/$id': typeof AuthenticatedContractsIdRoute
   '/contracts/new': typeof AuthenticatedContractsNewRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
@@ -167,6 +175,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/': typeof AuthenticatedIndexRoute
   '/challans/$id': typeof AuthenticatedChallansIdRoute
+  '/contracts/$id': typeof AuthenticatedContractsIdRoute
   '/contracts/new': typeof AuthenticatedContractsNewRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
@@ -190,6 +199,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/challans/$id': typeof AuthenticatedChallansIdRoute
+  '/_authenticated/contracts/$id': typeof AuthenticatedContractsIdRoute
   '/_authenticated/contracts/new': typeof AuthenticatedContractsNewRoute
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/_authenticated/entries/new': typeof AuthenticatedEntriesNewRoute
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | '/users'
     | '/api/chat'
     | '/challans/$id'
+    | '/contracts/$id'
     | '/contracts/new'
     | '/customers/$id'
     | '/entries/new'
@@ -231,6 +242,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/'
     | '/challans/$id'
+    | '/contracts/$id'
     | '/contracts/new'
     | '/customers/$id'
     | '/entries/new'
@@ -253,6 +265,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/_authenticated/'
     | '/_authenticated/challans/$id'
+    | '/_authenticated/contracts/$id'
     | '/_authenticated/contracts/new'
     | '/_authenticated/customers/$id'
     | '/_authenticated/entries/new'
@@ -397,6 +410,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedContractsNewRouteImport
       parentRoute: typeof AuthenticatedContractsRoute
     }
+    '/_authenticated/contracts/$id': {
+      id: '/_authenticated/contracts/$id'
+      path: '/$id'
+      fullPath: '/contracts/$id'
+      preLoaderRoute: typeof AuthenticatedContractsIdRouteImport
+      parentRoute: typeof AuthenticatedContractsRoute
+    }
     '/_authenticated/challans/$id': {
       id: '/_authenticated/challans/$id'
       path: '/$id'
@@ -430,12 +450,14 @@ const AuthenticatedChallansRouteWithChildren =
   )
 
 interface AuthenticatedContractsRouteChildren {
+  AuthenticatedContractsIdRoute: typeof AuthenticatedContractsIdRoute
   AuthenticatedContractsNewRoute: typeof AuthenticatedContractsNewRoute
   AuthenticatedContractsIndexRoute: typeof AuthenticatedContractsIndexRoute
 }
 
 const AuthenticatedContractsRouteChildren: AuthenticatedContractsRouteChildren =
   {
+    AuthenticatedContractsIdRoute: AuthenticatedContractsIdRoute,
     AuthenticatedContractsNewRoute: AuthenticatedContractsNewRoute,
     AuthenticatedContractsIndexRoute: AuthenticatedContractsIndexRoute,
   }
