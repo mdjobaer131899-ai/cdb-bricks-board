@@ -1,0 +1,7 @@
+# CDB Bricks
+
+> CDB Bricks — চালান, বিক্রয় ও গ্রাহক ব্যবস্থাপনার জন্য একটি বাংলা সেলস ম্যানেজমেন্ট সিস্টেম। A Bengali sales management system for brick manufacturers covering challan generation, customer records, and reporting.
+
+## Pages
+
+- [Sign in](/auth): Sign in to CDB Bricks to access challan, sales, and customer management.

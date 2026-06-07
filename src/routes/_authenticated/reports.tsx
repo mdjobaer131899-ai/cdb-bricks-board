@@ -20,7 +20,16 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/reports")({
-  head: () => ({ meta: [{ title: "রিপোর্ট — CDB Bricks" }] }),
+  head: () => ({
+    meta: [
+      { title: "রিপোর্ট — CDB Bricks" },
+      { name: "description", content: "তারিখভিত্তিক বিক্রয় রিপোর্ট তৈরি করুন, গ্রাহক ও ইটের ধরন অনুযায়ী বিশ্লেষণ দেখুন এবং PDF এক্সপোর্ট করুন।" },
+      { property: "og:title", content: "রিপোর্ট — CDB Bricks" },
+      { property: "og:description", content: "তারিখভিত্তিক বিক্রয় রিপোর্ট তৈরি করুন, গ্রাহক ও ইটের ধরন অনুযায়ী বিশ্লেষণ দেখুন এবং PDF এক্সপোর্ট করুন।" },
+      { property: "og:url", content: "/reports" },
+    ],
+    links: [{ rel: "canonical", href: "/reports" }],
+  }),
   component: ReportsPage,
 });
 

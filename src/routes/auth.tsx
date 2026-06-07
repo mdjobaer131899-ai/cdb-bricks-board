@@ -10,7 +10,16 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  head: () => ({ meta: [{ title: "লগইন — CDB Bricks" }] }),
+  head: () => ({
+    meta: [
+      { title: "লগইন — CDB Bricks" },
+      { name: "description", content: "CDB Bricks সেলস ম্যানেজমেন্ট সিস্টেমে সাইন ইন করুন — চালান, বিক্রয় ও গ্রাহক ব্যবস্থাপনার সম্পূর্ণ প্ল্যাটফর্ম।" },
+      { property: "og:title", content: "লগইন — CDB Bricks" },
+      { property: "og:description", content: "CDB Bricks সেলস ম্যানেজমেন্ট সিস্টেমে সাইন ইন করুন — চালান, বিক্রয় ও গ্রাহক ব্যবস্থাপনার সম্পূর্ণ প্ল্যাটফর্ম।" },
+      { property: "og:url", content: "/auth" },
+    ],
+    links: [{ rel: "canonical", href: "/auth" }],
+  }),
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (data.user) throw redirect({ to: "/" });
@@ -20,7 +29,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 via-background to-info/10 p-4">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 via-background to-info/10 p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex justify-center">
           <div className="rounded-full border border-primary/30 bg-primary/10 px-5 py-2 text-sm font-semibold text-primary shadow-sm">
@@ -31,8 +40,8 @@ function AuthPage() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-elegant">
             <Factory className="h-7 w-7" />
           </div>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight">CDB Bricks</h1>
-          <p className="text-sm text-muted-foreground">সেলস ম্যানেজমেন্ট সিস্টেম</p>
+          <h1 className="mt-3 text-2xl font-bold tracking-tight">CDB Bricks — সেলস ম্যানেজমেন্ট সিস্টেম</h1>
+          <p className="text-sm text-muted-foreground">চালান, বিক্রয় ও গ্রাহক ব্যবস্থাপনা</p>
         </div>
         <Card>
           <CardHeader className="pb-2">
@@ -50,7 +59,7 @@ function AuthPage() {
           <Link to="/" className="underline">ফিরে যান</Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 

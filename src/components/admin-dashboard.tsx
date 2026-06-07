@@ -51,7 +51,7 @@ export function AdminDashboard() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold tracking-tight md:text-2xl">অ্যাডমিন ড্যাশবোর্ড</h2>
+        <h1 className="text-xl font-bold tracking-tight md:text-2xl">অ্যাডমিন ড্যাশবোর্ড</h1>
         <p className="text-sm text-muted-foreground">সমস্ত বিক্রয় ও কার্যক্রমের সারসংক্ষেপ</p>
       </div>
       <DateRangeFilter value={range} onChange={setRange} />
