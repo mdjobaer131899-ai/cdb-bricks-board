@@ -59,7 +59,7 @@ function AuthPage() {
           <Link to="/" className="underline">ফিরে যান</Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cdb-bricks-board.lovable.app/sitemap.xml
