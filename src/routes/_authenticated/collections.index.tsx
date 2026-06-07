@@ -162,6 +162,7 @@ function CollectionsPage() {
     mutationFn: (id: string) => delFn({ data: { id } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["collections-list"] });
+      qc.invalidateQueries({ queryKey: ["cash-ledger"] });
       qc.invalidateQueries({ queryKey: ["dashboard-due"] });
       qc.invalidateQueries({ queryKey: ["dashboard-trend"] });
       qc.invalidateQueries({ queryKey: ["dashboard-month"] });
