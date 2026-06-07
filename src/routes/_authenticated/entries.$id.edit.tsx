@@ -394,6 +394,57 @@ function EditEntryPage() {
         </Card>
 
         {isAdmin && (
+          <Card className="border-primary/30">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                চুক্তি / খাত নির্বাচন
+              </CardTitle>
+              {selectedContract?.contract_type === "yearly_fixed" && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Lock className="h-3 w-3" /> রেট লক
+                </Badge>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Label>এই ডেলিভারি কোন খাতে যাবে?</Label>
+              <Select value={contractId || CASH_VALUE} onValueChange={setContractId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="চুক্তি বা ক্যাশ নির্বাচন করুন" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={CASH_VALUE}>
+                    <span className="inline-flex items-center gap-2">
+                      <Wallet className="h-4 w-4" /> ক্যাশ সেল (কোনো চুক্তি নয়)
+                    </span>
+                  </SelectItem>
+                  {contracts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.contract_no} · {CONTRACT_TYPE_LABEL[c.contract_type] ?? c.contract_type}
+                      {c.fixed_rate != null ? ` · ৳${bn(c.fixed_rate)}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {contractsQ.isLoading && (
+                <p className="text-xs text-muted-foreground">চুক্তি লোড হচ্ছে…</p>
+              )}
+              {!contractsQ.isLoading && contracts.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  এই গ্রাহকের কোনো সক্রিয় চুক্তি নেই — ক্যাশ সেল হিসেবে অনুমোদন হবে।
+                </p>
+              )}
+              {selectedContract && (
+                <div className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
+                  বুকড পরিমাণ: <span className="font-semibold text-foreground">{bn(selectedContract.booked_quantity)}</span>
+                  {selectedContract.expiry_date && <> · মেয়াদ: <span className="font-semibold text-foreground">{selectedContract.expiry_date}</span></>}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {isAdmin && (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">টাকার পরিমান</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
