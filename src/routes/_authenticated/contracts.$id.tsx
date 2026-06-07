@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, CalendarClock, Wallet, Banknote, FileText, Truck, CreditCard, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, CalendarClock, Wallet, Banknote, FileText, Truck, CreditCard, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,8 +9,22 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate } from "@/lib/format";
+import { deleteContract } from "@/lib/contracts.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/contracts/$id")({
   head: ({ params }) => ({
@@ -44,7 +59,24 @@ async function fetchContractDetail(id: string) {
 function ContractDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: me } = useCurrentUser();
+  const isAdmin = me?.role === "admin";
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   const q = useQuery({ queryKey: ["contract-detail", id], queryFn: () => fetchContractDetail(id) });
+
+  const deleteMut = useMutation({
+    mutationFn: () => deleteContract({ data: { id } }),
+    onSuccess: () => {
+      toast.success("চুক্তি মুছে ফেলা হয়েছে");
+      queryClient.invalidateQueries({ queryKey: ["contracts-all"] });
+      navigate({ to: "/contracts" });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "চুক্তি মুছতে ব্যর্থ হয়েছে");
+    },
+  });
 
   if (q.isLoading) {
     return <div className="space-y-3"><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
@@ -88,6 +120,35 @@ function ContractDetailPage() {
             </p>
           </div>
         </div>
+        {isAdmin && (
+          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="mr-2 h-4 w-4" /> মুছুন
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>চুক্তি মুছে ফেলতে চান?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {c.contract_no} — এই চুক্তি এবং এর সব পেমেন্ট রেকর্ড স্থায়ীভাবে মুছে যাবে। ডেলিভারি চালানগুলোর চুক্তি লিংক শুধু সরানো হবে।
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeleteOpen(false)}>বাতিল</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => {
+                    setDeleteOpen(false);
+                    deleteMut.mutate();
+                  }}
+                >
+                  মুছে ফেলুন
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {showExpiryAlert && (
