@@ -279,6 +279,39 @@ export type Database = {
         }
         Relationships: []
       }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          created_by: string
+          expense_date: string
+          id: string
+          note: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          created_by: string
+          expense_date?: string
+          id?: string
+          note?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          created_by?: string
+          expense_date?: string
+          id?: string
+          note?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
