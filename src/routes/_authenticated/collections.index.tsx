@@ -58,6 +58,54 @@ async function fetchCollections(): Promise<CollectionRow[]> {
   return (data ?? []) as unknown as CollectionRow[];
 }
 
+type CashLedgerRow = {
+  customer_id: string;
+  customer_name: string;
+  sales_total: number;
+  collected_total: number;
+  balance: number;
+};
+
+async function fetchCashLedger(): Promise<CashLedgerRow[]> {
+  // Approved cash (non-contract) sales per customer
+  const { data: sales, error: sErr } = await supabase
+    .from("sales_entries")
+    .select("customer_id, total_amount, customer:customers(id, name)")
+    .eq("status", "approved")
+    .is("contract_id", null)
+    .limit(5000);
+  if (sErr) throw sErr;
+
+  // Non-contract collections per customer
+  const { data: cols, error: cErr } = await supabase
+    .from("collections")
+    .select("customer_id, amount, customer:customers(id, name)")
+    .is("contract_id", null)
+    .limit(5000);
+  if (cErr) throw cErr;
+
+  const map = new Map<string, CashLedgerRow>();
+  for (const r of (sales ?? []) as Array<{ customer_id: string; total_amount: number; customer: { id: string; name: string } | null }>) {
+    const id = r.customer_id;
+    const name = r.customer?.name ?? "—";
+    const cur = map.get(id) ?? { customer_id: id, customer_name: name, sales_total: 0, collected_total: 0, balance: 0 };
+    cur.sales_total += Number(r.total_amount) || 0;
+    cur.customer_name = name;
+    map.set(id, cur);
+  }
+  for (const r of (cols ?? []) as Array<{ customer_id: string; amount: number; customer: { id: string; name: string } | null }>) {
+    const id = r.customer_id;
+    const name = r.customer?.name ?? "—";
+    const cur = map.get(id) ?? { customer_id: id, customer_name: name, sales_total: 0, collected_total: 0, balance: 0 };
+    cur.collected_total += Number(r.amount) || 0;
+    cur.customer_name = name;
+    map.set(id, cur);
+  }
+  const rows = Array.from(map.values()).map((r) => ({ ...r, balance: r.sales_total - r.collected_total }));
+  rows.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+  return rows;
+}
+
 async function fetchCustomers() {
   const { data, error } = await supabase.from("customers").select("id, name").order("name");
   if (error) throw error;
