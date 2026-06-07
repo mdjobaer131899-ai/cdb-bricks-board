@@ -239,6 +239,7 @@ function EditEntryPage() {
         approved_at: new Date().toISOString(),
         unit_price: unit,
         total_amount: amt,
+        contract_id: contractId && contractId !== CASH_VALUE ? contractId : null,
       })
       .eq("id", entry.id);
     setBusy(false);
