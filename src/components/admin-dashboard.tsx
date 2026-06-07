@@ -216,6 +216,11 @@ export function AdminDashboard() {
       const b = buckets.get(k);
       if (b) b.collection += Number(p.amount || 0);
     }
+    for (const p of trendQ.data?.cashOnly ?? []) {
+      const k = (p.payment_date as string).slice(0, 7);
+      const b = buckets.get(k);
+      if (b) b.collection += Number(p.amount || 0);
+    }
     return Array.from(buckets.values());
   }, [trendQ.data, today]);
 
