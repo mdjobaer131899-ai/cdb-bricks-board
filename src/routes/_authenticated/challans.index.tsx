@@ -63,7 +63,7 @@ function ChallansPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold tracking-tight md:text-2xl">চালান এন্ট্রি</h2>
+          <h1 className="text-xl font-bold tracking-tight md:text-2xl">চালান এন্ট্রি</h1>
           <p className="text-sm text-muted-foreground">নতুন বিক্রয় এন্ট্রি যোগ করুন ও আপনার সাম্প্রতিক চালান দেখুন</p>
         </div>
         <Button asChild>

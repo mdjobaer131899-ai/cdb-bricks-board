@@ -8,8 +8,12 @@ export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
       { title: "ড্যাশবোর্ড — CDB Bricks" },
-      { name: "description", content: "CDB Bricks বিক্রয় ব্যবস্থাপনা ড্যাশবোর্ড।" },
+      { name: "description", content: "CDB Bricks-এর বিক্রয় ও চালান ব্যবস্থাপনা ড্যাশবোর্ড। এখান থেকে দৈনিক বিক্রয়, স্টক ও অপেক্ষমাণ অনুমোদনের সারসংক্ষেপ দেখুন।" },
+      { property: "og:title", content: "ড্যাশবোর্ড — CDB Bricks" },
+      { property: "og:description", content: "CDB Bricks-এর বিক্রয় ও চালান ব্যবস্থাপনা ড্যাশবোর্ড। এখান থেকে দৈনিক বিক্রয়, স্টক ও অপেক্ষমাণ অনুমোদনের সারসংক্ষেপ দেখুন।" },
+      { property: "og:url", content: "/" },
     ],
+    links: [{ rel: "canonical", href: "/" }],
   }),
   component: Index,
 });

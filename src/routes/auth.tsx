@@ -10,7 +10,16 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  head: () => ({ meta: [{ title: "লগইন — CDB Bricks" }] }),
+  head: () => ({
+    meta: [
+      { title: "লগইন — CDB Bricks" },
+      { name: "description", content: "CDB Bricks সেলস ম্যানেজমেন্ট সিস্টেমে সাইন ইন করুন — চালান, বিক্রয় ও গ্রাহক ব্যবস্থাপনার সম্পূর্ণ প্ল্যাটফর্ম।" },
+      { property: "og:title", content: "লগইন — CDB Bricks" },
+      { property: "og:description", content: "CDB Bricks সেলস ম্যানেজমেন্ট সিস্টেমে সাইন ইন করুন — চালান, বিক্রয় ও গ্রাহক ব্যবস্থাপনার সম্পূর্ণ প্ল্যাটফর্ম।" },
+      { property: "og:url", content: "/auth" },
+    ],
+    links: [{ rel: "canonical", href: "/auth" }],
+  }),
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
     if (data.user) throw redirect({ to: "/" });
