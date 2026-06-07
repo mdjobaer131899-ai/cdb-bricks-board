@@ -101,7 +101,7 @@ function EditEntryPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("contracts")
-        .select("id, contract_no, contract_type, fixed_rate, booked_quantity, delivered_quantity, status, priority, expiry_date")
+        .select("id, contract_no, contract_type, fixed_rate, booked_quantity, status, priority, expiry_date")
         .eq("customer_id", customerId!)
         .in("status", ["active"])
         .order("priority", { ascending: true })
