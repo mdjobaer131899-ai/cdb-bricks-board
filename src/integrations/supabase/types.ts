@@ -83,6 +83,60 @@ export type Database = {
         }
         Relationships: []
       }
+      collections: {
+        Row: {
+          amount: number
+          contract_id: string | null
+          created_at: string
+          created_by: string
+          customer_id: string
+          id: string
+          method: string | null
+          note: string | null
+          payment_date: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          contract_id?: string | null
+          created_at?: string
+          created_by: string
+          customer_id: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          contract_id?: string | null
+          created_at?: string
+          created_by?: string
+          customer_id?: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collections_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collections_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contract_payments: {
         Row: {
           amount: number

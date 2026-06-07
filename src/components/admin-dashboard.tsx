@@ -77,7 +77,7 @@ export function AdminDashboard() {
   const todayStatsQ = useQuery({
     queryKey: ["dash", "today", todayIso],
     queryFn: async () => {
-      const [salesRes, payRes] = await Promise.all([
+      const [salesRes, payRes, colRes] = await Promise.all([
         supabase
           .from("sales_entries")
           .select("quantity, total_amount, status, vehicle_number")
@@ -86,19 +86,26 @@ export function AdminDashboard() {
           .from("contract_payments")
           .select("amount")
           .eq("payment_date", todayIso),
+        supabase
+          .from("collections")
+          .select("amount")
+          .is("contract_id", null)
+          .eq("payment_date", todayIso),
       ]);
       const sales = salesRes.data ?? [];
       const approved = sales.filter((s) => s.status === "approved");
       const vehicles = new Set(
         approved.map((s) => s.vehicle_number).filter((v): v is string => !!v && v.trim() !== ""),
       );
+      const contractPay = (payRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
+      const cashOnlyPay = (colRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
       return {
         challans: sales.length,
         approvedAmount: approved.reduce((a, b) => a + Number(b.total_amount || 0), 0),
         approvedBricks: approved.reduce((a, b) => a + Number(b.quantity || 0), 0),
         pending: sales.filter((s) => s.status === "pending").length,
         deliveries: vehicles.size,
-        collection: (payRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0),
+        collection: contractPay + cashOnlyPay,
       };
     },
   });
@@ -127,12 +134,15 @@ export function AdminDashboard() {
   const dueQ = useQuery({
     queryKey: ["dashboard-due"],
     queryFn: async () => {
-      const [salesRes, payRes] = await Promise.all([
+      const [salesRes, payRes, colRes] = await Promise.all([
         supabase.from("sales_entries").select("total_amount").eq("status", "approved"),
         supabase.from("contract_payments").select("amount"),
+        supabase.from("collections").select("amount").is("contract_id", null),
       ]);
       const totalSales = (salesRes.data ?? []).reduce((a, b) => a + Number(b.total_amount || 0), 0);
-      const totalCollection = (payRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
+      const contractPay = (payRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
+      const cashOnlyPay = (colRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
+      const totalCollection = contractPay + cashOnlyPay;
       return { totalSales, totalCollection, due: Math.max(0, totalSales - totalCollection) };
     },
   });
@@ -141,7 +151,7 @@ export function AdminDashboard() {
   const trendQ = useQuery({
     queryKey: ["dashboard-trend", sixMonthStart],
     queryFn: async () => {
-      const [salesRes, payRes] = await Promise.all([
+      const [salesRes, payRes, colRes] = await Promise.all([
         supabase
           .from("sales_entries")
           .select("sale_date, total_amount, quantity, status")
@@ -150,8 +160,13 @@ export function AdminDashboard() {
           .from("contract_payments")
           .select("payment_date, amount")
           .gte("payment_date", sixMonthStart),
+        supabase
+          .from("collections")
+          .select("payment_date, amount")
+          .is("contract_id", null)
+          .gte("payment_date", sixMonthStart),
       ]);
-      return { sales: salesRes.data ?? [], payments: payRes.data ?? [] };
+      return { sales: salesRes.data ?? [], payments: payRes.data ?? [], cashOnly: colRes.data ?? [] };
     },
   });
 
@@ -159,7 +174,7 @@ export function AdminDashboard() {
   const monthQ = useQuery({
     queryKey: ["dashboard-month", monthStartIso],
     queryFn: async () => {
-      const [salesRes, payRes] = await Promise.all([
+      const [salesRes, payRes, colRes] = await Promise.all([
         supabase
           .from("sales_entries")
           .select("total_amount, status")
@@ -169,9 +184,16 @@ export function AdminDashboard() {
           .from("contract_payments")
           .select("amount")
           .gte("payment_date", monthStartIso),
+        supabase
+          .from("collections")
+          .select("amount")
+          .is("contract_id", null)
+          .gte("payment_date", monthStartIso),
       ]);
       const sales = (salesRes.data ?? []).reduce((a, b) => a + Number(b.total_amount || 0), 0);
-      const collection = (payRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
+      const collection =
+        (payRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0) +
+        (colRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
       return { sales, collection };
     },
   });
@@ -190,6 +212,11 @@ export function AdminDashboard() {
       if (b) b.sales += Number(s.total_amount || 0);
     }
     for (const p of trendQ.data?.payments ?? []) {
+      const k = (p.payment_date as string).slice(0, 7);
+      const b = buckets.get(k);
+      if (b) b.collection += Number(p.amount || 0);
+    }
+    for (const p of trendQ.data?.cashOnly ?? []) {
       const k = (p.payment_date as string).slice(0, 7);
       const b = buckets.get(k);
       if (b) b.collection += Number(p.amount || 0);
