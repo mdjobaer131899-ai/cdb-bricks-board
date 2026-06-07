@@ -350,9 +350,13 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
     enabled: open && !!customerId,
   });
 
+  type IncomeInput = {
+    customer_id: string; contract_id: string | null; amount: number;
+    payment_date: string; method: string | null; note: string | null;
+  };
   const createFn = useServerFn(createCollection);
   const mut = useMutation({
-    mutationFn: (input: Parameters<typeof createFn>[0]["data"]) => createFn({ data: input }),
+    mutationFn: (input: IncomeInput) => createFn({ data: input }),
     onSuccess: () => {
       toast.success("আয় যোগ হয়েছে");
       setOpen(false);
