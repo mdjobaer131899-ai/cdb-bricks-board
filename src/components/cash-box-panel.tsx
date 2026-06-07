@@ -469,9 +469,10 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   const [date, setDate] = useState(isoDate(new Date()));
   const [note, setNote] = useState("");
 
+  type ExpenseInput = { category: string; amount: number; expense_date: string; note: string | null };
   const createFn = useServerFn(createExpense);
   const mut = useMutation({
-    mutationFn: (input: Parameters<typeof createFn>[0]["data"]) => createFn({ data: input }),
+    mutationFn: (input: ExpenseInput) => createFn({ data: input }),
     onSuccess: () => {
       toast.success("ব্যয় যোগ হয়েছে");
       setOpen(false);
