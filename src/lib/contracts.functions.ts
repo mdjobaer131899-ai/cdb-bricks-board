@@ -68,3 +68,13 @@ export const createContract = createServerFn({ method: "POST" })
 
     return row;
   });
+
+export const deleteContract = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { error } = await supabase.from("contracts").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { success: true };
+  });
