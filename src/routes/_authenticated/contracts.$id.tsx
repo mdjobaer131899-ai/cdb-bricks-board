@@ -59,7 +59,24 @@ async function fetchContractDetail(id: string) {
 function ContractDetailPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: me } = useCurrentUser();
+  const isAdmin = me?.role === "admin";
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   const q = useQuery({ queryKey: ["contract-detail", id], queryFn: () => fetchContractDetail(id) });
+
+  const deleteMut = useMutation({
+    mutationFn: () => deleteContract({ data: { id } }),
+    onSuccess: () => {
+      toast.success("চুক্তি মুছে ফেলা হয়েছে");
+      queryClient.invalidateQueries({ queryKey: ["contracts-all"] });
+      navigate({ to: "/contracts" });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "চুক্তি মুছতে ব্যর্থ হয়েছে");
+    },
+  });
 
   if (q.isLoading) {
     return <div className="space-y-3"><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
