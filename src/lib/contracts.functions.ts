@@ -63,7 +63,7 @@ export const createContract = createServerFn({ method: "POST" })
       _entity_type: "contract",
       _entity_id: row.id,
       _old_value: null,
-      _new_value: insertRow as unknown as Record<string, unknown>,
+      _new_value: JSON.parse(JSON.stringify(insertRow)),
     });
 
     return row;
