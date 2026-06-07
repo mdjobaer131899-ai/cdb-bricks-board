@@ -48,6 +48,37 @@ export function AdminDashboard() {
     approved: sales.filter((e) => e.status === "approved").length,
   }), [sales]);
 
+  // Build per-day series across the selected range for sparklines
+  const series = useMemo(() => {
+    const days: { key: string; challans: number; bricks: number; amount: number; approved: number; pending: number }[] = [];
+    const start = new Date(range.from);
+    const end = new Date(range.to);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      days.push({ key: isoDate(d), challans: 0, bricks: 0, amount: 0, approved: 0, pending: 0 });
+    }
+    const idx = new Map(days.map((d, i) => [d.key, i]));
+    for (const s of sales) {
+      const i = idx.get(s.sale_date);
+      if (i === undefined) continue;
+      days[i].challans += 1;
+      days[i].bricks += s.quantity;
+      days[i].amount += Number(s.total_amount);
+      if (s.status === "approved") days[i].approved += 1;
+      if (s.status === "pending") days[i].pending += 1;
+    }
+    return {
+      challans: days.map((d) => d.challans),
+      bricks: days.map((d) => d.bricks),
+      amount: days.map((d) => d.amount),
+      approved: days.map((d) => d.approved),
+      pending: days.map((d) => d.pending),
+    };
+  }, [sales, range]);
+
+  const approvalPct = stats.challans > 0 ? (stats.approved / stats.challans) * 100 : 0;
+  const pendingPct = stats.challans > 0 ? (stats.pending / stats.challans) * 100 : 0;
+  const advancePct = stats.challans > 0 ? (stats.advance / stats.challans) * 100 : 0;
+
   return (
     <div className="space-y-5">
       <div>
@@ -58,15 +89,15 @@ export function AdminDashboard() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
         {loading
-          ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-[110px] rounded-xl" />)
+          ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-[160px] rounded-xl" />)
           : (
             <>
-              <StatCard label="মোট চালান (নির্বাচিত)" value={bn(stats.challans)} icon={FileText} tone="primary" />
-              <StatCard label="ডেলিভার্ড ইট" value={bn(stats.bricks)} icon={Package} tone="info" hint="ইটের সংখ্যা" />
-              <StatCard label="মোট বিক্রয় (৳)" value={`৳ ${bn(stats.amount)}`} icon={DollarSign} tone="success" />
-              <StatCard label="অগ্রিম ডেলিভারি" value={bn(stats.advance)} icon={Truck} tone="info" />
-              <StatCard label="অপেক্ষমাণ অনুমোদন" value={bn(stats.pending)} icon={Clock} tone="warning" badge={stats.pending} />
-              <StatCard label="অনুমোদিত বিক্রয়" value={bn(stats.approved)} icon={CheckCircle2} tone="success" />
+              <StatCard label="মোট চালান" value={bn(stats.challans)} icon={FileText} tone="primary" series={series.challans} />
+              <StatCard label="ডেলিভার্ড ইট" value={bn(stats.bricks)} icon={Package} tone="info" hint="ইটের সংখ্যা" series={series.bricks} />
+              <StatCard label="মোট বিক্রয় (৳)" value={`৳ ${bn(stats.amount)}`} icon={DollarSign} tone="success" series={series.amount} />
+              <StatCard label="অগ্রিম ডেলিভারি" value={bn(stats.advance)} icon={Truck} tone="info" progress={advancePct} />
+              <StatCard label="অপেক্ষমাণ অনুমোদন" value={bn(stats.pending)} icon={Clock} tone="warning" badge={stats.pending} progress={pendingPct} />
+              <StatCard label="অনুমোদিত বিক্রয়" value={bn(stats.approved)} icon={CheckCircle2} tone="success" progress={approvalPct} />
               <StatCard label="মোট গ্রাহক" value={bn(customersQ.data ?? 0)} icon={Users} tone="primary" hint="সব সময়" />
               <StatCard label="লাইফটাইম ইট" value={bn(lifetimeQ.data ?? 0)} icon={Layers} tone="destructive" hint="অনুমোদিত ডেলিভার্ড" />
             </>
