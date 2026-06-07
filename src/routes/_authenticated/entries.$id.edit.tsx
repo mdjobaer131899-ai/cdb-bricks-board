@@ -91,6 +91,27 @@ function EditEntryPage() {
   const [loaded, setLoaded] = useState(false);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [contractId, setContractId] = useState<string>("");
+
+  // Active contracts for this entry's customer (admins use this to assign delivery to a contract)
+  const customerId = entryQ.data?.customer_id;
+  const contractsQ = useQuery({
+    queryKey: ["contracts-for-customer", customerId],
+    enabled: !!customerId && isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("id, contract_no, contract_type, fixed_rate, booked_quantity, delivered_quantity, status, priority, expiry_date")
+        .eq("customer_id", customerId!)
+        .in("status", ["active"])
+        .order("priority", { ascending: true })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const contracts = contractsQ.data ?? [];
+  const selectedContract = contracts.find((c) => c.id === contractId);
 
   useEffect(() => {
     const e = entryQ.data;
