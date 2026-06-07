@@ -19,6 +19,7 @@ const ALL_ITEMS = [
   { title: "নতুন এন্ট্রি", url: "/entries/new", icon: FilePlus2, roles: ["admin", "manager"] as const },
   { title: "চালান এন্ট্রি", url: "/challans", icon: FileText, roles: ["admin", "manager"] as const },
   { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck, roles: ["admin"] as const },
+  { title: "চুক্তি", url: "/contracts", icon: ScrollText, roles: ["admin", "manager"] as const },
   { title: "গ্রাহক", url: "/customers", icon: Users, roles: ["admin", "manager"] as const },
   { title: "রিপোর্ট", url: "/reports", icon: BarChart3, roles: ["admin", "manager"] as const },
   { title: "ইউজার", url: "/users", icon: UserCog, roles: ["admin"] as const },
