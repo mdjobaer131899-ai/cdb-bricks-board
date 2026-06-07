@@ -299,8 +299,8 @@ export function AdminDashboard() {
                   <AreaChart data={monthly} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                     <defs>
                       <linearGradient id="salesG" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.4} />
-                        <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0} />
+                        <stop offset="0%" stopColor="var(--success)" stopOpacity={0.4} />
+                        <stop offset="100%" stopColor="var(--success)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
@@ -308,9 +308,9 @@ export function AdminDashboard() {
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => bn(v)} />
                     <Tooltip
                       formatter={(v: number) => [`৳ ${bn(v)}`, "বিক্রয়"]}
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                      contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8 }}
                     />
-                    <Area type="monotone" dataKey="sales" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#salesG)" />
+                    <Area type="monotone" dataKey="sales" stroke="var(--success)" strokeWidth={2} fill="url(#salesG)" />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
@@ -342,11 +342,11 @@ export function AdminDashboard() {
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => bn(v)} />
                     <Tooltip
                       formatter={(v: number, name) => [`৳ ${bn(v)}`, name === "sales" ? "বিক্রয়" : "কালেকশন"]}
-                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }}
+                      contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8 }}
                     />
                     <Legend formatter={(v) => (v === "sales" ? "বিক্রয়" : "কালেকশন")} wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="collection" fill="hsl(var(--info))" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="sales" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="collection" fill="var(--info)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
