@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          device: string | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          ip: string | null
+          new_value: Json | null
+          old_value: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          device?: string | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          ip?: string | null
+          new_value?: Json | null
+          old_value?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          device?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          ip?: string | null
+          new_value?: Json | null
+          old_value?: Json | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       brick_types: {
         Row: {
           created_at: string
@@ -43,6 +82,115 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      contract_payments: {
+        Row: {
+          amount: number
+          contract_id: string
+          created_at: string
+          created_by: string
+          id: string
+          method: string | null
+          note: string | null
+          payment_date: string
+        }
+        Insert: {
+          amount: number
+          contract_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+        }
+        Update: {
+          amount?: number
+          contract_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_payments_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contracts: {
+        Row: {
+          advance_paid: number
+          approved_by: string | null
+          booked_quantity: number
+          booked_value: number
+          contract_no: string
+          contract_type: Database["public"]["Enums"]["contract_type"]
+          created_at: string
+          created_by: string
+          customer_id: string
+          expiry_date: string | null
+          fixed_rate: number | null
+          id: string
+          notes: string | null
+          priority: number
+          start_date: string
+          status: Database["public"]["Enums"]["contract_status"]
+          updated_at: string
+        }
+        Insert: {
+          advance_paid?: number
+          approved_by?: string | null
+          booked_quantity?: number
+          booked_value?: number
+          contract_no: string
+          contract_type: Database["public"]["Enums"]["contract_type"]
+          created_at?: string
+          created_by: string
+          customer_id: string
+          expiry_date?: string | null
+          fixed_rate?: number | null
+          id?: string
+          notes?: string | null
+          priority?: number
+          start_date?: string
+          status?: Database["public"]["Enums"]["contract_status"]
+          updated_at?: string
+        }
+        Update: {
+          advance_paid?: number
+          approved_by?: string | null
+          booked_quantity?: number
+          booked_value?: number
+          contract_no?: string
+          contract_type?: Database["public"]["Enums"]["contract_type"]
+          created_at?: string
+          created_by?: string
+          customer_id?: string
+          expiry_date?: string | null
+          fixed_rate?: number | null
+          id?: string
+          notes?: string | null
+          priority?: number
+          start_date?: string
+          status?: Database["public"]["Enums"]["contract_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contracts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       customers: {
         Row: {
@@ -107,6 +255,7 @@ export type Database = {
           approved_by: string | null
           brick_type_id: string
           challan_no: string
+          contract_id: string | null
           created_at: string
           created_by: string
           custom_brick_name: string | null
@@ -128,6 +277,7 @@ export type Database = {
           approved_by?: string | null
           brick_type_id: string
           challan_no: string
+          contract_id?: string | null
           created_at?: string
           created_by: string
           custom_brick_name?: string | null
@@ -149,6 +299,7 @@ export type Database = {
           approved_by?: string | null
           brick_type_id?: string
           challan_no?: string
+          contract_id?: string | null
           created_at?: string
           created_by?: string
           custom_brick_name?: string | null
@@ -171,6 +322,13 @@ export type Database = {
             columns: ["brick_type_id"]
             isOneToOne: false
             referencedRelation: "brick_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_entries_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
             referencedColumns: ["id"]
           },
           {
@@ -208,10 +366,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      expire_old_contracts: { Args: never; Returns: undefined }
+      generate_contract_no: {
+        Args: { _type: Database["public"]["Enums"]["contract_type"] }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "manager"
+      contract_status: "active" | "completed" | "expired" | "suspended"
+      contract_type: "yearly_fixed" | "short_term" | "cash"
       sale_status: "pending" | "approved" | "rejected"
       sale_type: "advance" | "regular"
     }
@@ -342,6 +506,8 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "manager"],
+      contract_status: ["active", "completed", "expired", "suspended"],
+      contract_type: ["yearly_fixed", "short_term", "cash"],
       sale_status: ["pending", "approved", "rejected"],
       sale_type: ["advance", "regular"],
     },
