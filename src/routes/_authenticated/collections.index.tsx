@@ -128,6 +128,24 @@ function CollectionsPage() {
   const isAdmin = me?.role === "admin";
   const qc = useQueryClient();
   const list = useQuery({ queryKey: ["collections-list"], queryFn: fetchCollections });
+  const ledger = useQuery({ queryKey: ["cash-ledger"], queryFn: fetchCashLedger });
+  const [ledgerSearch, setLedgerSearch] = useState("");
+
+  const ledgerRows = useMemo(() => {
+    const rows = ledger.data ?? [];
+    const q = ledgerSearch.trim().toLowerCase();
+    const filtered = q ? rows.filter((r) => r.customer_name.toLowerCase().includes(q)) : rows;
+    return filtered;
+  }, [ledger.data, ledgerSearch]);
+
+  const ledgerTotals = useMemo(() => {
+    const rows = ledger.data ?? [];
+    const sales = rows.reduce((a, r) => a + r.sales_total, 0);
+    const collected = rows.reduce((a, r) => a + r.collected_total, 0);
+    const due = rows.filter((r) => r.balance > 0).reduce((a, r) => a + r.balance, 0);
+    const advance = rows.filter((r) => r.balance < 0).reduce((a, r) => a + Math.abs(r.balance), 0);
+    return { sales, collected, due, advance };
+  }, [ledger.data]);
 
   const totals = useMemo(() => {
     const rows = list.data ?? [];
