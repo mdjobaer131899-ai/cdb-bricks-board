@@ -58,6 +58,54 @@ async function fetchCollections(): Promise<CollectionRow[]> {
   return (data ?? []) as unknown as CollectionRow[];
 }
 
+type CashLedgerRow = {
+  customer_id: string;
+  customer_name: string;
+  sales_total: number;
+  collected_total: number;
+  balance: number;
+};
+
+async function fetchCashLedger(): Promise<CashLedgerRow[]> {
+  // Approved cash (non-contract) sales per customer
+  const { data: sales, error: sErr } = await supabase
+    .from("sales_entries")
+    .select("customer_id, total_amount, customer:customers(id, name)")
+    .eq("status", "approved")
+    .is("contract_id", null)
+    .limit(5000);
+  if (sErr) throw sErr;
+
+  // Non-contract collections per customer
+  const { data: cols, error: cErr } = await supabase
+    .from("collections")
+    .select("customer_id, amount, customer:customers(id, name)")
+    .is("contract_id", null)
+    .limit(5000);
+  if (cErr) throw cErr;
+
+  const map = new Map<string, CashLedgerRow>();
+  for (const r of (sales ?? []) as Array<{ customer_id: string; total_amount: number; customer: { id: string; name: string } | null }>) {
+    const id = r.customer_id;
+    const name = r.customer?.name ?? "—";
+    const cur = map.get(id) ?? { customer_id: id, customer_name: name, sales_total: 0, collected_total: 0, balance: 0 };
+    cur.sales_total += Number(r.total_amount) || 0;
+    cur.customer_name = name;
+    map.set(id, cur);
+  }
+  for (const r of (cols ?? []) as Array<{ customer_id: string; amount: number; customer: { id: string; name: string } | null }>) {
+    const id = r.customer_id;
+    const name = r.customer?.name ?? "—";
+    const cur = map.get(id) ?? { customer_id: id, customer_name: name, sales_total: 0, collected_total: 0, balance: 0 };
+    cur.collected_total += Number(r.amount) || 0;
+    cur.customer_name = name;
+    map.set(id, cur);
+  }
+  const rows = Array.from(map.values()).map((r) => ({ ...r, balance: r.sales_total - r.collected_total }));
+  rows.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+  return rows;
+}
+
 async function fetchCustomers() {
   const { data, error } = await supabase.from("customers").select("id, name").order("name");
   if (error) throw error;
@@ -80,6 +128,24 @@ function CollectionsPage() {
   const isAdmin = me?.role === "admin";
   const qc = useQueryClient();
   const list = useQuery({ queryKey: ["collections-list"], queryFn: fetchCollections });
+  const ledger = useQuery({ queryKey: ["cash-ledger"], queryFn: fetchCashLedger });
+  const [ledgerSearch, setLedgerSearch] = useState("");
+
+  const ledgerRows = useMemo(() => {
+    const rows = ledger.data ?? [];
+    const q = ledgerSearch.trim().toLowerCase();
+    const filtered = q ? rows.filter((r) => r.customer_name.toLowerCase().includes(q)) : rows;
+    return filtered;
+  }, [ledger.data, ledgerSearch]);
+
+  const ledgerTotals = useMemo(() => {
+    const rows = ledger.data ?? [];
+    const sales = rows.reduce((a, r) => a + r.sales_total, 0);
+    const collected = rows.reduce((a, r) => a + r.collected_total, 0);
+    const due = rows.filter((r) => r.balance > 0).reduce((a, r) => a + r.balance, 0);
+    const advance = rows.filter((r) => r.balance < 0).reduce((a, r) => a + Math.abs(r.balance), 0);
+    return { sales, collected, due, advance };
+  }, [ledger.data]);
 
   const totals = useMemo(() => {
     const rows = list.data ?? [];
@@ -96,6 +162,7 @@ function CollectionsPage() {
     mutationFn: (id: string) => delFn({ data: { id } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["collections-list"] });
+      qc.invalidateQueries({ queryKey: ["cash-ledger"] });
       qc.invalidateQueries({ queryKey: ["dashboard-due"] });
       qc.invalidateQueries({ queryKey: ["dashboard-trend"] });
       qc.invalidateQueries({ queryKey: ["dashboard-month"] });
@@ -121,6 +188,80 @@ function CollectionsPage() {
         <StatMini label="মোট কালেকশন" value={`৳ ${bn(totals.totalSum)}`} icon={Banknote} />
         <StatMini label="মোট এন্ট্রি" value={bn(totals.count)} icon={Wallet} />
       </div>
+
+      {/* Cash (non-contract) customer ledger */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-base">গ্রাহকের নগদ হিসাব</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">চুক্তি বহির্ভূত অনুমোদিত বিক্রয় − নেওয়া টাকা = বাকি / অতিরিক্ত</p>
+          </div>
+          <Input
+            placeholder="গ্রাহক খুঁজুন..."
+            value={ledgerSearch}
+            onChange={(e) => setLedgerSearch(e.target.value)}
+            className="h-8 w-40 md:w-56"
+          />
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 pt-0">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MiniLedgerStat label="মোট নগদ বিক্রয়" value={`৳ ${bn(ledgerTotals.sales)}`} />
+            <MiniLedgerStat label="মোট নেওয়া" value={`৳ ${bn(ledgerTotals.collected)}`} />
+            <MiniLedgerStat label="মোট বাকি" value={`৳ ${bn(ledgerTotals.due)}`} tone="due" />
+            <MiniLedgerStat label="মোট অতিরিক্ত" value={`৳ ${bn(ledgerTotals.advance)}`} tone="advance" />
+          </div>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>গ্রাহক</TableHead>
+                  <TableHead className="text-right">নগদ বিক্রয়</TableHead>
+                  <TableHead className="text-right">নেওয়া টাকা</TableHead>
+                  <TableHead className="text-right">অবস্থা</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ledger.isLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 4 }).map((__, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : ledgerRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                      কোনো নগদ গ্রাহক হিসাব নেই
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  ledgerRows.map((r) => {
+                    const bal = r.balance;
+                    const status =
+                      bal > 0
+                        ? { label: `বাকি ৳ ${bn(bal)}`, cls: "bg-destructive/10 text-destructive border-destructive/30" }
+                        : bal < 0
+                        ? { label: `অতিরিক্ত ৳ ${bn(Math.abs(bal))}`, cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30" }
+                        : { label: "পরিশোধিত", cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" };
+                    return (
+                      <TableRow key={r.customer_id}>
+                        <TableCell className="font-medium">{r.customer_name}</TableCell>
+                        <TableCell className="text-right">৳ {bn(r.sales_total)}</TableCell>
+                        <TableCell className="text-right">৳ {bn(r.collected_total)}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline" className={`text-[11px] ${status.cls}`}>{status.label}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
 
       <Card>
         <CardHeader>
@@ -224,6 +365,21 @@ function StatMini({ label, value, icon: Icon }: { label: string; value: string; 
   );
 }
 
+function MiniLedgerStat({ label, value, tone }: { label: string; value: string; tone?: "due" | "advance" }) {
+  const toneCls =
+    tone === "due"
+      ? "text-destructive"
+      : tone === "advance"
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-foreground";
+  return (
+    <div className="rounded-md border bg-muted/30 p-2.5">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`text-sm font-bold ${toneCls}`}>{value}</div>
+    </div>
+  );
+}
+
 function AddCollectionDialog() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -246,6 +402,7 @@ function AddCollectionDialog() {
     mutationFn: createFn,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["collections-list"] });
+      qc.invalidateQueries({ queryKey: ["cash-ledger"] });
       qc.invalidateQueries({ queryKey: ["dashboard-due"] });
       qc.invalidateQueries({ queryKey: ["dashboard-trend"] });
       qc.invalidateQueries({ queryKey: ["dashboard-month"] });
