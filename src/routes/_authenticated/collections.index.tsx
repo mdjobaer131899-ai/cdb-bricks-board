@@ -189,6 +189,80 @@ function CollectionsPage() {
         <StatMini label="মোট এন্ট্রি" value={bn(totals.count)} icon={Wallet} />
       </div>
 
+      {/* Cash (non-contract) customer ledger */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-base">গ্রাহকের নগদ হিসাব</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">চুক্তি বহির্ভূত অনুমোদিত বিক্রয় − নেওয়া টাকা = বাকি / অতিরিক্ত</p>
+          </div>
+          <Input
+            placeholder="গ্রাহক খুঁজুন..."
+            value={ledgerSearch}
+            onChange={(e) => setLedgerSearch(e.target.value)}
+            className="h-8 w-40 md:w-56"
+          />
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 pt-0">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <MiniLedgerStat label="মোট নগদ বিক্রয়" value={`৳ ${bn(ledgerTotals.sales)}`} />
+            <MiniLedgerStat label="মোট নেওয়া" value={`৳ ${bn(ledgerTotals.collected)}`} />
+            <MiniLedgerStat label="মোট বাকি" value={`৳ ${bn(ledgerTotals.due)}`} tone="due" />
+            <MiniLedgerStat label="মোট অতিরিক্ত" value={`৳ ${bn(ledgerTotals.advance)}`} tone="advance" />
+          </div>
+          <div className="overflow-x-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>গ্রাহক</TableHead>
+                  <TableHead className="text-right">নগদ বিক্রয়</TableHead>
+                  <TableHead className="text-right">নেওয়া টাকা</TableHead>
+                  <TableHead className="text-right">অবস্থা</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ledger.isLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 4 }).map((__, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : ledgerRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                      কোনো নগদ গ্রাহক হিসাব নেই
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  ledgerRows.map((r) => {
+                    const bal = r.balance;
+                    const status =
+                      bal > 0
+                        ? { label: `বাকি ৳ ${bn(bal)}`, cls: "bg-destructive/10 text-destructive border-destructive/30" }
+                        : bal < 0
+                        ? { label: `অতিরিক্ত ৳ ${bn(Math.abs(bal))}`, cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30" }
+                        : { label: "পরিশোধিত", cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" };
+                    return (
+                      <TableRow key={r.customer_id}>
+                        <TableCell className="font-medium">{r.customer_name}</TableCell>
+                        <TableCell className="text-right">৳ {bn(r.sales_total)}</TableCell>
+                        <TableCell className="text-right">৳ {bn(r.collected_total)}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline" className={`text-[11px] ${status.cls}`}>{status.label}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">কালেকশন তালিকা</CardTitle>
