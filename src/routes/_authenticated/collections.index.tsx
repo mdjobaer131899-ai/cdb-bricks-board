@@ -387,6 +387,7 @@ function AddCollectionDialog() {
     mutationFn: createFn,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["collections-list"] });
+      qc.invalidateQueries({ queryKey: ["cash-ledger"] });
       qc.invalidateQueries({ queryKey: ["dashboard-due"] });
       qc.invalidateQueries({ queryKey: ["dashboard-trend"] });
       qc.invalidateQueries({ queryKey: ["dashboard-month"] });
