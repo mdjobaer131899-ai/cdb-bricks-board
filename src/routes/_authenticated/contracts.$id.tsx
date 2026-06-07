@@ -120,6 +120,35 @@ function ContractDetailPage() {
             </p>
           </div>
         </div>
+        {isAdmin && (
+          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="mr-2 h-4 w-4" /> মুছুন
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>চুক্তি মুছে ফেলতে চান?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {c.contract_no} — এই চুক্তি এবং এর সব পেমেন্ট রেকর্ড স্থায়ীভাবে মুছে যাবে। ডেলিভারি চালানগুলোর চুক্তি লিংক শুধু সরানো হবে।
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeleteOpen(false)}>বাতিল</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => {
+                    setDeleteOpen(false);
+                    deleteMut.mutate();
+                  }}
+                >
+                  মুছে ফেলুন
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {showExpiryAlert && (
