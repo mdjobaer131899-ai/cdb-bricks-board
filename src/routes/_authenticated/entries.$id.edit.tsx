@@ -126,8 +126,17 @@ function EditEntryPage() {
     setQuantity(String(e.quantity));
     setUnitPrice(String(e.unit_price ?? 0));
     setNotes(e.notes ?? "");
+    setContractId(e.contract_id ?? CASH_VALUE);
     setLoaded(true);
   }, [entryQ.data, loaded]);
+
+  // When admin picks a yearly_fixed contract, auto-lock the unit price.
+  useEffect(() => {
+    if (!isAdmin || !selectedContract) return;
+    if (selectedContract.contract_type === "yearly_fixed" && selectedContract.fixed_rate != null) {
+      setUnitPrice(String(selectedContract.fixed_rate));
+    }
+  }, [contractId, selectedContract, isAdmin]);
 
   const entry = entryQ.data;
   const selectedBrick = orderedBricks.find((b) => b.id === brickTypeId);
