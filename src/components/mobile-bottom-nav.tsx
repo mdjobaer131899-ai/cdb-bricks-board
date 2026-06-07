@@ -17,7 +17,10 @@ export function MobileBottomNav() {
   const role = data?.role ?? "manager";
   const items = ALL.filter((i) => (i.roles as readonly string[]).includes(role));
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur md:hidden">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-background/85 backdrop-blur-xl md:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       <div className={cn("grid", items.length === 5 ? "grid-cols-5" : "grid-cols-4")}>
         {items.map((it) => {
           const active = path === it.url;
@@ -26,12 +29,26 @@ export function MobileBottomNav() {
               key={it.url}
               to={it.url}
               className={cn(
-                "flex flex-col items-center gap-1 py-2 text-[10px] transition-colors",
-                active ? "text-primary" : "text-muted-foreground",
+                "group relative flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <it.icon className={cn("h-5 w-5", active && "scale-110")} />
-              <span>{it.title}</span>
+              <span
+                className={cn(
+                  "absolute top-0 h-0.5 w-8 rounded-full transition-all",
+                  active ? "bg-primary opacity-100" : "opacity-0",
+                )}
+              />
+              <it.icon
+                className={cn(
+                  "h-[18px] w-[18px] transition-transform",
+                  active ? "scale-105" : "group-active:scale-95",
+                )}
+                strokeWidth={active ? 2.25 : 1.75}
+              />
+              <span className={cn("tracking-tight", active ? "font-semibold" : "font-normal")}>
+                {it.title}
+              </span>
             </Link>
           );
         })}

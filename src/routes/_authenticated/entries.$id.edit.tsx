@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save, CheckCircle2, Trash2 } from "lucide-react";
+import { Loader2, Save, CheckCircle2, Trash2, Calculator } from "lucide-react";
+import { ProcessStepBar } from "@/components/process-step-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -251,6 +252,18 @@ function EditEntryPage() {
     );
   }
 
+  const steps: { label: string; status: "done" | "current" | "upcoming" }[] = [
+    { label: "তৈরি", status: "done" },
+    {
+      label: "মূল্য নির্ধারণ",
+      status: entry.status === "pending" ? (Number(unitPrice) > 0 ? "current" : "current") : "done",
+    },
+    {
+      label: "অনুমোদন",
+      status: entry.status === "approved" ? "done" : "upcoming",
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
@@ -261,6 +274,13 @@ function EditEntryPage() {
             : "এডমিন অনুমোদনের আগ পর্যন্ত পরিবর্তন করা যাবে"}
         </p>
       </div>
+
+      <Card className="border-border/60 bg-gradient-to-br from-card to-card/60">
+        <CardContent className="p-4">
+          <ProcessStepBar steps={steps} />
+        </CardContent>
+      </Card>
+
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <Card>
@@ -339,15 +359,18 @@ function EditEntryPage() {
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>একক মূল্য (৳ / {isAdla ? "ফুট" : "পিস"})</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={unitPrice}
-                  onChange={(e) => setUnitPrice(e.target.value)}
-                  className="font-semibold text-primary"
-                  placeholder="০"
-                />
+                <div className="relative">
+                  <Calculator className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary/70" />
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={unitPrice}
+                    onChange={(e) => setUnitPrice(e.target.value)}
+                    className="pl-9 font-semibold text-primary"
+                    placeholder="০"
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>মোট টাকার পরিমান (৳)</Label>
