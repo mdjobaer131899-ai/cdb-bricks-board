@@ -371,6 +371,16 @@ export type Database = {
         Args: { _type: Database["public"]["Enums"]["contract_type"] }
         Returns: string
       }
+      log_audit: {
+        Args: {
+          _action: string
+          _entity_id: string
+          _entity_type: string
+          _new_value?: Json
+          _old_value?: Json
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "manager"

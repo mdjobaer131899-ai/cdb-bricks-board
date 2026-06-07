@@ -58,12 +58,12 @@ export const createContract = createServerFn({ method: "POST" })
       });
     }
 
-    await supabase.from("audit_logs").insert({
-      user_id: userId,
-      action: "contract.create",
-      entity_type: "contract",
-      entity_id: row.id,
-      new_value: insertRow,
+    await supabase.rpc("log_audit", {
+      _action: "contract.create",
+      _entity_type: "contract",
+      _entity_id: row.id,
+      _old_value: null,
+      _new_value: JSON.parse(JSON.stringify(insertRow)),
     });
 
     return row;
