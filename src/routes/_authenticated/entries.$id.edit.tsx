@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save, CheckCircle2, Trash2, Calculator } from "lucide-react";
+import { Loader2, Save, CheckCircle2, Trash2, Calculator, FileText, Lock, Wallet } from "lucide-react";
 import { ProcessStepBar } from "@/components/process-step-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -18,6 +19,13 @@ import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { isoDate, bn } from "@/lib/format";
 import { toast } from "sonner";
+
+const CASH_VALUE = "__cash__";
+const CONTRACT_TYPE_LABEL: Record<string, string> = {
+  yearly_fixed: "বার্ষিক ফিক্সড",
+  short_term: "শর্ট-টার্ম",
+  cash: "ক্যাশ",
+};
 
 export const Route = createFileRoute("/_authenticated/entries/$id/edit")({
   head: () => ({ meta: [{ title: "এন্ট্রি এডিট — CDB Bricks" }] }),
@@ -83,6 +91,27 @@ function EditEntryPage() {
   const [loaded, setLoaded] = useState(false);
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [contractId, setContractId] = useState<string>("");
+
+  // Active contracts for this entry's customer (admins use this to assign delivery to a contract)
+  const customerId = entryQ.data?.customer_id;
+  const contractsQ = useQuery({
+    queryKey: ["contracts-for-customer", customerId],
+    enabled: !!customerId && isAdmin,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("id, contract_no, contract_type, fixed_rate, booked_quantity, status, priority, expiry_date")
+        .eq("customer_id", customerId!)
+        .in("status", ["active"])
+        .order("priority", { ascending: true })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const contracts = contractsQ.data ?? [];
+  const selectedContract = contracts.find((c) => c.id === contractId);
 
   useEffect(() => {
     const e = entryQ.data;
@@ -97,8 +126,17 @@ function EditEntryPage() {
     setQuantity(String(e.quantity));
     setUnitPrice(String(e.unit_price ?? 0));
     setNotes(e.notes ?? "");
+    setContractId(e.contract_id ?? CASH_VALUE);
     setLoaded(true);
   }, [entryQ.data, loaded]);
+
+  // When admin picks a yearly_fixed contract, auto-lock the unit price.
+  useEffect(() => {
+    if (!isAdmin || !selectedContract) return;
+    if (selectedContract.contract_type === "yearly_fixed" && selectedContract.fixed_rate != null) {
+      setUnitPrice(String(selectedContract.fixed_rate));
+    }
+  }, [contractId, selectedContract, isAdmin]);
 
   const entry = entryQ.data;
   const selectedBrick = orderedBricks.find((b) => b.id === brickTypeId);
@@ -166,6 +204,7 @@ function EditEntryPage() {
         driver_name: driverName || null,
         vehicle_number: vehicleNumber || null,
         notes: notes || null,
+        ...(isAdmin ? { contract_id: contractId && contractId !== CASH_VALUE ? contractId : null } : {}),
       })
       .eq("id", entry.id);
     setBusy(false);
@@ -200,6 +239,7 @@ function EditEntryPage() {
         approved_at: new Date().toISOString(),
         unit_price: unit,
         total_amount: amt,
+        contract_id: contractId && contractId !== CASH_VALUE ? contractId : null,
       })
       .eq("id", entry.id);
     setBusy(false);
@@ -352,6 +392,57 @@ function EditEntryPage() {
             )}
           </CardContent>
         </Card>
+
+        {isAdmin && (
+          <Card className="border-primary/30">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                চুক্তি / খাত নির্বাচন
+              </CardTitle>
+              {selectedContract?.contract_type === "yearly_fixed" && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Lock className="h-3 w-3" /> রেট লক
+                </Badge>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Label>এই ডেলিভারি কোন খাতে যাবে?</Label>
+              <Select value={contractId || CASH_VALUE} onValueChange={setContractId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="চুক্তি বা ক্যাশ নির্বাচন করুন" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={CASH_VALUE}>
+                    <span className="inline-flex items-center gap-2">
+                      <Wallet className="h-4 w-4" /> ক্যাশ সেল (কোনো চুক্তি নয়)
+                    </span>
+                  </SelectItem>
+                  {contracts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.contract_no} · {CONTRACT_TYPE_LABEL[c.contract_type] ?? c.contract_type}
+                      {c.fixed_rate != null ? ` · ৳${bn(c.fixed_rate)}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {contractsQ.isLoading && (
+                <p className="text-xs text-muted-foreground">চুক্তি লোড হচ্ছে…</p>
+              )}
+              {!contractsQ.isLoading && contracts.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  এই গ্রাহকের কোনো সক্রিয় চুক্তি নেই — ক্যাশ সেল হিসেবে অনুমোদন হবে।
+                </p>
+              )}
+              {selectedContract && (
+                <div className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
+                  বুকড পরিমাণ: <span className="font-semibold text-foreground">{bn(selectedContract.booked_quantity)}</span>
+                  {selectedContract.expiry_date && <> · মেয়াদ: <span className="font-semibold text-foreground">{selectedContract.expiry_date}</span></>}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {isAdmin && (
           <Card>
