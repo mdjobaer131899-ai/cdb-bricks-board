@@ -20,6 +20,7 @@ import { Route as AuthenticatedCustomersRouteImport } from './routes/_authentica
 import { Route as AuthenticatedChallansRouteImport } from './routes/_authenticated/challans'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers.index'
+import { Route as AuthenticatedChallansIndexRouteImport } from './routes/_authenticated/challans.index'
 import { Route as AuthenticatedEntriesNewRouteImport } from './routes/_authenticated/entries.new'
 import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
 import { Route as AuthenticatedChallansIdRouteImport } from './routes/_authenticated/challans.$id'
@@ -80,6 +81,12 @@ const AuthenticatedCustomersIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedCustomersRoute,
   } as any)
+const AuthenticatedChallansIndexRoute =
+  AuthenticatedChallansIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedChallansRoute,
+  } as any)
 const AuthenticatedEntriesNewRoute = AuthenticatedEntriesNewRouteImport.update({
   id: '/entries/new',
   path: '/entries/new',
@@ -116,13 +123,13 @@ export interface FileRoutesByFullPath {
   '/challans/$id': typeof AuthenticatedChallansIdRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/challans/': typeof AuthenticatedChallansIndexRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
   '/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/approvals': typeof AuthenticatedApprovalsRoute
-  '/challans': typeof AuthenticatedChallansRouteWithChildren
   '/reports': typeof AuthenticatedReportsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/challans/$id': typeof AuthenticatedChallansIdRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/challans': typeof AuthenticatedChallansIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/_authenticated/challans/$id': typeof AuthenticatedChallansIdRoute
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/_authenticated/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/_authenticated/challans/': typeof AuthenticatedChallansIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
   '/_authenticated/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
@@ -167,13 +176,13 @@ export interface FileRouteTypes {
     | '/challans/$id'
     | '/customers/$id'
     | '/entries/new'
+    | '/challans/'
     | '/customers/'
     | '/entries/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
     | '/approvals'
-    | '/challans'
     | '/reports'
     | '/settings'
     | '/users'
@@ -182,6 +191,7 @@ export interface FileRouteTypes {
     | '/challans/$id'
     | '/customers/$id'
     | '/entries/new'
+    | '/challans'
     | '/customers'
     | '/entries/$id/edit'
   id:
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/_authenticated/challans/$id'
     | '/_authenticated/customers/$id'
     | '/_authenticated/entries/new'
+    | '/_authenticated/challans/'
     | '/_authenticated/customers/'
     | '/_authenticated/entries/$id/edit'
   fileRoutesById: FileRoutesById
@@ -288,6 +299,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCustomersIndexRouteImport
       parentRoute: typeof AuthenticatedCustomersRoute
     }
+    '/_authenticated/challans/': {
+      id: '/_authenticated/challans/'
+      path: '/'
+      fullPath: '/challans/'
+      preLoaderRoute: typeof AuthenticatedChallansIndexRouteImport
+      parentRoute: typeof AuthenticatedChallansRoute
+    }
     '/_authenticated/entries/new': {
       id: '/_authenticated/entries/new'
       path: '/entries/new'
@@ -321,10 +339,12 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedChallansRouteChildren {
   AuthenticatedChallansIdRoute: typeof AuthenticatedChallansIdRoute
+  AuthenticatedChallansIndexRoute: typeof AuthenticatedChallansIndexRoute
 }
 
 const AuthenticatedChallansRouteChildren: AuthenticatedChallansRouteChildren = {
   AuthenticatedChallansIdRoute: AuthenticatedChallansIdRoute,
+  AuthenticatedChallansIndexRoute: AuthenticatedChallansIndexRoute,
 }
 
 const AuthenticatedChallansRouteWithChildren =
