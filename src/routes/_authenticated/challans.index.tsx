@@ -20,7 +20,16 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/challans/")({
-  head: () => ({ meta: [{ title: "চালান এন্ট্রি — CDB Bricks" }] }),
+  head: () => ({
+    meta: [
+      { title: "চালান এন্ট্রি — CDB Bricks" },
+      { name: "description", content: "নতুন বিক্রয় চালান এন্ট্রি যোগ করুন এবং আপনার সাম্প্রতিক চালানের সম্পূর্ণ তালিকা ও স্ট্যাটাস দেখুন।" },
+      { property: "og:title", content: "চালান এন্ট্রি — CDB Bricks" },
+      { property: "og:description", content: "নতুন বিক্রয় চালান এন্ট্রি যোগ করুন এবং আপনার সাম্প্রতিক চালানের সম্পূর্ণ তালিকা ও স্ট্যাটাস দেখুন।" },
+      { property: "og:url", content: "/challans" },
+    ],
+    links: [{ rel: "canonical", href: "/challans" }],
+  }),
   component: ChallansPage,
 });
 

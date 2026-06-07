@@ -47,9 +47,9 @@ export function AppHeader() {
           <Skeleton className="h-4 w-32" />
         ) : (
           <>
-            <h1 className="text-sm font-semibold leading-tight md:text-base">
+            <div className="text-sm font-semibold leading-tight md:text-base">
               স্বাগতম, {name.split(" ")[0] || "ব্যবহারকারী"}
-            </h1>
+            </div>
             <p className="text-[11px] text-muted-foreground">আজ: {new Date().toLocaleDateString("bn-BD")}</p>
           </>
         )}

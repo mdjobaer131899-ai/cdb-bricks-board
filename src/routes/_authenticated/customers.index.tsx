@@ -21,7 +21,16 @@ import { bnDate } from "@/lib/format";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/customers/")({
-  head: () => ({ meta: [{ title: "গ্রাহক — CDB Bricks" }] }),
+  head: () => ({
+    meta: [
+      { title: "গ্রাহক ব্যবস্থাপনা — CDB Bricks" },
+      { name: "description", content: "CDB Bricks-এর সকল গ্রাহকের তালিকা, যোগাযোগের তথ্য ও চালান ইতিহাস এক জায়গায় ব্যবস্থাপনা করুন।" },
+      { property: "og:title", content: "গ্রাহক ব্যবস্থাপনা — CDB Bricks" },
+      { property: "og:description", content: "CDB Bricks-এর সকল গ্রাহকের তালিকা, যোগাযোগের তথ্য ও চালান ইতিহাস এক জায়গায় ব্যবস্থাপনা করুন।" },
+      { property: "og:url", content: "/customers" },
+    ],
+    links: [{ rel: "canonical", href: "/customers" }],
+  }),
   component: CustomersPage,
 });
 
@@ -61,7 +70,7 @@ function CustomersPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold tracking-tight md:text-2xl">গ্রাহক ব্যবস্থাপনা</h2>
+          <h1 className="text-xl font-bold tracking-tight md:text-2xl">গ্রাহক ব্যবস্থাপনা</h1>
           <p className="text-sm text-muted-foreground">সব গ্রাহকের তালিকা</p>
         </div>
         {canManage && (
@@ -121,10 +130,10 @@ function CustomersPage() {
                       {canManage && (
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
-                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setEditing(c as Customer); }}>
+                            <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="এডিট" onClick={(e) => { e.stopPropagation(); setEditing(c as Customer); }}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleting(c as Customer); }}>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label="মুছে ফেলুন" onClick={(e) => { e.stopPropagation(); setDeleting(c as Customer); }}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>

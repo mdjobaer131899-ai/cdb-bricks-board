@@ -34,7 +34,7 @@ export function ManagerDashboard() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold tracking-tight md:text-2xl">ম্যানেজার ড্যাশবোর্ড</h2>
+        <h1 className="text-xl font-bold tracking-tight md:text-2xl">ম্যানেজার ড্যাশবোর্ড</h1>
         <p className="text-sm text-muted-foreground">{me?.fullName} — আপনার নিজস্ব এন্ট্রি ও পারফরম্যান্স</p>
       </div>
       <DateRangeFilter value={range} onChange={setRange} />
