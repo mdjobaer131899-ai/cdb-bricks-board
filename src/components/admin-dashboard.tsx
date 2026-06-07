@@ -288,6 +288,9 @@ export function AdminDashboard() {
         </div>
       </section>
 
+      {/* === Cash Box (Income / Expense) === */}
+      <CashBoxPanel />
+
       {/* === Operations === */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
