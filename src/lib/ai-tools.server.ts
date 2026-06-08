@@ -284,5 +284,135 @@ export function buildAssistantTools(supabase: DB) {
         return { brick_types: items };
       },
     }),
+
+    /** Contracts: list active/all contracts with bookings & paid amounts. */
+    getContractsSummary: tool({
+      description:
+        "Get a summary of contracts. Supports filtering by status (active/completed/expired) or contract_type (yearly_fixed/short_term/cash). Returns booked value, advance paid, due amount.",
+      inputSchema: z.object({
+        status: z.enum(["active", "completed", "expired", "all"]).optional().default("active"),
+        contract_type: z.enum(["yearly_fixed", "short_term", "cash", "all"]).optional().default("all"),
+        customerName: z.string().optional(),
+      }),
+      execute: async ({ status, contract_type, customerName }) => {
+        let q = supabase
+          .from("contracts")
+          .select("id, contract_no, contract_type, status, booked_value, advance_paid, expiry_date, customer:customers(name)")
+          .order("created_at", { ascending: false })
+          .limit(200);
+        if (status && status !== "all") q = q.eq("status", status);
+        if (contract_type && contract_type !== "all") q = q.eq("contract_type", contract_type);
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+        let rows = (data ?? []) as unknown as Array<{
+          id: string; contract_no: string; contract_type: string; status: string;
+          booked_value: number; advance_paid: number; expiry_date: string | null;
+          customer: { name: string } | null;
+        }>;
+        if (customerName) {
+          const needle = customerName.toLowerCase();
+          rows = rows.filter((r) => (r.customer?.name ?? "").toLowerCase().includes(needle));
+        }
+        const totalBooked = rows.reduce((s, r) => s + Number(r.booked_value || 0), 0);
+        const totalPaid = rows.reduce((s, r) => s + Number(r.advance_paid || 0), 0);
+        return {
+          count: rows.length,
+          total_booked: totalBooked,
+          total_paid: totalPaid,
+          total_due: Math.max(0, totalBooked - totalPaid),
+          contracts: rows.map((r) => ({
+            contract_no: r.contract_no,
+            type: r.contract_type,
+            status: r.status,
+            customer: r.customer?.name ?? "—",
+            booked: Number(r.booked_value || 0),
+            paid: Number(r.advance_paid || 0),
+            due: Math.max(0, Number(r.booked_value || 0) - Number(r.advance_paid || 0)),
+            expiry_date: r.expiry_date,
+          })),
+        };
+      },
+    }),
+
+    /** Collections summary (cash + contract). */
+    getCollectionsSummary: tool({
+      description:
+        "Get collections (টাকা গ্রহণ) for a date range. Separates cash-sale collections (contract_id null) from contract-linked collections.",
+      inputSchema: z.object({
+        from: z.string(),
+        to: z.string(),
+        customerName: z.string().optional(),
+      }),
+      execute: async ({ from, to, customerName }) => {
+        const { data, error } = await supabase
+          .from("collections")
+          .select("amount, payment_date, method, contract_id, customer:customers(name)")
+          .gte("payment_date", from)
+          .lte("payment_date", to)
+          .limit(1000);
+        if (error) throw new Error(error.message);
+        let rows = (data ?? []) as unknown as Array<{
+          amount: number; payment_date: string; method: string | null;
+          contract_id: string | null; customer: { name: string } | null;
+        }>;
+        if (customerName) {
+          const needle = customerName.toLowerCase();
+          rows = rows.filter((r) => (r.customer?.name ?? "").toLowerCase().includes(needle));
+        }
+        const cash = rows.filter((r) => !r.contract_id);
+        const contract = rows.filter((r) => r.contract_id);
+        return {
+          from, to,
+          cash_total: cash.reduce((s, r) => s + Number(r.amount || 0), 0),
+          cash_count: cash.length,
+          contract_total: contract.reduce((s, r) => s + Number(r.amount || 0), 0),
+          contract_count: contract.length,
+          grand_total: rows.reduce((s, r) => s + Number(r.amount || 0), 0),
+        };
+      },
+    }),
+
+    /** Expense summary by category in a date range. */
+    getExpensesSummary: tool({
+      description: "Get expense (ব্যয়) totals for a date range, grouped by category.",
+      inputSchema: z.object({ from: z.string(), to: z.string() }),
+      execute: async ({ from, to }) => {
+        const { data, error } = await supabase
+          .from("expenses")
+          .select("category, amount, expense_date, note")
+          .gte("expense_date", from)
+          .lte("expense_date", to)
+          .limit(1000);
+        if (error) throw new Error(error.message);
+        const rows = data ?? [];
+        const byCat = new Map<string, number>();
+        for (const r of rows) byCat.set(r.category, (byCat.get(r.category) ?? 0) + Number(r.amount || 0));
+        const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+        return {
+          from, to,
+          total,
+          count: rows.length,
+          by_category: Array.from(byCat.entries()).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount),
+        };
+      },
+    }),
+
+    /** Cash box for a specific day: cash-only income − expense. */
+    getCashBox: tool({
+      description:
+        "Get the daily cash box for a date: total cash-sale income (collections with contract_id null), total expenses, and net cash in hand. Contract money is NOT counted.",
+      inputSchema: z.object({ date: z.string().describe("ISO date YYYY-MM-DD") }),
+      execute: async ({ date }) => {
+        const [colRes, expRes] = await Promise.all([
+          supabase.from("collections").select("amount").is("contract_id", null).eq("payment_date", date),
+          supabase.from("expenses").select("amount").eq("expense_date", date),
+        ]);
+        if (colRes.error) throw new Error(colRes.error.message);
+        if (expRes.error) throw new Error(expRes.error.message);
+        const income = (colRes.data ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
+        const expense = (expRes.data ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
+        return { date, cash_income: income, total_expense: expense, net_cash: income - expense };
+      },
+    }),
   };
 }
