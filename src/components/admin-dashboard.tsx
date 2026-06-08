@@ -44,6 +44,8 @@ import { bn, isoDate } from "@/lib/format";
 import { supabase } from "@/integrations/supabase/client";
 import { AiAssistantFab } from "@/components/ai-assistant-fab";
 import { CashBoxPanel } from "@/components/cash-box-panel";
+import { QuickActions } from "@/components/quick-actions";
+import { TopCustomersPanel } from "@/components/top-customers-panel";
 
 const BN_MONTHS = ["জানু", "ফেব", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্ট", "অক্টো", "নভে", "ডিসে"];
 
