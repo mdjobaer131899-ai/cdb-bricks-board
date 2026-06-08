@@ -56,6 +56,7 @@ export function AppHeader() {
         )}
       </div>
       <div className="ml-auto flex items-center gap-2">
+        <GlobalSearch />
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : (
