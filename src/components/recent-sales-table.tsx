@@ -101,7 +101,7 @@ export function RecentSalesTable({
                         )}
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-muted-foreground">{e.manager_name}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{bnDate(e.sale_date)}</TableCell>
+                      <TableCell className="text-muted-foreground text-xs">{bnDate(e.sale_date)}</TableCell>
                       {showActions && (
                         <TableCell className="text-right">
                           {canEdit ? (
