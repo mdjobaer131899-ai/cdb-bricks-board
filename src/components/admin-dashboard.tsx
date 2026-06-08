@@ -390,6 +390,10 @@ export function AdminDashboard() {
         </Card>
       </section>
 
+      <TopCustomersPanel />
+
+
+
       {/* === P&L Summary === */}
       <section>
         <Card className="overflow-hidden">
