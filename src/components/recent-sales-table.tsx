@@ -55,7 +55,7 @@ export function RecentSalesTable({
                 <TableHead>ধরন</TableHead>
                 <TableHead>স্ট্যাটাস</TableHead>
                 <TableHead className="hidden md:table-cell">ম্যানেজার</TableHead>
-                <TableHead className="hidden sm:table-cell">তারিখ</TableHead>
+                <TableHead>তারিখ</TableHead>
                 {showActions && <TableHead className="text-right">অ্যাকশন</TableHead>}
               </TableRow>
             </TableHeader>
