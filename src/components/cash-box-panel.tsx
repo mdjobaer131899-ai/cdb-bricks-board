@@ -298,18 +298,12 @@ function SummaryBox({
 function AddIncomeDialog({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [customerId, setCustomerId] = useState<string>("");
-  const [contractId, setContractId] = useState<string>("none");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<string>("cash");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));
 
   const custQ = useQuery({ queryKey: ["customers-min"], queryFn: fetchCustomers, enabled: open });
-  const contractsQ = useQuery({
-    queryKey: ["contracts-of", customerId],
-    queryFn: () => fetchActiveContracts(customerId || null),
-    enabled: open && !!customerId,
-  });
 
   type IncomeInput = {
     customer_id: string; contract_id: string | null; amount: number;
@@ -319,9 +313,9 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
   const mut = useMutation({
     mutationFn: (input: IncomeInput) => createFn({ data: input }),
     onSuccess: () => {
-      toast.success("আয় যোগ হয়েছে");
+      toast.success("নগদ আয় যোগ হয়েছে");
       setOpen(false);
-      setCustomerId(""); setContractId("none"); setAmount(""); setNote(""); setMethod("cash");
+      setCustomerId(""); setAmount(""); setNote(""); setMethod("cash");
       onDone();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -334,7 +328,7 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
     if (!Number.isFinite(amt) || amt <= 0) return toast.error("টাকার পরিমাণ সঠিক নয়");
     mut.mutate({
       customer_id: customerId,
-      contract_id: contractId === "none" ? null : contractId,
+      contract_id: null,
       amount: amt,
       payment_date: date,
       method: method || null,
