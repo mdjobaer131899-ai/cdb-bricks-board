@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { GlobalSearch } from "@/components/global-search";
 
 export function AppHeader() {
   const { data, loading } = useCurrentUser();
@@ -55,6 +56,7 @@ export function AppHeader() {
         )}
       </div>
       <div className="ml-auto flex items-center gap-2">
+        <GlobalSearch />
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : (
