@@ -55,7 +55,7 @@ export function RecentSalesTable({
                 <TableHead>ধরন</TableHead>
                 <TableHead>স্ট্যাটাস</TableHead>
                 <TableHead className="hidden md:table-cell">ম্যানেজার</TableHead>
-                <TableHead className="hidden sm:table-cell">তারিখ</TableHead>
+                <TableHead>তারিখ</TableHead>
                 {showActions && <TableHead className="text-right">অ্যাকশন</TableHead>}
               </TableRow>
             </TableHeader>
@@ -83,7 +83,7 @@ export function RecentSalesTable({
                       <TableCell className="font-medium">{e.customer?.name ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{e.brick_type?.name ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{bn(e.quantity)}</TableCell>
-                      {showAmount && <TableCell className="text-right tabular-nums font-semibold">৳ {bn(e.total_amount)}</TableCell>}
+                      {showAmount && <TableCell className="text-right tabular-nums font-semibold">{e.sale_type === "advance" ? <span className="text-muted-foreground">—</span> : <>৳ {bn(e.total_amount)}</>}</TableCell>}
                       <TableCell>
                         {e.sale_type === "advance" ? (
                           <Badge className="bg-info/15 text-info hover:bg-info/20">অগ্রিম</Badge>
@@ -101,7 +101,7 @@ export function RecentSalesTable({
                         )}
                       </TableCell>
                       <TableCell className="hidden md:table-cell text-muted-foreground">{e.manager_name}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{bnDate(e.sale_date)}</TableCell>
+                      <TableCell className="text-muted-foreground text-xs">{bnDate(e.sale_date)}</TableCell>
                       {showActions && (
                         <TableCell className="text-right">
                           {canEdit ? (

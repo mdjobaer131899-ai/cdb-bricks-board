@@ -41,15 +41,14 @@ type TodayIncome = { id: string; source: "contract" | "cash"; label: string; amo
 type TodayExpense = { id: string; category: string; amount: number; note: string | null };
 
 async function fetchTodayCashBox(todayIso: string) {
-  const [cpRes, colRes, expRes] = await Promise.all([
-    supabase
-      .from("contract_payments")
-      .select("id, amount, method, note, contract:contracts(contract_no, customer:customers(name))")
-      .eq("payment_date", todayIso)
-      .order("created_at", { ascending: false }),
+  // Income in cash-box = ONLY non-contract (cash) collections.
+  // Contract-linked payments (yearly_fixed/short_term/cash contracts) are tracked
+  // on the contract ledger and must NOT appear in the daily cash box.
+  const [colRes, expRes] = await Promise.all([
     supabase
       .from("collections")
-      .select("id, amount, method, note, contract_id, customer:customers(name), contract:contracts(contract_no)")
+      .select("id, amount, method, note, customer:customers(name)")
+      .is("contract_id", null)
       .eq("payment_date", todayIso)
       .order("created_at", { ascending: false }),
     supabase
@@ -58,59 +57,21 @@ async function fetchTodayCashBox(todayIso: string) {
       .eq("expense_date", todayIso)
       .order("created_at", { ascending: false }),
   ]);
-  if (cpRes.error) throw cpRes.error;
   if (colRes.error) throw colRes.error;
   if (expRes.error) throw expRes.error;
 
-  const incomes: TodayIncome[] = [];
-  // Contract payments that came in via /contracts page (not duplicated by collections)
-  const cpRows = (cpRes.data ?? []) as unknown as Array<{
-    id: string; amount: number; method: string | null;
-    contract: { contract_no: string; customer: { name: string } | null } | null;
-  }>;
   const colRows = (colRes.data ?? []) as unknown as Array<{
-    id: string; amount: number; method: string | null; contract_id: string | null;
-    customer: { name: string } | null; contract: { contract_no: string } | null;
+    id: string; amount: number; method: string | null;
+    customer: { name: string } | null;
   }>;
 
-  // To avoid double-counting: every collection with contract_id also wrote into contract_payments.
-  // We treat `collections` as the canonical record for the cash box. Add cp rows only when there's
-  // no matching collection (same amount + contract). Simpler: include all collections; include cp
-  // rows whose contract_id is NOT represented in today's collections.
-  const cpHandledContracts = new Set(
-    colRows.filter((c) => c.contract_id).map((c) => `${c.contract_id}:${Number(c.amount)}`),
-  );
-  for (const r of cpRows) {
-    const key = r.contract ? `${(r as { contract_id?: string }).contract_id ?? ""}` : "";
-    // contract_payments don't expose contract_id directly here; fall back to label match
-    void key;
-  }
-  // Simpler & safer dedup: build a set of (amount) per contract_no from collections
-  const colKeySet = new Set<string>();
-  for (const c of colRows) {
-    if (c.contract?.contract_no) colKeySet.add(`${c.contract.contract_no}:${Number(c.amount)}`);
-  }
-  for (const r of cpRows) {
-    const k = r.contract ? `${r.contract.contract_no}:${Number(r.amount)}` : "";
-    if (k && colKeySet.has(k)) continue; // already counted via collections
-    incomes.push({
-      id: `cp-${r.id}`,
-      source: "contract",
-      label: `${r.contract?.customer?.name ?? "—"} • ${r.contract?.contract_no ?? ""}`,
-      amount: Number(r.amount),
-      method: r.method,
-    });
-  }
-  for (const c of colRows) {
-    incomes.push({
-      id: `col-${c.id}`,
-      source: c.contract_id ? "contract" : "cash",
-      label: `${c.customer?.name ?? "—"}${c.contract?.contract_no ? ` • ${c.contract.contract_no}` : ""}`,
-      amount: Number(c.amount),
-      method: c.method,
-    });
-  }
-  void cpHandledContracts;
+  const incomes: TodayIncome[] = colRows.map((c) => ({
+    id: `col-${c.id}`,
+    source: "cash" as const,
+    label: c.customer?.name ?? "—",
+    amount: Number(c.amount),
+    method: c.method,
+  }));
 
   const expenses: TodayExpense[] = (expRes.data ?? []).map((e) => ({
     id: e.id,
@@ -128,17 +89,6 @@ async function fetchCustomers() {
   return data ?? [];
 }
 
-async function fetchActiveContracts(customerId: string | null) {
-  if (!customerId) return [];
-  const { data, error } = await supabase
-    .from("contracts")
-    .select("id, contract_no, contract_type")
-    .eq("customer_id", customerId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
-}
 
 export function CashBoxPanel() {
   const { data: me } = useCurrentUser();
@@ -181,7 +131,7 @@ export function CashBoxPanel() {
             <CardTitle className="text-base flex items-center gap-2">
               <Wallet className="h-4 w-4 text-primary" />আজকের আয়-ব্যয়
             </CardTitle>
-            <CardDescription>আজকের আয় থেকে ব্যয় বাদ দিয়ে হাতে কত টাকা আছে</CardDescription>
+            <CardDescription>শুধু নগদ বিক্রয় গণনা — চুক্তির আয় (বাৎসরিক/স্বল্পমেয়াদী/ক্যাশ চুক্তি) এতে যোগ হবে না</CardDescription>
           </div>
           <div className="flex gap-2">
             <AddIncomeDialog onDone={invalidateAll} />
@@ -337,18 +287,12 @@ function SummaryBox({
 function AddIncomeDialog({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [customerId, setCustomerId] = useState<string>("");
-  const [contractId, setContractId] = useState<string>("none");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<string>("cash");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));
 
   const custQ = useQuery({ queryKey: ["customers-min"], queryFn: fetchCustomers, enabled: open });
-  const contractsQ = useQuery({
-    queryKey: ["contracts-of", customerId],
-    queryFn: () => fetchActiveContracts(customerId || null),
-    enabled: open && !!customerId,
-  });
 
   type IncomeInput = {
     customer_id: string; contract_id: string | null; amount: number;
@@ -358,9 +302,9 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
   const mut = useMutation({
     mutationFn: (input: IncomeInput) => createFn({ data: input }),
     onSuccess: () => {
-      toast.success("আয় যোগ হয়েছে");
+      toast.success("নগদ আয় যোগ হয়েছে");
       setOpen(false);
-      setCustomerId(""); setContractId("none"); setAmount(""); setNote(""); setMethod("cash");
+      setCustomerId(""); setAmount(""); setNote(""); setMethod("cash");
       onDone();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -373,7 +317,7 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
     if (!Number.isFinite(amt) || amt <= 0) return toast.error("টাকার পরিমাণ সঠিক নয়");
     mut.mutate({
       customer_id: customerId,
-      contract_id: contractId === "none" ? null : contractId,
+      contract_id: null,
       amount: amt,
       payment_date: date,
       method: method || null,
@@ -390,32 +334,17 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>নতুন আয় এন্ট্রি</DialogTitle>
-          <DialogDescription>গ্রাহক ও চুক্তি বাছাই করুন। চুক্তি ছাড়া সরাসরি ক্যাশ এন্ট্রি করতে পারবেন।</DialogDescription>
+          <DialogTitle>নতুন নগদ আয় এন্ট্রি</DialogTitle>
+          <DialogDescription>শুধু নগদ বিক্রির আয়। চুক্তির আয় চুক্তি পেজ থেকে যোগ করুন — এটি দৈনিক আয়-ব্যয়ে গণনা হবে না।</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1">
             <Label>গ্রাহক *</Label>
-            <Select value={customerId} onValueChange={(v) => { setCustomerId(v); setContractId("none"); }}>
+            <Select value={customerId} onValueChange={(v) => setCustomerId(v)}>
               <SelectTrigger><SelectValue placeholder="গ্রাহক নির্বাচন করুন" /></SelectTrigger>
               <SelectContent>
                 {(custQ.data ?? []).map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label>চুক্তি (ঐচ্ছিক)</Label>
-            <Select value={contractId} onValueChange={setContractId} disabled={!customerId}>
-              <SelectTrigger><SelectValue placeholder="চুক্তি নির্বাচন বা সরাসরি ক্যাশ" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">সরাসরি ক্যাশ (চুক্তিবিহীন)</SelectItem>
-                {(contractsQ.data ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.contract_no} • {c.contract_type}
-                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
