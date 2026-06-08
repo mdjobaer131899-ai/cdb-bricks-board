@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate } from "@/lib/format";
 import { toast } from "sonner";
+import { CustomerLedger } from "@/components/customer-ledger";
 
 export const Route = createFileRoute("/_authenticated/customers/$id")({
   head: () => ({ meta: [{ title: "গ্রাহকের লেনদেন — CDB Bricks" }] }),
