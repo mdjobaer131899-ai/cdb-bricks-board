@@ -142,7 +142,7 @@ export function CashBoxPanel() {
             <CardTitle className="text-base flex items-center gap-2">
               <Wallet className="h-4 w-4 text-primary" />আজকের আয়-ব্যয়
             </CardTitle>
-            <CardDescription>আজকের আয় থেকে ব্যয় বাদ দিয়ে হাতে কত টাকা আছে</CardDescription>
+            <CardDescription>শুধু নগদ বিক্রয় গণনা — চুক্তির আয় (বাৎসরিক/স্বল্পমেয়াদী/ক্যাশ চুক্তি) এতে যোগ হবে না</CardDescription>
           </div>
           <div className="flex gap-2">
             <AddIncomeDialog onDone={invalidateAll} />
