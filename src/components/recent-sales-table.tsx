@@ -83,7 +83,7 @@ export function RecentSalesTable({
                       <TableCell className="font-medium">{e.customer?.name ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{e.brick_type?.name ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{bn(e.quantity)}</TableCell>
-                      {showAmount && <TableCell className="text-right tabular-nums font-semibold">৳ {bn(e.total_amount)}</TableCell>}
+                      {showAmount && <TableCell className="text-right tabular-nums font-semibold">{e.sale_type === "advance" ? <span className="text-muted-foreground">—</span> : <>৳ {bn(e.total_amount)}</>}</TableCell>}
                       <TableCell>
                         {e.sale_type === "advance" ? (
                           <Badge className="bg-info/15 text-info hover:bg-info/20">অগ্রিম</Badge>
