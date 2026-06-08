@@ -351,32 +351,17 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>নতুন আয় এন্ট্রি</DialogTitle>
-          <DialogDescription>গ্রাহক ও চুক্তি বাছাই করুন। চুক্তি ছাড়া সরাসরি ক্যাশ এন্ট্রি করতে পারবেন।</DialogDescription>
+          <DialogTitle>নতুন নগদ আয় এন্ট্রি</DialogTitle>
+          <DialogDescription>শুধু নগদ বিক্রির আয়। চুক্তির আয় চুক্তি পেজ থেকে যোগ করুন — এটি দৈনিক আয়-ব্যয়ে গণনা হবে না।</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1">
             <Label>গ্রাহক *</Label>
-            <Select value={customerId} onValueChange={(v) => { setCustomerId(v); setContractId("none"); }}>
+            <Select value={customerId} onValueChange={(v) => setCustomerId(v)}>
               <SelectTrigger><SelectValue placeholder="গ্রাহক নির্বাচন করুন" /></SelectTrigger>
               <SelectContent>
                 {(custQ.data ?? []).map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label>চুক্তি (ঐচ্ছিক)</Label>
-            <Select value={contractId} onValueChange={setContractId} disabled={!customerId}>
-              <SelectTrigger><SelectValue placeholder="চুক্তি নির্বাচন বা সরাসরি ক্যাশ" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">সরাসরি ক্যাশ (চুক্তিবিহীন)</SelectItem>
-                {(contractsQ.data ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.contract_no} • {c.contract_type}
-                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
