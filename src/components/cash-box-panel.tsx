@@ -89,17 +89,6 @@ async function fetchCustomers() {
   return data ?? [];
 }
 
-async function fetchActiveContracts(customerId: string | null) {
-  if (!customerId) return [];
-  const { data, error } = await supabase
-    .from("contracts")
-    .select("id, contract_no, contract_type")
-    .eq("customer_id", customerId)
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
-}
 
 export function CashBoxPanel() {
   const { data: me } = useCurrentUser();
