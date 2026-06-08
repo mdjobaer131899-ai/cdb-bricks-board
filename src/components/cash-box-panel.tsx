@@ -41,15 +41,14 @@ type TodayIncome = { id: string; source: "contract" | "cash"; label: string; amo
 type TodayExpense = { id: string; category: string; amount: number; note: string | null };
 
 async function fetchTodayCashBox(todayIso: string) {
-  const [cpRes, colRes, expRes] = await Promise.all([
-    supabase
-      .from("contract_payments")
-      .select("id, amount, method, note, contract:contracts(contract_no, customer:customers(name))")
-      .eq("payment_date", todayIso)
-      .order("created_at", { ascending: false }),
+  // Income in cash-box = ONLY non-contract (cash) collections.
+  // Contract-linked payments (yearly_fixed/short_term/cash contracts) are tracked
+  // on the contract ledger and must NOT appear in the daily cash box.
+  const [colRes, expRes] = await Promise.all([
     supabase
       .from("collections")
-      .select("id, amount, method, note, contract_id, customer:customers(name), contract:contracts(contract_no)")
+      .select("id, amount, method, note, customer:customers(name)")
+      .is("contract_id", null)
       .eq("payment_date", todayIso)
       .order("created_at", { ascending: false }),
     supabase
@@ -58,59 +57,21 @@ async function fetchTodayCashBox(todayIso: string) {
       .eq("expense_date", todayIso)
       .order("created_at", { ascending: false }),
   ]);
-  if (cpRes.error) throw cpRes.error;
   if (colRes.error) throw colRes.error;
   if (expRes.error) throw expRes.error;
 
-  const incomes: TodayIncome[] = [];
-  // Contract payments that came in via /contracts page (not duplicated by collections)
-  const cpRows = (cpRes.data ?? []) as unknown as Array<{
-    id: string; amount: number; method: string | null;
-    contract: { contract_no: string; customer: { name: string } | null } | null;
-  }>;
   const colRows = (colRes.data ?? []) as unknown as Array<{
-    id: string; amount: number; method: string | null; contract_id: string | null;
-    customer: { name: string } | null; contract: { contract_no: string } | null;
+    id: string; amount: number; method: string | null;
+    customer: { name: string } | null;
   }>;
 
-  // To avoid double-counting: every collection with contract_id also wrote into contract_payments.
-  // We treat `collections` as the canonical record for the cash box. Add cp rows only when there's
-  // no matching collection (same amount + contract). Simpler: include all collections; include cp
-  // rows whose contract_id is NOT represented in today's collections.
-  const cpHandledContracts = new Set(
-    colRows.filter((c) => c.contract_id).map((c) => `${c.contract_id}:${Number(c.amount)}`),
-  );
-  for (const r of cpRows) {
-    const key = r.contract ? `${(r as { contract_id?: string }).contract_id ?? ""}` : "";
-    // contract_payments don't expose contract_id directly here; fall back to label match
-    void key;
-  }
-  // Simpler & safer dedup: build a set of (amount) per contract_no from collections
-  const colKeySet = new Set<string>();
-  for (const c of colRows) {
-    if (c.contract?.contract_no) colKeySet.add(`${c.contract.contract_no}:${Number(c.amount)}`);
-  }
-  for (const r of cpRows) {
-    const k = r.contract ? `${r.contract.contract_no}:${Number(r.amount)}` : "";
-    if (k && colKeySet.has(k)) continue; // already counted via collections
-    incomes.push({
-      id: `cp-${r.id}`,
-      source: "contract",
-      label: `${r.contract?.customer?.name ?? "—"} • ${r.contract?.contract_no ?? ""}`,
-      amount: Number(r.amount),
-      method: r.method,
-    });
-  }
-  for (const c of colRows) {
-    incomes.push({
-      id: `col-${c.id}`,
-      source: c.contract_id ? "contract" : "cash",
-      label: `${c.customer?.name ?? "—"}${c.contract?.contract_no ? ` • ${c.contract.contract_no}` : ""}`,
-      amount: Number(c.amount),
-      method: c.method,
-    });
-  }
-  void cpHandledContracts;
+  const incomes: TodayIncome[] = colRows.map((c) => ({
+    id: `col-${c.id}`,
+    source: "cash" as const,
+    label: c.customer?.name ?? "—",
+    amount: Number(c.amount),
+    method: c.method,
+  }));
 
   const expenses: TodayExpense[] = (expRes.data ?? []).map((e) => ({
     id: e.id,
