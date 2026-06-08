@@ -236,6 +236,8 @@ function CustomerDetailPage() {
           ))}
         </CardContent>
       </Card>
+
+      <CustomerLedger customerId={customer.id} customerName={customer.name} />
     </div>
   );
 }
