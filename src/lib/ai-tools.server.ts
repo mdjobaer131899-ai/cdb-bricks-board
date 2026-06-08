@@ -91,10 +91,14 @@ export function buildAssistantTools(supabase: DB) {
             { name: "customers", fields: ["name", "phone", "address"] },
             { name: "brick_types", fields: ["name", "default_unit_price", "is_active"] },
             { name: "sales_entries", fields: ["challan_no", "sale_date", "quantity", "unit_price", "total_amount", "status", "sale_type"] },
+            { name: "contracts", fields: ["contract_no", "contract_type (yearly_fixed/short_term/cash)", "booked_value", "advance_paid", "status", "expiry_date"] },
+            { name: "contract_payments", fields: ["contract_id", "amount", "payment_date", "method"] },
+            { name: "collections", fields: ["customer_id", "contract_id", "amount", "payment_date", "method (cash sales when contract_id is null)"] },
+            { name: "expenses", fields: ["category", "amount", "expense_date", "note"] },
             { name: "profiles", fields: ["full_name"] },
           ],
           notes:
-            "Adla items (১ নং আদলা, ২ নং আদলা, মিক্সার আদলা) are measured in ফুট. All other bricks are measured in পিস.",
+            "নগদ আয় = collections যেগুলোর contract_id null। চুক্তির আয় (contract_payments + contract-linked collections) দৈনিক আয়-ব্যয়ে গণনা হয় না। আদলা (১/২ নং, মিক্সার) — ফুট, অন্য ইট — পিস।",
         };
       },
     }),
