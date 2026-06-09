@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Users2, Loader2, Wallet, Pencil } from "lucide-react";
+import { Plus, Users2, Loader2, Wallet, Pencil, Trash2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -51,6 +51,7 @@ function WorkersPage() {
   const isAdmin = me?.role === "admin";
 
   const [filter, setFilter] = useState<"all" | "active" | "inactive">("active");
+  const [search, setSearch] = useState("");
   const [workerDialog, setWorkerDialog] = useState<{ open: boolean; mode: "new" | "edit"; form: WorkerForm }>({
     open: false, mode: "new", form: emptyForm,
   });
