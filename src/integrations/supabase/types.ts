@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          account_type: Database["public"]["Enums"]["account_type"]
+          code: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          name_bn: string | null
+          parent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_type: Database["public"]["Enums"]["account_type"]
+          code: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          name_bn?: string | null
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_type?: Database["public"]["Enums"]["account_type"]
+          code?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          name_bn?: string | null
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounts_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -318,6 +369,107 @@ export type Database = {
         }
         Relationships: []
       }
+      journal_entries: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          entry_date: string
+          entry_no: string
+          id: string
+          narration: string | null
+          ref_id: string | null
+          ref_type: string | null
+          source: Database["public"]["Enums"]["journal_source"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          entry_date?: string
+          entry_no?: string
+          id?: string
+          narration?: string | null
+          ref_id?: string | null
+          ref_type?: string | null
+          source?: Database["public"]["Enums"]["journal_source"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          entry_date?: string
+          entry_no?: string
+          id?: string
+          narration?: string | null
+          ref_id?: string | null
+          ref_type?: string | null
+          source?: Database["public"]["Enums"]["journal_source"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      journal_lines: {
+        Row: {
+          account_id: string
+          created_at: string
+          credit: number
+          customer_id: string | null
+          debit: number
+          entry_id: string
+          id: string
+          note: string | null
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          credit?: number
+          customer_id?: string | null
+          debit?: number
+          entry_id: string
+          id?: string
+          note?: string | null
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          credit?: number
+          customer_id?: string | null
+          debit?: number
+          entry_id?: string
+          id?: string
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "account_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_lines_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_lines_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       production_entries: {
         Row: {
           brick_type_id: string
@@ -559,6 +711,19 @@ export type Database = {
       }
     }
     Views: {
+      account_balances: {
+        Row: {
+          account_type: Database["public"]["Enums"]["account_type"] | null
+          balance: number | null
+          code: string | null
+          id: string | null
+          name: string | null
+          name_bn: string | null
+          total_credit: number | null
+          total_debit: number | null
+        }
+        Relationships: []
+      }
       current_stock: {
         Row: {
           brick_name: string | null
@@ -567,8 +732,29 @@ export type Database = {
         }
         Relationships: []
       }
+      profit_loss_summary: {
+        Row: {
+          net_profit: number | null
+          total_expense: number | null
+          total_income: number | null
+        }
+        Relationships: []
+      }
+      trial_balance: {
+        Row: {
+          account_type: Database["public"]["Enums"]["account_type"] | null
+          balance: number | null
+          code: string | null
+          name: string | null
+          name_bn: string | null
+          total_credit: number | null
+          total_debit: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      acc: { Args: { _code: string }; Returns: string }
       expire_old_contracts: { Args: never; Returns: undefined }
       generate_contract_no: {
         Args: { _type: Database["public"]["Enums"]["contract_type"] }
@@ -594,9 +780,17 @@ export type Database = {
       }
     }
     Enums: {
+      account_type: "asset" | "liability" | "equity" | "income" | "expense"
       app_role: "admin" | "manager"
       contract_status: "active" | "completed" | "expired" | "suspended"
       contract_type: "yearly_fixed" | "short_term" | "cash"
+      journal_source:
+        | "sale"
+        | "collection"
+        | "expense"
+        | "manual"
+        | "opening"
+        | "adjustment"
       sale_status: "pending" | "approved" | "rejected"
       sale_type: "advance" | "regular"
     }
@@ -726,9 +920,18 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_type: ["asset", "liability", "equity", "income", "expense"],
       app_role: ["admin", "manager"],
       contract_status: ["active", "completed", "expired", "suspended"],
       contract_type: ["yearly_fixed", "short_term", "cash"],
+      journal_source: [
+        "sale",
+        "collection",
+        "expense",
+        "manual",
+        "opening",
+        "adjustment",
+      ],
       sale_status: ["pending", "approved", "rejected"],
       sale_type: ["advance", "regular"],
     },
