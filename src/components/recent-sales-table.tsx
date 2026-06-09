@@ -32,7 +32,7 @@ export function RecentSalesTable({
   const navigate = useNavigate();
   const showActions = Boolean(onDelete);
   const showAmount = isAdmin === true;
-  const colCount = (showActions ? 1 : 0) + (showAmount ? 9 : 8);
+  const colCount = (showActions ? 1 : 0) + (showAmount ? 8 : 7);
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -54,7 +54,7 @@ export function RecentSalesTable({
                 {showAmount && <TableHead className="text-right">টাকা (৳)</TableHead>}
                 <TableHead>ধরন</TableHead>
                 <TableHead>স্ট্যাটাস</TableHead>
-                <TableHead className="hidden md:table-cell">ম্যানেজার</TableHead>
+                {/* manager column removed */}
                 <TableHead>তারিখ</TableHead>
                 {showActions && <TableHead className="text-right">অ্যাকশন</TableHead>}
               </TableRow>
@@ -100,7 +100,7 @@ export function RecentSalesTable({
                           <Badge className="bg-warning/20 text-warning-foreground hover:bg-warning/30">অপেক্ষমাণ</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-muted-foreground">{e.manager_name}</TableCell>
+                      {/* manager cell removed */}
                       <TableCell className="text-muted-foreground text-xs">{bnDate(e.sale_date)}</TableCell>
                       {showActions && (
                         <TableCell className="text-right">

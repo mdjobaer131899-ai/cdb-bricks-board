@@ -29,20 +29,21 @@ export function StatCard({ label, value, icon: Icon, tone = "primary", badge, hi
   const t = tones[tone];
   const pct = Math.max(0, Math.min(100, progress ?? 0));
   return (
-    <Card className="relative overflow-hidden border-border/60 bg-card/80 backdrop-blur transition-all hover:shadow-elegant hover:-translate-y-0.5">
+    <Card className="relative overflow-hidden border-border/60 bg-card/80 backdrop-blur transition-all hover:shadow-elegant">
       <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br opacity-70", t.grad)} />
       <div className={cn("absolute left-0 top-0 h-full w-[3px]", t.bar)} />
-      <CardContent className="relative p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 space-y-1">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold tracking-tight text-foreground">{value}</p>
-            {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
+      <CardContent className="relative p-3">
+        <div className="flex items-center gap-3">
+          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background/70 ring-1 ring-border/60", t.text)}>
+            <Icon className="h-4 w-4" />
           </div>
-          <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background/70 ring-1 ring-border/60", t.text)}>
-            <Icon className="h-5 w-5" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+            <p className="truncate text-lg font-bold leading-tight tracking-tight text-foreground">{value}</p>
+            {hint && <p className="truncate text-[10px] text-muted-foreground">{hint}</p>}
           </div>
         </div>
+
 
         {series && series.length > 0 && (
           <div className={cn("mt-3 h-7 w-full", t.text)}>

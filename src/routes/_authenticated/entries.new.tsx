@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+// removed: Checkbox (advance toggle no longer used)
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -93,7 +93,7 @@ function NewEntryPage() {
   const [customBrickName, setCustomBrickName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
-  const [isAdvance, setIsAdvance] = useState(false);
+  const isAdvance = false; // advance delivery option removed per requirement
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [addCustOpen, setAddCustOpen] = useState(false);
@@ -376,20 +376,6 @@ function NewEntryPage() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">মূল্য</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <label className="flex items-center gap-2 rounded-md border border-dashed p-3 cursor-pointer hover:bg-muted/40">
-                <Checkbox
-                  checked={isAdvance}
-                  onCheckedChange={(v) => {
-                    const next = Boolean(v);
-                    setIsAdvance(next);
-                    if (next) setUnitPrice("0");
-                  }}
-                />
-                <div>
-                  <div className="text-sm font-medium">অগ্রিম চালান / Advance Delivery</div>
-                  <div className="text-xs text-muted-foreground">পরিমাণ ০ হিসেবে সংরক্ষিত হবে</div>
-                </div>
-              </label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>একক মূল্য (৳)</Label>
@@ -399,7 +385,6 @@ function NewEntryPage() {
                     step="0.01"
                     value={unitPrice}
                     onChange={(e) => setUnitPrice(e.target.value)}
-                    disabled={isAdvance}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -413,6 +398,7 @@ function NewEntryPage() {
               </div>
             </CardContent>
           </Card>
+
         ) : (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">অতিরিক্ত তথ্য</CardTitle></CardHeader>
