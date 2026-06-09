@@ -127,6 +127,34 @@ function RawMaterialsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updMut = useMutation({
+    mutationFn: async (r: any) => {
+      const qty = Number(r.quantity);
+      const price = Number(r.unit_price);
+      if (!(qty > 0) || !(price >= 0)) throw new Error("পরিমাণ ও মূল্য চেক করুন");
+      const { error } = await supabase.from("raw_material_purchases").update({
+        material_id: r.material_id, supplier_id: r.supplier_id || null,
+        quantity: qty, unit_price: price, total_amount: qty * price,
+        purchase_date: r.purchase_date, note: r.note || null,
+      }).eq("id", r.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("আপডেট হয়েছে"); setEditRow(null); qc.invalidateQueries({ queryKey: ["raw-material-purchases"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const filtered = useMemo(() => {
+    const list = purchasesQ.data ?? [];
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter((p: any) =>
+      (p.material?.name ?? "").toLowerCase().includes(q) ||
+      (p.supplier?.name ?? "").toLowerCase().includes(q) ||
+      (p.note ?? "").toLowerCase().includes(q) ||
+      (p.purchase_date ?? "").includes(q)
+    );
+  }, [purchasesQ.data, search]);
+
   const total = (Number(form.quantity) || 0) * (Number(form.unit_price) || 0);
 
   return (
