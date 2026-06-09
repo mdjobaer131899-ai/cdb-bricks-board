@@ -197,16 +197,22 @@ function WorkersPage() {
 
         <TabsContent value="list">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">শ্রমিক</CardTitle>
-              <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
-                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">সক্রিয়</SelectItem>
-                  <SelectItem value="inactive">নিষ্ক্রিয়</SelectItem>
-                  <SelectItem value="all">সব</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <div className="relative w-44">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input className="pl-8 h-9" placeholder="খুঁজুন..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                </div>
+                <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">সক্রিয়</SelectItem>
+                    <SelectItem value="inactive">নিষ্ক্রিয়</SelectItem>
+                    <SelectItem value="all">সব</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {workersQ.isLoading ? <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> :
@@ -240,6 +246,7 @@ function WorkersPage() {
                           <div className="flex justify-end gap-1">
                             {isAdmin && <Button size="sm" variant="ghost" onClick={() => openEdit(w)}><Pencil className="h-3.5 w-3.5" /></Button>}
                             {isAdmin && <Button size="sm" variant="outline" onClick={() => openPay(w.id)}>পেমেন্ট</Button>}
+                            {isAdmin && <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${w.name}" মুছে ফেলবেন?`)) delWorker.mutate(w.id); }}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>}
                           </div>
                         </TableCell>
                       </TableRow>
