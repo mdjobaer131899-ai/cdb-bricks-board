@@ -91,11 +91,28 @@ function WorkersPage() {
   }, [payQ.data]);
 
   const filteredWorkers = useMemo(() => {
-    const list = workersQ.data ?? [];
-    if (filter === "active") return list.filter((w: any) => w.active);
-    if (filter === "inactive") return list.filter((w: any) => !w.active);
+    let list = workersQ.data ?? [];
+    if (filter === "active") list = list.filter((w: any) => w.active);
+    else if (filter === "inactive") list = list.filter((w: any) => !w.active);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((w: any) =>
+        (w.name ?? "").toLowerCase().includes(q) ||
+        (w.phone ?? "").toLowerCase().includes(q) ||
+        (w.role ?? "").toLowerCase().includes(q)
+      );
+    }
     return list;
-  }, [workersQ.data, filter]);
+  }, [workersQ.data, filter, search]);
+
+  const delWorker = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("workers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["workers"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const saveWorker = useMutation({
     mutationFn: async () => {
