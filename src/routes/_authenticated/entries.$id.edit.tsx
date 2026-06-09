@@ -230,6 +230,11 @@ function EditEntryPage() {
       setConfirmApprove(false);
       return;
     }
+    if (contracts.length > 0 && (!contractId || contractId === CASH_VALUE)) {
+      toast.error("এই গ্রাহকের active contract আছে — অনুমোদনের আগে contract নির্বাচন করুন");
+      setConfirmApprove(false);
+      return;
+    }
     setBusy(true);
     const { error } = await supabase
       .from("sales_entries")
