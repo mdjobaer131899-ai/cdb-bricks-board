@@ -51,8 +51,8 @@ export function printReport({ title, subtitle, bodyHtml }: PrintOptions) {
   <div class="head">
     <div>
       <div class="brand">CDB Bricks Ltd.</div>
-      <h1>${title}</h1>
-      ${subtitle ? `<h2>${subtitle}</h2>` : ""}
+      <h1>${safeTitle}</h1>
+      ${safeSubtitle ? `<h2>${safeSubtitle}</h2>` : ""}
     </div>
     <div class="meta">
       প্রিন্ট তারিখ<br/>${new Date().toLocaleString("bn-BD")}
