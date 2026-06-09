@@ -14,6 +14,7 @@ import { QuickActions } from "@/components/quick-actions";
 import { StockSummaryCard } from "@/components/stock-summary-card";
 import { CashBoxPanel } from "@/components/cash-box-panel";
 import { SeasonProgressCard } from "@/components/season-progress-card";
+import { BrandLogo } from "@/components/brand-logo";
 
 
 export function AdminDashboard() {
@@ -82,10 +83,17 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm text-muted-foreground">
-          আজ {today.toLocaleDateString("bn-BD", { day: "2-digit", month: "long", year: "numeric" })}
-        </p>
+      <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-warning/10 p-4 shadow-elegant">
+        <BrandLogo className="h-14 w-14 shrink-0 drop-shadow-md" />
+        <div className="min-w-0 flex-1">
+          <h1 className="bg-gradient-to-r from-[#e85d3a] via-[#f7931e] to-[#c2410c] bg-clip-text text-2xl font-extrabold leading-tight tracking-tight text-transparent sm:text-3xl">
+            সি ডি বি ব্রিকস
+          </h1>
+          <p className="text-xs font-medium text-muted-foreground sm:text-sm">কাপাসিয়া, গাজীপুর</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            আজ {today.toLocaleDateString("bn-BD", { day: "2-digit", month: "long", year: "numeric" })}
+          </p>
+        </div>
       </div>
 
       <QuickActions />

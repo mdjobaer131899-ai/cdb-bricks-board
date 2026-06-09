@@ -13,6 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { BrandLogo } from "@/components/brand-logo";
 
 type Item = { title: string; url: string; icon: any; roles: readonly ("admin" | "manager")[] };
 type Group = { label: string; items: Item[] };
@@ -67,12 +68,10 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-elegant">
-            <Factory className="h-5 w-5" />
-          </div>
+          <BrandLogo className="h-9 w-9 shrink-0" />
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-bold text-sidebar-foreground">CDB Bricks</span>
-            <span className="text-[10px] text-sidebar-foreground/60">সেলস ম্যানেজমেন্ট</span>
+            <span className="text-[10px] text-sidebar-foreground/60">কাপাসিয়া, গাজীপুর</span>
           </div>
         </div>
       </SidebarHeader>
