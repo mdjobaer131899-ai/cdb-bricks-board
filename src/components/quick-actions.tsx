@@ -20,17 +20,19 @@ export function QuickActions() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="-mx-2 flex gap-4 overflow-x-auto px-2 pb-2 [scrollbar-width:thin]">
           {actions.map((a) => (
             <Link
               key={a.label}
               to={a.to}
-              className={`group relative flex flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border bg-gradient-to-br ${a.tone} p-4 transition-all hover:shadow-md hover:-translate-y-0.5`}
+              className={`group flex shrink-0 flex-col items-center gap-2 transition-all hover:-translate-y-0.5`}
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background/80 ring-1 ring-border/60">
-                <a.icon className="h-5 w-5" />
+              <div
+                className={`flex h-16 w-16 items-center justify-center rounded-full border bg-gradient-to-br ${a.tone} shadow-sm ring-1 ring-border/40 group-hover:shadow-md`}
+              >
+                <a.icon className="h-6 w-6" />
               </div>
-              <span className="text-xs font-semibold text-foreground">{a.label}</span>
+              <span className="w-20 truncate text-center text-[11px] font-semibold text-foreground">{a.label}</span>
             </Link>
           ))}
         </div>
