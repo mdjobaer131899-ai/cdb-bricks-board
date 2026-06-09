@@ -11,8 +11,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { fetchSales, fetchAllCustomers, type SaleRow } from "@/lib/sales-queries";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import { fetchSales, fetchAllCustomers, fetchCollections, type SaleRow } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { exportReportPdf, type PdfColumn } from "@/lib/pdf-export";
@@ -41,16 +41,18 @@ function ReportsPage() {
         <p className="text-sm text-muted-foreground">বিক্রয় বিশ্লেষণ ও PDF এক্সপোর্ট</p>
       </div>
       <Tabs defaultValue="daily">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
           <TabsTrigger value="daily">দৈনিক</TabsTrigger>
           <TabsTrigger value="range">তারিখ পরিসীমা</TabsTrigger>
           <TabsTrigger value="customer">গ্রাহক সারাংশ</TabsTrigger>
           <TabsTrigger value="advance">অগ্রিম চালান</TabsTrigger>
+          <TabsTrigger value="profit">গ্রাহকভিত্তিক বিশ্লেষণ</TabsTrigger>
         </TabsList>
         <TabsContent value="daily" className="mt-4"><DailyReport /></TabsContent>
         <TabsContent value="range" className="mt-4"><RangeReport /></TabsContent>
         <TabsContent value="customer" className="mt-4"><CustomerReport /></TabsContent>
         <TabsContent value="advance" className="mt-4"><AdvanceReport /></TabsContent>
+        <TabsContent value="profit" className="mt-4"><CustomerProfitReport /></TabsContent>
       </Tabs>
     </div>
   );
@@ -482,6 +484,168 @@ function AdvanceReport() {
                     </TableRow>
                   ))}
                 </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------- 5. Customer Profit Analysis ---------------- */
+function CustomerProfitReport() {
+  const now = new Date();
+  const [from, setFrom] = useState<Date>(new Date(now.getFullYear(), now.getMonth(), 1));
+  const [to, setTo] = useState<Date>(new Date());
+  const [exporting, setExporting] = useState(false);
+  const admin = useAdminName();
+  const fromS = isoDate(from), toS = isoDate(to);
+
+  const sq = useQuery({
+    queryKey: ["report-profit-sales", fromS, toS],
+    queryFn: () => fetchSales({ from: fromS, to: toS, limit: 5000 }),
+  });
+
+  const cq = useQuery({
+    queryKey: ["report-profit-collections", fromS, toS],
+    queryFn: () => fetchCollections({ from: fromS, to: toS }),
+  });
+
+  const customerQ = useQuery({ queryKey: ["customers-all"], queryFn: fetchAllCustomers });
+
+  const rows = useMemo(() => {
+    const sales = (sq.data ?? []).filter((s) => s.status === "approved");
+    const collections = cq.data ?? [];
+    const customers = customerQ.data ?? [];
+
+    const map = new Map<string, { name: string; sales: number; bricks: number; collection: number }>();
+
+    for (const s of sales) {
+      const cid = s.customer?.id;
+      if (!cid) continue;
+      const cur = map.get(cid) ?? { name: s.customer!.name, sales: 0, bricks: 0, collection: 0 };
+      cur.sales += Number(s.total_amount);
+      cur.bricks += s.quantity;
+      map.set(cid, cur);
+    }
+
+    for (const c of collections) {
+      const name = customers.find((x) => x.id === c.customer_id)?.name;
+      const cur = map.get(c.customer_id) ?? { name: name ?? "—", sales: 0, bricks: 0, collection: 0 };
+      cur.collection += Number(c.amount);
+      map.set(c.customer_id, cur);
+    }
+
+    return Array.from(map.entries())
+      .map(([id, v]) => ({ id, ...v, due: v.sales - v.collection }))
+      .sort((a, b) => b.sales - a.sales);
+  }, [sq.data, cq.data, customerQ.data]);
+
+  const totals = useMemo(() => ({
+    sales: rows.reduce((t, r) => t + r.sales, 0),
+    bricks: rows.reduce((t, r) => t + r.bricks, 0),
+    collection: rows.reduce((t, r) => t + r.collection, 0),
+    due: rows.reduce((t, r) => t + r.due, 0),
+  }), [rows]);
+
+  async function onExport() {
+    setExporting(true);
+    const columns: PdfColumn[] = [
+      { header: "গ্রাহক", dataKey: "customer" },
+      { header: "মোট বিক্রি", dataKey: "sales", align: "right" },
+      { header: "মোট ইট", dataKey: "bricks", align: "right" },
+      { header: "মোট কালেকশন", dataKey: "collection", align: "right" },
+      { header: "বর্তমান বকেয়া", dataKey: "due", align: "right" },
+    ];
+    const pdfRows = rows.map((r) => ({
+      customer: r.name,
+      sales: "৳ " + bn(r.sales),
+      bricks: bn(r.bricks),
+      collection: "৳ " + bn(r.collection),
+      due: "৳ " + bn(r.due),
+    }));
+    await downloadPdf({
+      filename: `customer-profit-${fromS}_to_${toS}.pdf`,
+      reportTitle: "গ্রাহকভিত্তিক বিশ্লেষণ",
+      subtitle: `${bnDate(from)} — ${bnDate(to)}`,
+      adminName: admin,
+      columns,
+      rows: pdfRows,
+      footerSummary: [
+        { label: "মোট বিক্রি", value: "৳ " + bn(totals.sales) },
+        { label: "মোট ইট", value: bn(totals.bricks) },
+        { label: "মোট কালেকশন", value: "৳ " + bn(totals.collection) },
+        { label: "সর্বমোট বকেয়া", value: "৳ " + bn(totals.due) },
+      ],
+    });
+    setExporting(false);
+  }
+
+  const isLoading = sq.isLoading || cq.isLoading || customerQ.isLoading;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-3 flex flex-wrap gap-2 items-center">
+          <DatePicker value={from} onChange={setFrom} label="From" />
+          <span className="text-muted-foreground">→</span>
+          <DatePicker value={to} onChange={setTo} label="To" />
+          <Button size="sm" className="ml-auto" onClick={onExport} disabled={exporting || rows.length === 0}>
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />} Export PDF
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">গ্রাহকভিত্তিক বিশ্লেষণ</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? <LoadingTable /> : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>গ্রাহক</TableHead>
+                    <TableHead className="text-right">মোট বিক্রি</TableHead>
+                    <TableHead className="text-right">মোট ইট</TableHead>
+                    <TableHead className="text-right">মোট কালেকশন</TableHead>
+                    <TableHead className="text-right">বর্তমান বকেয়া</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">কোনো তথ্য নেই</TableCell>
+                    </TableRow>
+                  ) : (
+                    rows.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-medium">{r.name}</TableCell>
+                        <TableCell className="text-right tabular-nums">৳ {bn(r.sales)}</TableCell>
+                        <TableCell className="text-right tabular-nums">{bn(r.bricks)}</TableCell>
+                        <TableCell className="text-right tabular-nums">৳ {bn(r.collection)}</TableCell>
+                        <TableCell className={cn("text-right tabular-nums font-semibold", r.due > 0 ? "text-destructive" : r.due < 0 ? "text-emerald-600" : "")}>
+                          ৳ {bn(Math.abs(r.due))}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+                {rows.length > 0 && (
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="font-semibold">সর্বমোট</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">৳ {bn(totals.sales)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">{bn(totals.bricks)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold">৳ {bn(totals.collection)}</TableCell>
+                      <TableCell className={cn("text-right tabular-nums font-semibold", totals.due > 0 ? "text-destructive" : totals.due < 0 ? "text-emerald-600" : "")}>
+                        ৳ {bn(Math.abs(totals.due))}
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
+                )}
               </Table>
             </div>
           )}

@@ -63,3 +63,12 @@ export async function fetchActiveBrickTypes() {
   if (error) throw error;
   return data ?? [];
 }
+
+export async function fetchCollections(params: { from?: string; to?: string }): Promise<{ id: string; customer_id: string; amount: number; payment_date: string }[]> {
+  let q = supabase.from("collections").select("id, customer_id, amount, payment_date").order("payment_date", { ascending: false });
+  if (params.from) q = q.gte("payment_date", params.from);
+  if (params.to) q = q.lte("payment_date", params.to);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
