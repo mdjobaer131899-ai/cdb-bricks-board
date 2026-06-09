@@ -93,6 +93,20 @@ function NewContractPage() {
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-1.5">
+              <Label>চুক্তির ধরন *</Label>
+              <Select value={contractType} onValueChange={(v) => setContractType(v as "yearly_fixed" | "cash")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="yearly_fixed">নিয়মিত চুক্তি (বার্ষিক)</SelectItem>
+                  <SelectItem value="cash">নগদ চুক্তি (অগ্রিম টাকা)</SelectItem>
+                </SelectContent>
+              </Select>
+              {contractType === "cash" && (
+                <p className="text-[11px] text-muted-foreground">গ্রাহক অগ্রিম টাকা দিয়েছেন, ধীরে ধীরে ইট নিবেন</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
               <Label>গ্রাহক *</Label>
               <Select value={customerId} onValueChange={setCustomerId}>
                 <SelectTrigger><SelectValue placeholder="গ্রাহক নির্বাচন করুন" /></SelectTrigger>
@@ -108,6 +122,14 @@ function NewContractPage() {
               <Label>চুক্তির তারিখ *</Label>
               <Input type="date" value={contractDate} onChange={(e) => setContractDate(e.target.value)} required />
             </div>
+
+            {contractType === "cash" && (
+              <div className="space-y-1.5">
+                <Label>অগ্রিম পরিশোধ (৳) *</Label>
+                <Input type="number" step="0.01" min="0" value={advancePaid} onChange={(e) => setAdvancePaid(e.target.value)} placeholder="যেমন: ৫০০০০০" />
+                <p className="text-[11px] text-muted-foreground">গ্রাহক এখনই যে টাকা দিয়েছেন</p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
