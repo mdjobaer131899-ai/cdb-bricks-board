@@ -376,20 +376,6 @@ function NewEntryPage() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">মূল্য</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <label className="flex items-center gap-2 rounded-md border border-dashed p-3 cursor-pointer hover:bg-muted/40">
-                <Checkbox
-                  checked={isAdvance}
-                  onCheckedChange={(v) => {
-                    const next = Boolean(v);
-                    setIsAdvance(next);
-                    if (next) setUnitPrice("0");
-                  }}
-                />
-                <div>
-                  <div className="text-sm font-medium">অগ্রিম চালান / Advance Delivery</div>
-                  <div className="text-xs text-muted-foreground">পরিমাণ ০ হিসেবে সংরক্ষিত হবে</div>
-                </div>
-              </label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>একক মূল্য (৳)</Label>
@@ -399,7 +385,6 @@ function NewEntryPage() {
                     step="0.01"
                     value={unitPrice}
                     onChange={(e) => setUnitPrice(e.target.value)}
-                    disabled={isAdvance}
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -413,6 +398,7 @@ function NewEntryPage() {
               </div>
             </CardContent>
           </Card>
+
         ) : (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">অতিরিক্ত তথ্য</CardTitle></CardHeader>
