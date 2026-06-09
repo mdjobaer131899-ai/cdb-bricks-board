@@ -145,11 +145,9 @@ export function AdminDashboard() {
 
       <SeasonProgressCard />
 
-      {/* New: daily folders */}
-      <DailyIncomeExpenseFolders />
-
       {/* Quick income/expense entry */}
       <CashBoxPanel />
+
 
       {/* Filtered recent sales */}
       <section className="space-y-3">
