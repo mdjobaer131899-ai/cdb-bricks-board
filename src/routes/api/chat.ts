@@ -16,7 +16,6 @@ const SYSTEM_PROMPT = `তুমি "CDB Bricks AI সহকারী" — এ�
 - যদি কোন ডেটা না পাও, ভদ্রভাবে বলো: "দুঃখিত, এই তথ্যটি খুঁজে পাইনি।"
 - উত্তর সংক্ষিপ্ত ও পরিষ্কার রাখো — দরকারে বুলেট পয়েন্ট ব্যবহার করো।
 - তুমি শুধুমাত্র পঠনযোগ্য (read-only) — কখনো কোন ডেটা পরিবর্তন বা মুছে ফেলার চেষ্টা করো না।
-- বিক্রির সারসংক্ষেপ দেখানোর সময় মোট, পরিশোধিত (অনুমোদিত) ও বাকি (পেন্ডিং) উল্লেখ করো।
 
 আজকের তারিখ: ${new Date().toISOString().slice(0, 10)}
 `;
@@ -26,43 +25,40 @@ export const Route = createFileRoute("/api/chat")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          // --- 1. Auth: validate bearer token & require admin role ---
           const authHeader = request.headers.get("authorization") ?? "";
-          if (!authHeader.startsWith("Bearer ")) {
-            return new Response("Unauthorized", { status: 401 });
+          const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+          if (!token) {
+            console.error("[/api/chat] Missing bearer token");
+            return new Response("দয়া করে আবার লগইন করুন (টোকেন নেই)।", { status: 401 });
           }
-          const token = authHeader.slice("Bearer ".length).trim();
-          if (!token) return new Response("Unauthorized", { status: 401 });
 
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
           const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
           if (userErr || !userData?.user) {
-            return new Response("Unauthorized", { status: 401 });
+            console.error("[/api/chat] getUser failed:", userErr?.message);
+            return new Response("সেশনের মেয়াদ শেষ — পুনরায় লগইন করুন।", { status: 401 });
           }
           const userId = userData.user.id;
 
-          const { data: roleRow, error: roleErr } = await supabaseAdmin
+          const { data: roleRow } = await supabaseAdmin
             .from("user_roles")
             .select("role")
             .eq("user_id", userId)
             .eq("role", "admin")
             .maybeSingle();
-          if (roleErr || !roleRow) {
-            return new Response("Forbidden: Admin only", { status: 403 });
+          if (!roleRow) {
+            return new Response("এই ফিচারটি শুধু অ্যাডমিনদের জন্য।", { status: 403 });
           }
 
-          // --- 2. Parse body ---
           const body = (await request.json()) as { messages?: UIMessage[] };
           const messages = Array.isArray(body.messages) ? body.messages : [];
 
-          // --- 3. Lovable AI Gateway ---
           const apiKey = process.env.LOVABLE_API_KEY;
           if (!apiKey) {
-            return new Response("AI is not configured (missing LOVABLE_API_KEY).", { status: 500 });
+            return new Response("AI কনফিগার করা হয়নি (LOVABLE_API_KEY নেই)।", { status: 500 });
           }
           const gateway = createLovableAiGatewayProvider(apiKey);
 
-          // --- 4. Build read-only tools using admin client (RLS bypass is safe — we verified admin) ---
           const tools = buildAssistantTools(supabaseAdmin);
 
           const result = streamText({
