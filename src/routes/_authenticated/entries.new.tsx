@@ -155,7 +155,7 @@ function NewEntryPage() {
       toast.error("সকল প্রয়োজনীয় তথ্য পূরণ করুন");
       return;
     }
-    if (!customerId) {
+    if (isAdmin && !customerId) {
       toast.error("গ্রাহক নির্বাচন করুন");
       return;
     }
@@ -180,8 +180,8 @@ function NewEntryPage() {
 
     const { error } = await supabase.from("sales_entries").insert({
       challan_no: challanNo.trim(),
-      customer_id: customerId,
-      contract_id: contractId || null,
+      customer_id: isAdmin ? customerId : null,
+      contract_id: isAdmin ? (contractId || null) : null,
       brick_type_id: brickTypeId,
       custom_brick_name: isOthers ? customBrickName.trim() : null,
       quantity: finalQuantity,
@@ -190,8 +190,8 @@ function NewEntryPage() {
       sale_type: advanceFlag ? "advance" : "regular",
       status: "pending",
       sale_date: saleDate,
-      driver_name: driverName || null,
-      vehicle_number: vehicleNumber || null,
+      driver_name: isAdmin ? (driverName || null) : null,
+      vehicle_number: isAdmin ? (vehicleNumber || null) : null,
       notes: notes || null,
       created_by: me.user.id,
     });
