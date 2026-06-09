@@ -54,7 +54,7 @@ export function RecentSalesTable({
                 {showAmount && <TableHead className="text-right">টাকা (৳)</TableHead>}
                 <TableHead>ধরন</TableHead>
                 <TableHead>স্ট্যাটাস</TableHead>
-                <TableHead className="hidden md:table-cell">ম্যানেজার</TableHead>
+                {/* manager column removed */}
                 <TableHead>তারিখ</TableHead>
                 {showActions && <TableHead className="text-right">অ্যাকশন</TableHead>}
               </TableRow>
