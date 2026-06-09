@@ -155,7 +155,7 @@ function NewEntryPage() {
       toast.error("সকল প্রয়োজনীয় তথ্য পূরণ করুন");
       return;
     }
-    if (isAdmin && !customerId) {
+    if (!customerId) {
       toast.error("গ্রাহক নির্বাচন করুন");
       return;
     }
