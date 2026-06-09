@@ -134,6 +134,33 @@ export type Database = {
         }
         Relationships: []
       }
+      closed_months: {
+        Row: {
+          closed_at: string
+          closed_by: string | null
+          id: string
+          month: number
+          snapshot: Json | null
+          year: number
+        }
+        Insert: {
+          closed_at?: string
+          closed_by?: string | null
+          id?: string
+          month: number
+          snapshot?: Json | null
+          year: number
+        }
+        Update: {
+          closed_at?: string
+          closed_by?: string | null
+          id?: string
+          month?: number
+          snapshot?: Json | null
+          year?: number
+        }
+        Relationships: []
+      }
       collections: {
         Row: {
           amount: number
@@ -490,30 +517,42 @@ export type Database = {
       production_entries: {
         Row: {
           brick_type_id: string
+          coal_used: number | null
           created_at: string
           created_by: string
           id: string
+          labor_cost: number | null
+          mati_used: number | null
           notes: string | null
+          other_cost: number | null
           production_date: string
           quantity: number
           updated_at: string
         }
         Insert: {
           brick_type_id: string
+          coal_used?: number | null
           created_at?: string
           created_by: string
           id?: string
+          labor_cost?: number | null
+          mati_used?: number | null
           notes?: string | null
+          other_cost?: number | null
           production_date?: string
           quantity: number
           updated_at?: string
         }
         Update: {
           brick_type_id?: string
+          coal_used?: number | null
           created_at?: string
           created_by?: string
           id?: string
+          labor_cost?: number | null
+          mati_used?: number | null
           notes?: string | null
+          other_cost?: number | null
           production_date?: string
           quantity?: number
           updated_at?: string
@@ -555,6 +594,89 @@ export type Database = {
           full_name?: string
           id?: string
           phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      raw_material_purchases: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          material_id: string
+          note: string | null
+          payment_method: string
+          purchase_date: string
+          quantity: number
+          supplier_name: string | null
+          total_amount: number
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          material_id: string
+          note?: string | null
+          payment_method?: string
+          purchase_date?: string
+          quantity: number
+          supplier_name?: string | null
+          total_amount: number
+          unit_price: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          material_id?: string
+          note?: string | null
+          payment_method?: string
+          purchase_date?: string
+          quantity?: number
+          supplier_name?: string | null
+          total_amount?: number
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raw_material_purchases_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raw_materials: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          low_stock_threshold: number
+          name: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          low_stock_threshold?: number
+          name: string
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          low_stock_threshold?: number
+          name?: string
+          unit?: string
           updated_at?: string
         }
         Relationships: []
@@ -733,6 +855,204 @@ export type Database = {
         }
         Relationships: []
       }
+      vehicle_expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          created_by: string | null
+          expense_date: string
+          id: string
+          note: string | null
+          vehicle_id: string
+        }
+        Insert: {
+          amount: number
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          expense_date?: string
+          id?: string
+          note?: string | null
+          vehicle_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          expense_date?: string
+          id?: string
+          note?: string | null
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_expenses_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicles: {
+        Row: {
+          active: boolean
+          capacity: number | null
+          created_at: string
+          driver_name: string | null
+          driver_phone: string | null
+          id: string
+          type: string
+          updated_at: string
+          vehicle_no: string
+        }
+        Insert: {
+          active?: boolean
+          capacity?: number | null
+          created_at?: string
+          driver_name?: string | null
+          driver_phone?: string | null
+          id?: string
+          type?: string
+          updated_at?: string
+          vehicle_no: string
+        }
+        Update: {
+          active?: boolean
+          capacity?: number | null
+          created_at?: string
+          driver_name?: string | null
+          driver_phone?: string | null
+          id?: string
+          type?: string
+          updated_at?: string
+          vehicle_no?: string
+        }
+        Relationships: []
+      }
+      worker_attendance: {
+        Row: {
+          advance_paid: number
+          created_at: string
+          created_by: string | null
+          date: string
+          id: string
+          note: string | null
+          overtime_hours: number
+          present: boolean
+          worker_id: string
+        }
+        Insert: {
+          advance_paid?: number
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          id?: string
+          note?: string | null
+          overtime_hours?: number
+          present?: boolean
+          worker_id: string
+        }
+        Update: {
+          advance_paid?: number
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          id?: string
+          note?: string | null
+          overtime_hours?: number
+          present?: boolean
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_attendance_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      worker_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          payment_date: string
+          payment_type: string
+          worker_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          payment_date?: string
+          payment_type?: string
+          worker_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          payment_date?: string
+          payment_type?: string
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_payments_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workers: {
+        Row: {
+          active: boolean
+          created_at: string
+          daily_wage: number
+          id: string
+          name: string
+          note: string | null
+          phone: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          daily_wage?: number
+          id?: string
+          name: string
+          note?: string | null
+          phone?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          daily_wage?: number
+          id?: string
+          name?: string
+          note?: string | null
+          phone?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       account_balances: {
@@ -852,6 +1172,7 @@ export type Database = {
         Args: { _type: Database["public"]["Enums"]["contract_type"] }
         Returns: string
       }
+      is_month_closed: { Args: { _date: string }; Returns: boolean }
       log_audit: {
         Args: {
           _action: string

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, DollarSign, Truck, Clock, Users, Wallet, HandCoins, AlertTriangle, Package, CheckCircle2 } from "lucide-react";
+import { FileText, DollarSign, Truck, Clock, Users, Wallet, HandCoins, AlertTriangle, Package, CheckCircle2, TrendingUp, Users2 } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter";
 import { RecentSalesTable } from "@/components/recent-sales-table";
@@ -74,9 +74,41 @@ export function AdminDashboard() {
     },
   });
 
+  // New: month-to-date raw material + labor + net profit
+  const monthIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+  const monthLast = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
+
+  const newStatsQ = useQuery({
+    queryKey: ["dash-new-cards", todayIso, monthIso],
+    queryFn: async () => {
+      const [rmTodayRes, wpTodayRes, monthSalesRes, monthExpRes, monthRmRes, monthWpRes, materialsRes, rmAllRes] = await Promise.all([
+        supabase.from("raw_material_purchases").select("total_amount").eq("purchase_date", todayIso),
+        supabase.from("worker_payments").select("amount").eq("payment_date", todayIso),
+        supabase.from("sales_entries").select("total_amount").eq("status", "approved").gte("sale_date", monthIso).lte("sale_date", monthLast),
+        supabase.from("expenses").select("amount").gte("expense_date", monthIso).lte("expense_date", monthLast),
+        supabase.from("raw_material_purchases").select("total_amount").gte("purchase_date", monthIso).lte("purchase_date", monthLast),
+        supabase.from("worker_payments").select("amount").gte("payment_date", monthIso).lte("payment_date", monthLast),
+        supabase.from("raw_materials").select("id, name, unit, low_stock_threshold"),
+        supabase.from("raw_material_purchases").select("material_id, quantity"),
+      ]);
+      const sum = (rows: any[] | null, k: string) => (rows ?? []).reduce((s, r) => s + Number(r[k] || 0), 0);
+      const rmToday = sum(rmTodayRes.data, "total_amount");
+      const wpToday = sum(wpTodayRes.data, "amount");
+      const mSales = sum(monthSalesRes.data, "total_amount");
+      const mExp = sum(monthExpRes.data, "amount");
+      const mRm = sum(monthRmRes.data, "total_amount");
+      const mWp = sum(monthWpRes.data, "amount");
+      const stockMap = new Map<string, number>();
+      (rmAllRes.data ?? []).forEach((p: any) => stockMap.set(p.material_id, (stockMap.get(p.material_id) ?? 0) + Number(p.quantity || 0)));
+      const lowStock = (materialsRes.data ?? []).filter((m: any) => Number(m.low_stock_threshold || 0) > 0 && (stockMap.get(m.id) ?? 0) < Number(m.low_stock_threshold));
+      return { rmToday, wpToday, netProfit: mSales - mExp - mRm - mWp, lowStock };
+    },
+  });
+
   const t = todayStatsQ.data;
   const due = dueQ.data;
   const sales = salesQ.data ?? [];
+  const n = newStatsQ.data;
 
   return (
     <div className="space-y-6">
@@ -108,6 +140,13 @@ export function AdminDashboard() {
         <StatCard label="মোট গ্রাহক" value={bn(customersQ.data ?? 0)} icon={Users} tone="primary" />
         <StatCard label="মাসিক লেনদেন" value={bn(sales.length)} icon={FileText} tone="info" />
         <StatCard label="হাতে নগদ" value={`৳ ${bn(0)}`} icon={Wallet} tone="success" hint="শীঘ্রই" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard label="আজকের কাঁচামাল খরচ" value={`৳ ${bn(n?.rmToday ?? 0)}`} icon={Package} tone="warning" />
+        <StatCard label="আজকের শ্রমিক খরচ" value={`৳ ${bn(n?.wpToday ?? 0)}`} icon={Users2} tone="warning" />
+        <StatCard label="চলতি মাসের নিট লাভ" value={`৳ ${bn(n?.netProfit ?? 0)}`} icon={TrendingUp} tone={(n?.netProfit ?? 0) >= 0 ? "success" : "destructive"} />
+        <StatCard label="কম স্টক সতর্কতা" value={bn(n?.lowStock?.length ?? 0)} icon={AlertTriangle} tone={(n?.lowStock?.length ?? 0) > 0 ? "destructive" : "info"} hint={(n?.lowStock ?? []).map((m: any) => m.name).join(", ") || "—"} />
       </div>
 
       <StockSummaryCard />
