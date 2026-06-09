@@ -331,16 +331,20 @@ function NewEntryPage() {
 
 
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">ডেলিভারি ও ইটের তথ্য</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">ইটের তথ্য</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>ড্রাইভারের নাম</Label>
-              <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} placeholder="যেমন: করিম মিয়া" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>গাড়ির নম্বর <span className="text-muted-foreground">(ঐচ্ছিক)</span></Label>
-              <Input value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} placeholder="যেমন: ঢাকা-মেট্রো-ট-১২৩৪" />
-            </div>
+            {isAdmin && (
+              <>
+                <div className="space-y-1.5">
+                  <Label>ড্রাইভারের নাম</Label>
+                  <Input value={driverName} onChange={(e) => setDriverName(e.target.value)} placeholder="যেমন: করিম মিয়া" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>গাড়ির নম্বর <span className="text-muted-foreground">(ঐচ্ছিক)</span></Label>
+                  <Input value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} placeholder="যেমন: ঢাকা-মেট্রো-ট-১২৩৪" />
+                </div>
+              </>
+            )}
             <div className="space-y-1.5">
               <Label>ইটের ধরন</Label>
               <Select value={brickTypeId} onValueChange={setBrickTypeId}>
