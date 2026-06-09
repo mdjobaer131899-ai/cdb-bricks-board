@@ -1,84 +1,80 @@
-# CDB Bricks ERP — Integrated Flow Restructure
+# ERP Restructure Plan
 
-এই কাজ অনেক বড় — একটি টার্নে সম্পূর্ণ করা সম্ভব নয়। আমি এটি **৪টি ফেজে** ভাগ করে করব, প্রতিটি ফেজ আলাদাভাবে পরীক্ষাযোগ্য ও স্থিতিশীল।
+বড় পরিবর্তন — কাজগুলো ৬টি গ্রুপে ভাগ করা হয়েছে।
 
-## বর্তমান অবস্থা (যা ইতিমধ্যে আছে)
+## 1. AI Assistant "Unauthorized" Fix (অগ্রাধিকার)
+- `src/routes/api/chat.ts` বর্তমানে authentication ছাড়া call হচ্ছে। Browser থেকে Supabase bearer token পাঠানো হচ্ছে না।
+- Fix: chat route handler-এ Authorization header forward করব এবং AI tools-এ `requireSupabaseAuth` middleware ব্যবহার করব, অথবা service-role admin client ব্যবহার করব (read-only tools-এর জন্য নিরাপদ)।
 
-- `customers`, `contracts`, `contract_payments`, `sales_entries`, `collections`, `expenses`, `brick_types`, `audit_logs`, `user_roles`
-- Customer Ledger (ব্যাংক-স্টেটমেন্ট স্টাইল) — চুক্তি + চালান (ডেবিট), কালেকশন (ক্রেডিট)
-- Global Search, Top Customers, Quick Actions
-- Cash Box (নগদ বিক্রি − ব্যয়), Recent Sales, Dashboard
+## 2. Dashboard সরলীকরণ
+- "আজকের সারসংক্ষেপ" card বাদ
+- সব chart/graph component বাদ (sparkline, top-customers chart ইত্যাদি)
+- **নতুন: তারিখভিত্তিক Income/Expense Folder List**
+  - প্রতি তারিখ একটি collapsible folder
+  - ক্লিক করলে সেই দিনের আয় (collections + cash sales) ও ব্যয় (expenses) detail দেখাবে
+  - Admin-এর জন্য প্রতিটি row-তে Edit/Delete button
+- নগদ collection স্বয়ংক্রিয় income হিসেবে দেখাবে (DB trigger ইতিমধ্যে আছে — শুধু UI)
 
-## যা নেই / অসম্পূর্ণ
+## 3. Admin Auto-Approval
+- Admin role দিয়ে create করা সকল `sales_entries` সরাসরি `status='approved'` হবে
+- `entries.new.tsx` ও cash-sale function-এ user role check করে status set করব
+- Approval Queue থেকে admin-এর নিজের entry hide
 
-- **Inventory / Stock table** — production ও challan-এর সাথে কানেক্টেড না
-- **Contract-wise delivered/remaining quantity** — automated tracking নেই
-- **Advance balance ledger entry** — কাস্টমার-লেভেলে advance pool নেই
-- **Accounts ledger** (double-entry journal) — automated posting নেই
-- **Production module** — নেই
-- **Sales return** — নেই
+## 4. Challan Page পরিবর্তন
+- উপরের "New Entry" button সরানো
+- Date filter যোগ (default: আজ)
+- Filtered list দেখাবে
 
-## Phase 1 — Contract-Challan Sync + Advance Pool (এই টার্ন)
+## 5. Contract — Customer Folder System
+- `/contracts` page redesign:
+  - Customer-wise group/folder (accordion)
+  - Customer expand করলে তার সব contracts নিচে
+- **New Contract Form সরলীকরণ:**
+  - শুধু: Customer Name, Contract Date, Total Brick Quantity, Per Brick Rate
+  - বাদ: Start/End/Expiry Date, Per Truck Rate
+  - Auto-calc: `truck_quantity = total_bricks / 2000` (read-only)
+  - Auto-calc: `total_value = quantity × rate` (read-only)
+- **Contract Detail Page-এ live stats:**
+  - মোট চুক্তি, মোট ট্রাক, সরবরাহকৃত (ট্রাক+ইট), অবশিষ্ট, মোট টাকা, আদায়, বকেয়া
+  - সব calculation DB view থেকে (real-time)
 
-**লক্ষ্য:** Master flow-এর core wiring — চুক্তি বুকিং থেকে চালান পর্যন্ত automated quantity tracking এবং advance balance auto-adjust।
+## 6. Challan ↔ Contract Linking
+- Challan approve করার সময় **Contract dropdown বাধ্যতামূলক** (যদি customer-এর active contract থাকে)
+- Approve trigger automatically update করবে:
+  - Contract delivered_quantity
+  - Contract balance
+  - Customer ledger
+  - Reports (already via journal triggers from Phase 3)
 
-### Migration
+## Technical Changes
 
-1. `contracts`-এ যোগ:
-   - `delivered_quantity numeric default 0` (auto-updated)
-   - generated column বা trigger-based `remaining_quantity`
-2. `customers`-এ যোগ:
-   - `advance_balance numeric default 0` (running pool)
-3. **Triggers:**
-   - `sales_entries` INSERT/UPDATE/DELETE (status=approved) → `contracts.delivered_quantity` auto-update যখন `contract_id` set
-   - `collections` INSERT/DELETE → যদি কোনো contract না থাকে এবং note='advance' হয়, `customers.advance_balance` বাড়াবে
-   - `sales_entries` approve হলে → যদি `customer.advance_balance > 0`, প্রথমে সেটা থেকে কেটে নেবে এবং একটি system collection row তৈরি করবে (auto-adjustment)
-4. Validation trigger: challan quantity > contract remaining হলে error
+**Database migrations:**
+- `contracts` table: `truck_quantity` generated column বা trigger (2000 piece/truck), remove not-null on dates
+- Add `delivered_quantity`, `delivered_value`, `collected_amount`, `due_amount` as a view `contract_summary`
+- Trigger: sales_entry approved → update contract_summary cache (or use view, simpler)
+- Trigger/policy: admin-created sales_entry auto-approved
 
-### UI updates
+**Frontend files:**
+- `src/components/admin-dashboard.tsx` — strip charts, add date-folder list
+- `src/components/manager-dashboard.tsx` — same simplification
+- New: `src/components/daily-income-expense-folders.tsx`
+- `src/routes/_authenticated/challans.index.tsx` — remove New Entry, add date filter
+- `src/routes/_authenticated/contracts.index.tsx` — customer folder accordion
+- `src/routes/_authenticated/contracts.new.tsx` — simplified form
+- `src/routes/_authenticated/contracts.$id.tsx` — live stats panel
+- `src/routes/_authenticated/entries.new.tsx` — require contract selection, auto-approve for admin
+- `src/lib/contracts.functions.ts` — update schema (remove dates, auto-calc)
+- `src/lib/cash-sale.functions.ts` — auto-approve always (already approved)
+- `src/routes/api/chat.ts` — fix auth forwarding
 
-- **Contract page** (`contracts.$id.tsx`): দেখাবে Contract Qty / Delivered / Remaining / Value / Collected / Outstanding — progress bar সহ
-- **Challan form** (`entries.new.tsx`): customer select → active contracts dropdown (with remaining qty) → contract auto-select → over-delivery warning
-- **Customer profile**: Total Contract Qty / Delivered / Remaining / Sales / Collections / **Advance Balance** / Due cards যোগ
-- **Cash Sale shortcut**: Quick Actions থেকে এক ক্লিকে challan + collection একসাথে create (existing createCollection + createSale flow combine)
+**সংরক্ষিত:** Phase 1-4 এর accounts/journal/stock infrastructure অপরিবর্তিত থাকবে।
 
-### Files
+## কাজের ক্রম
+1. AI Unauthorized fix (দ্রুত)
+2. DB migration (contracts schema + auto-approve trigger + contract_summary view)
+3. Contract pages (form + folder list + detail stats)
+4. Challan page (filter + remove new entry + require contract)
+5. Dashboard restructure (folders + remove charts)
+6. Admin edit/delete UI on income-expense entries
 
-- New migration (triggers + columns + grants)
-- Edit: `src/routes/_authenticated/contracts.$id.tsx`, `entries.new.tsx`, `customers.$id.tsx`
-- Edit: `src/components/customer-ledger.tsx` (advance auto-adjust rows show)
-- New: `src/lib/cash-sale.functions.ts` (atomic cash sale: challan + collection)
-
-## Phase 2 — Inventory & Production Module
-
-- New tables: `stock_ledger` (brick_type_id, qty, direction, ref_type, ref_id), `production_entries`
-- Triggers: production → stock+, approved challan → stock−, sales return → stock+
-- New routes: `/production`, `/inventory`
-- Dashboard: Current Stock card per brick type
-- Low-stock alerts
-
-## Phase 3 — Accounts / Journal Module
-
-- New tables: `accounts` (chart of accounts), `journal_entries`, `journal_lines` (double-entry)
-- Auto-post triggers:
-  - Sale approved → Dr Customer / Cr Sales
-  - Collection → Dr Cash|Bank / Cr Customer
-  - Advance → Dr Cash|Bank / Cr Advance Liability
-  - Expense → Dr Expense / Cr Cash|Bank
-- New route: `/accounts/ledger`, `/accounts/journal`
-- Trial Balance + P&L reports
-
-## Phase 4 — Sales Return + Reports + Polish
-
-- Sales return module (reverses stock, ledger, accounts)
-- Comprehensive reports: customer outstanding, contract status, daily sales, stock movement
-- Edit/delete cascade audit
-- Real-time sync verification across modules
-
----
-
-## এই টার্নে আমি Phase 1 implement করব
-
-Phase 1 সম্পন্ন হলে ERP-এর core integrated flow কাজ করবে (Customer → Contract → Challan → Auto-Sales → Collection → Advance auto-adjust → Ledger)। তারপর Phase 2/3/4 ধাপে এগোব।
-
-**অনুমতি দিলে শুরু করছি।**
+প্রায় ১২-১৫টি ফাইল edit/create হবে। শুরু করব?
