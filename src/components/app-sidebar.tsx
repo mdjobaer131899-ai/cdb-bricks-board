@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Package, Boxes, BookOpen } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Package, Boxes, BookOpen, Users2, Truck, Lock } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -24,8 +24,13 @@ const ALL_ITEMS = [
   { title: "গ্রাহক", url: "/customers", icon: Users, roles: ["admin", "manager"] as const },
   { title: "প্রোডাকশন", url: "/production", icon: Package, roles: ["admin", "manager"] as const },
   { title: "স্টক / ইনভেন্টরি", url: "/inventory", icon: Boxes, roles: ["admin", "manager"] as const },
+  { title: "কাঁচামাল", url: "/inventory/raw-materials", icon: Package, roles: ["admin", "manager"] as const },
+  { title: "শ্রমিক", url: "/workers", icon: Users2, roles: ["admin", "manager"] as const },
+  { title: "গাড়ি", url: "/vehicles", icon: Truck, roles: ["admin", "manager"] as const },
   { title: "অ্যাকাউন্টস", url: "/accounts", icon: BookOpen, roles: ["admin"] as const },
+  { title: "মাসিক ক্লোজিং", url: "/accounts/closing", icon: Lock, roles: ["admin"] as const },
   { title: "রিপোর্ট", url: "/reports", icon: BarChart3, roles: ["admin", "manager"] as const },
+  { title: "উৎপাদন খরচ", url: "/reports/production-cost", icon: Factory, roles: ["admin", "manager"] as const },
   { title: "ইউজার", url: "/users", icon: UserCog, roles: ["admin"] as const },
   { title: "সেটিংস", url: "/settings", icon: Settings, roles: ["admin", "manager"] as const },
 ];

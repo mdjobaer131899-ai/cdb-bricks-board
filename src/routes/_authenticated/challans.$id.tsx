@@ -1,12 +1,14 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
-import { ArrowLeft, Printer, Share2, Loader2, Pencil, Download } from "lucide-react";
+import { ArrowLeft, Printer, Share2, Loader2, Pencil, Download, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { InvoiceDocument, type InvoiceData } from "@/components/invoice-document";
 import { shareNodeAsImage, downloadNodeAsImage, printNode } from "@/lib/share-invoice";
+import { openWhatsApp } from "@/lib/whatsapp";
+import { bn } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/challans/$id")({
   head: () => ({ meta: [{ title: "চালান ডিটেইলস — CDB Bricks" }] }),
@@ -120,6 +122,18 @@ function ChallanDetailPage() {
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={handleShare}>
             <Share2 className="mr-2 h-4 w-4" /> শেয়ার
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              openWhatsApp(
+                entry!.customer?.phone,
+                `আপনার চালান ${entry!.challan_no} ${entry!.status === "approved" ? "অনুমোদিত হয়েছে" : "তৈরি হয়েছে"}। পরিমাণ: ${bn(entry!.quantity)} ${entry!.brick_type?.name ?? ""}, মূল্য: ৳ ${bn(entry!.total_amount)}। — CDB Bricks`
+              )
+            }
+          >
+            <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp
           </Button>
           <Button variant="outline" size="sm" onClick={handleDownload}>
             <Download className="mr-2 h-4 w-4" /> ডাউনলোড

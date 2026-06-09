@@ -14,6 +14,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as AuthenticatedWorkersRouteImport } from './routes/_authenticated/workers'
+import { Route as AuthenticatedVehiclesRouteImport } from './routes/_authenticated/vehicles'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
@@ -28,11 +30,14 @@ import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authe
 import { Route as AuthenticatedContractsIndexRouteImport } from './routes/_authenticated/contracts.index'
 import { Route as AuthenticatedCollectionsIndexRouteImport } from './routes/_authenticated/collections.index'
 import { Route as AuthenticatedChallansIndexRouteImport } from './routes/_authenticated/challans.index'
+import { Route as AuthenticatedReportsProductionCostRouteImport } from './routes/_authenticated/reports.production-cost'
+import { Route as AuthenticatedInventoryRawMaterialsRouteImport } from './routes/_authenticated/inventory.raw-materials'
 import { Route as AuthenticatedEntriesNewRouteImport } from './routes/_authenticated/entries.new'
 import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
 import { Route as AuthenticatedContractsNewRouteImport } from './routes/_authenticated/contracts.new'
 import { Route as AuthenticatedContractsIdRouteImport } from './routes/_authenticated/contracts.$id'
 import { Route as AuthenticatedChallansIdRouteImport } from './routes/_authenticated/challans.$id'
+import { Route as AuthenticatedAccountsClosingRouteImport } from './routes/_authenticated/accounts.closing'
 import { Route as AuthenticatedEntriesIdEditRouteImport } from './routes/_authenticated/entries.$id.edit'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -58,6 +63,16 @@ const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedWorkersRoute = AuthenticatedWorkersRouteImport.update({
+  id: '/workers',
+  path: '/workers',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedVehiclesRoute = AuthenticatedVehiclesRouteImport.update({
+  id: '/vehicles',
+  path: '/vehicles',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   id: '/users',
@@ -133,6 +148,18 @@ const AuthenticatedChallansIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedChallansRoute,
   } as any)
+const AuthenticatedReportsProductionCostRoute =
+  AuthenticatedReportsProductionCostRouteImport.update({
+    id: '/production-cost',
+    path: '/production-cost',
+    getParentRoute: () => AuthenticatedReportsRoute,
+  } as any)
+const AuthenticatedInventoryRawMaterialsRoute =
+  AuthenticatedInventoryRawMaterialsRouteImport.update({
+    id: '/raw-materials',
+    path: '/raw-materials',
+    getParentRoute: () => AuthenticatedInventoryRoute,
+  } as any)
 const AuthenticatedEntriesNewRoute = AuthenticatedEntriesNewRouteImport.update({
   id: '/entries/new',
   path: '/entries/new',
@@ -161,6 +188,12 @@ const AuthenticatedChallansIdRoute = AuthenticatedChallansIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => AuthenticatedChallansRoute,
 } as any)
+const AuthenticatedAccountsClosingRoute =
+  AuthenticatedAccountsClosingRouteImport.update({
+    id: '/closing',
+    path: '/closing',
+    getParentRoute: () => AuthenticatedAccountsRoute,
+  } as any)
 const AuthenticatedEntriesIdEditRoute =
   AuthenticatedEntriesIdEditRouteImport.update({
     id: '/entries/$id/edit',
@@ -172,22 +205,27 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/accounts': typeof AuthenticatedAccountsRoute
+  '/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/challans': typeof AuthenticatedChallansRouteWithChildren
   '/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
-  '/inventory': typeof AuthenticatedInventoryRoute
+  '/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/production': typeof AuthenticatedProductionRoute
-  '/reports': typeof AuthenticatedReportsRoute
+  '/reports': typeof AuthenticatedReportsRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/vehicles': typeof AuthenticatedVehiclesRoute
+  '/workers': typeof AuthenticatedWorkersRoute
   '/api/chat': typeof ApiChatRoute
+  '/accounts/closing': typeof AuthenticatedAccountsClosingRoute
   '/challans/$id': typeof AuthenticatedChallansIdRoute
   '/contracts/$id': typeof AuthenticatedContractsIdRoute
   '/contracts/new': typeof AuthenticatedContractsNewRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
+  '/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
   '/challans/': typeof AuthenticatedChallansIndexRoute
   '/collections/': typeof AuthenticatedCollectionsIndexRoute
   '/contracts/': typeof AuthenticatedContractsIndexRoute
@@ -197,20 +235,25 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/accounts': typeof AuthenticatedAccountsRoute
+  '/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/approvals': typeof AuthenticatedApprovalsRoute
-  '/inventory': typeof AuthenticatedInventoryRoute
+  '/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/production': typeof AuthenticatedProductionRoute
-  '/reports': typeof AuthenticatedReportsRoute
+  '/reports': typeof AuthenticatedReportsRouteWithChildren
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
+  '/vehicles': typeof AuthenticatedVehiclesRoute
+  '/workers': typeof AuthenticatedWorkersRoute
   '/api/chat': typeof ApiChatRoute
   '/': typeof AuthenticatedIndexRoute
+  '/accounts/closing': typeof AuthenticatedAccountsClosingRoute
   '/challans/$id': typeof AuthenticatedChallansIdRoute
   '/contracts/$id': typeof AuthenticatedContractsIdRoute
   '/contracts/new': typeof AuthenticatedContractsNewRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
+  '/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
   '/challans': typeof AuthenticatedChallansIndexRoute
   '/collections': typeof AuthenticatedCollectionsIndexRoute
   '/contracts': typeof AuthenticatedContractsIndexRoute
@@ -222,23 +265,28 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
+  '/_authenticated/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRoute
   '/_authenticated/challans': typeof AuthenticatedChallansRouteWithChildren
   '/_authenticated/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
-  '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
+  '/_authenticated/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/_authenticated/production': typeof AuthenticatedProductionRoute
-  '/_authenticated/reports': typeof AuthenticatedReportsRoute
+  '/_authenticated/reports': typeof AuthenticatedReportsRouteWithChildren
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
+  '/_authenticated/vehicles': typeof AuthenticatedVehiclesRoute
+  '/_authenticated/workers': typeof AuthenticatedWorkersRoute
   '/api/chat': typeof ApiChatRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/accounts/closing': typeof AuthenticatedAccountsClosingRoute
   '/_authenticated/challans/$id': typeof AuthenticatedChallansIdRoute
   '/_authenticated/contracts/$id': typeof AuthenticatedContractsIdRoute
   '/_authenticated/contracts/new': typeof AuthenticatedContractsNewRoute
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/_authenticated/entries/new': typeof AuthenticatedEntriesNewRoute
+  '/_authenticated/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
+  '/_authenticated/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
   '/_authenticated/challans/': typeof AuthenticatedChallansIndexRoute
   '/_authenticated/collections/': typeof AuthenticatedCollectionsIndexRoute
   '/_authenticated/contracts/': typeof AuthenticatedContractsIndexRoute
@@ -261,12 +309,17 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/users'
+    | '/vehicles'
+    | '/workers'
     | '/api/chat'
+    | '/accounts/closing'
     | '/challans/$id'
     | '/contracts/$id'
     | '/contracts/new'
     | '/customers/$id'
     | '/entries/new'
+    | '/inventory/raw-materials'
+    | '/reports/production-cost'
     | '/challans/'
     | '/collections/'
     | '/contracts/'
@@ -283,13 +336,18 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/users'
+    | '/vehicles'
+    | '/workers'
     | '/api/chat'
     | '/'
+    | '/accounts/closing'
     | '/challans/$id'
     | '/contracts/$id'
     | '/contracts/new'
     | '/customers/$id'
     | '/entries/new'
+    | '/inventory/raw-materials'
+    | '/reports/production-cost'
     | '/challans'
     | '/collections'
     | '/contracts'
@@ -310,13 +368,18 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/settings'
     | '/_authenticated/users'
+    | '/_authenticated/vehicles'
+    | '/_authenticated/workers'
     | '/api/chat'
     | '/_authenticated/'
+    | '/_authenticated/accounts/closing'
     | '/_authenticated/challans/$id'
     | '/_authenticated/contracts/$id'
     | '/_authenticated/contracts/new'
     | '/_authenticated/customers/$id'
     | '/_authenticated/entries/new'
+    | '/_authenticated/inventory/raw-materials'
+    | '/_authenticated/reports/production-cost'
     | '/_authenticated/challans/'
     | '/_authenticated/collections/'
     | '/_authenticated/contracts/'
@@ -367,6 +430,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/workers': {
+      id: '/_authenticated/workers'
+      path: '/workers'
+      fullPath: '/workers'
+      preLoaderRoute: typeof AuthenticatedWorkersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/vehicles': {
+      id: '/_authenticated/vehicles'
+      path: '/vehicles'
+      fullPath: '/vehicles'
+      preLoaderRoute: typeof AuthenticatedVehiclesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/users': {
       id: '/_authenticated/users'
@@ -466,6 +543,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChallansIndexRouteImport
       parentRoute: typeof AuthenticatedChallansRoute
     }
+    '/_authenticated/reports/production-cost': {
+      id: '/_authenticated/reports/production-cost'
+      path: '/production-cost'
+      fullPath: '/reports/production-cost'
+      preLoaderRoute: typeof AuthenticatedReportsProductionCostRouteImport
+      parentRoute: typeof AuthenticatedReportsRoute
+    }
+    '/_authenticated/inventory/raw-materials': {
+      id: '/_authenticated/inventory/raw-materials'
+      path: '/raw-materials'
+      fullPath: '/inventory/raw-materials'
+      preLoaderRoute: typeof AuthenticatedInventoryRawMaterialsRouteImport
+      parentRoute: typeof AuthenticatedInventoryRoute
+    }
     '/_authenticated/entries/new': {
       id: '/_authenticated/entries/new'
       path: '/entries/new'
@@ -501,6 +592,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedChallansIdRouteImport
       parentRoute: typeof AuthenticatedChallansRoute
     }
+    '/_authenticated/accounts/closing': {
+      id: '/_authenticated/accounts/closing'
+      path: '/closing'
+      fullPath: '/accounts/closing'
+      preLoaderRoute: typeof AuthenticatedAccountsClosingRouteImport
+      parentRoute: typeof AuthenticatedAccountsRoute
+    }
     '/_authenticated/entries/$id/edit': {
       id: '/_authenticated/entries/$id/edit'
       path: '/entries/$id/edit'
@@ -510,6 +608,19 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AuthenticatedAccountsRouteChildren {
+  AuthenticatedAccountsClosingRoute: typeof AuthenticatedAccountsClosingRoute
+}
+
+const AuthenticatedAccountsRouteChildren: AuthenticatedAccountsRouteChildren = {
+  AuthenticatedAccountsClosingRoute: AuthenticatedAccountsClosingRoute,
+}
+
+const AuthenticatedAccountsRouteWithChildren =
+  AuthenticatedAccountsRoute._addFileChildren(
+    AuthenticatedAccountsRouteChildren,
+  )
 
 interface AuthenticatedChallansRouteChildren {
   AuthenticatedChallansIdRoute: typeof AuthenticatedChallansIdRoute
@@ -560,17 +671,46 @@ const AuthenticatedCustomersRouteWithChildren =
     AuthenticatedCustomersRouteChildren,
   )
 
+interface AuthenticatedInventoryRouteChildren {
+  AuthenticatedInventoryRawMaterialsRoute: typeof AuthenticatedInventoryRawMaterialsRoute
+}
+
+const AuthenticatedInventoryRouteChildren: AuthenticatedInventoryRouteChildren =
+  {
+    AuthenticatedInventoryRawMaterialsRoute:
+      AuthenticatedInventoryRawMaterialsRoute,
+  }
+
+const AuthenticatedInventoryRouteWithChildren =
+  AuthenticatedInventoryRoute._addFileChildren(
+    AuthenticatedInventoryRouteChildren,
+  )
+
+interface AuthenticatedReportsRouteChildren {
+  AuthenticatedReportsProductionCostRoute: typeof AuthenticatedReportsProductionCostRoute
+}
+
+const AuthenticatedReportsRouteChildren: AuthenticatedReportsRouteChildren = {
+  AuthenticatedReportsProductionCostRoute:
+    AuthenticatedReportsProductionCostRoute,
+}
+
+const AuthenticatedReportsRouteWithChildren =
+  AuthenticatedReportsRoute._addFileChildren(AuthenticatedReportsRouteChildren)
+
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRoute
+  AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRouteWithChildren
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRoute
   AuthenticatedChallansRoute: typeof AuthenticatedChallansRouteWithChildren
   AuthenticatedContractsRoute: typeof AuthenticatedContractsRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
-  AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
+  AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRouteWithChildren
   AuthenticatedProductionRoute: typeof AuthenticatedProductionRoute
-  AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
+  AuthenticatedReportsRoute: typeof AuthenticatedReportsRouteWithChildren
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
+  AuthenticatedVehiclesRoute: typeof AuthenticatedVehiclesRoute
+  AuthenticatedWorkersRoute: typeof AuthenticatedWorkersRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedEntriesNewRoute: typeof AuthenticatedEntriesNewRoute
   AuthenticatedCollectionsIndexRoute: typeof AuthenticatedCollectionsIndexRoute
@@ -578,16 +718,18 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAccountsRoute: AuthenticatedAccountsRoute,
+  AuthenticatedAccountsRoute: AuthenticatedAccountsRouteWithChildren,
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRoute,
   AuthenticatedChallansRoute: AuthenticatedChallansRouteWithChildren,
   AuthenticatedContractsRoute: AuthenticatedContractsRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
-  AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
+  AuthenticatedInventoryRoute: AuthenticatedInventoryRouteWithChildren,
   AuthenticatedProductionRoute: AuthenticatedProductionRoute,
-  AuthenticatedReportsRoute: AuthenticatedReportsRoute,
+  AuthenticatedReportsRoute: AuthenticatedReportsRouteWithChildren,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
+  AuthenticatedVehiclesRoute: AuthenticatedVehiclesRoute,
+  AuthenticatedWorkersRoute: AuthenticatedWorkersRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedEntriesNewRoute: AuthenticatedEntriesNewRoute,
   AuthenticatedCollectionsIndexRoute: AuthenticatedCollectionsIndexRoute,
