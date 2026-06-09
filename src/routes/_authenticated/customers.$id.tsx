@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Printer, Share2, Loader2 } from "lucide-react";
+import { ArrowLeft, Printer, Share2, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate } from "@/lib/format";
-import { toast } from "sonner";
 import { CustomerLedger } from "@/components/customer-ledger";
+import { InvoiceDocument, type InvoiceData } from "@/components/invoice-document";
+import { shareNodeAsImage, downloadNodeAsImage, printNode } from "@/lib/share-invoice";
 
 export const Route = createFileRoute("/_authenticated/customers/$id")({
   head: () => ({ meta: [{ title: "গ্রাহকের লেনদেন — CDB Bricks" }] }),
