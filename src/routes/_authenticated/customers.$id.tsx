@@ -25,6 +25,7 @@ function CustomerDetailPage() {
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
   const [selectedDate, setSelectedDate] = useState("");
+  const invoiceRef = useRef<HTMLDivElement>(null);
 
   const customerQ = useQuery({
     queryKey: ["customer", id],
