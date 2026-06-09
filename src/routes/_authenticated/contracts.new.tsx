@@ -48,9 +48,10 @@ function NewContractPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!customerId) return toast.error("গ্রাহক নির্বাচন করুন");
-    if (qty <= 0) return toast.error("ইটের পরিমাণ দিন");
     if (r <= 0) return toast.error("প্রতি ইট রেট দিন");
-    if (contractType === "cash" && advance <= 0) return toast.error("নগদ চুক্তির জন্য অগ্রিম পরিমাণ দিন");
+    if (isCash && advance <= 0) return toast.error("নগদ চুক্তির জন্য অগ্রিম পরিমাণ দিন");
+    if (qty <= 0) return toast.error("ইটের পরিমাণ দিন");
+
 
     setBusy(true);
     try {
