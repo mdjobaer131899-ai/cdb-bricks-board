@@ -1,5 +1,6 @@
 import { forwardRef } from "react";
 import { bn, bnDate } from "@/lib/format";
+import logoAsset from "@/assets/cdb-logo.png.asset.json";
 
 export interface InvoiceItem {
   code?: string | null;
@@ -29,7 +30,12 @@ export interface InvoiceData {
 export const InvoiceDocument = forwardRef<HTMLDivElement, { data: InvoiceData }>(
   function InvoiceDocument({ data }, ref) {
     return (
-      <div ref={ref} className="inv-doc" style={{ background: "#fff", color: "#111", fontFamily: "'Hind Siliguri', system-ui, sans-serif", padding: 32, maxWidth: 820, margin: "0 auto", border: "1px solid #d1d5db" }}>
+      <div ref={ref} className="inv-doc" style={{ position: "relative", background: "#fff", color: "#111", fontFamily: "'Hind Siliguri', system-ui, sans-serif", padding: 32, maxWidth: 820, margin: "0 auto", border: "1px solid #d1d5db", overflow: "hidden" }}>
+        {/* Watermark */}
+        <div aria-hidden style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 0 }}>
+          <img src={logoAsset.url} alt="" style={{ width: 480, height: 480, objectFit: "contain", opacity: 0.07 }} />
+        </div>
+        <div style={{ position: "relative", zIndex: 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
           <div className="inv-meta" style={{ fontSize: 13 }}>
             <div style={{ display: "flex", gap: 12, padding: "2px 0" }}>
@@ -41,10 +47,14 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, { data: InvoiceData }>
               <span style={{ fontWeight: 600 }}>{data.invoiceNo}</span>
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#111", textAlign: "right" }}>CDB Bricks Ltd.</div>
-            <div className="inv-title" style={{ fontSize: 34, fontWeight: 700, letterSpacing: 1, textAlign: "right", color: "#374151", marginTop: 4 }}>
-              INVOICE
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <img src={logoAsset.url} alt="CDB Bricks" style={{ width: 64, height: 64, objectFit: "contain" }} />
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#c2410c", textAlign: "right" }}>CDB Bricks Ltd.</div>
+              <div style={{ fontSize: 11, color: "#6b7280", textAlign: "right" }}>কাপাসিয়া, গাজীপুর</div>
+              <div className="inv-title" style={{ fontSize: 30, fontWeight: 700, letterSpacing: 1, textAlign: "right", color: "#374151", marginTop: 4 }}>
+                INVOICE
+              </div>
             </div>
           </div>
         </div>
