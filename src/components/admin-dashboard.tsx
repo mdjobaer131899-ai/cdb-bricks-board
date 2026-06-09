@@ -14,6 +14,7 @@ import { QuickActions } from "@/components/quick-actions";
 import { StockSummaryCard } from "@/components/stock-summary-card";
 import { CashBoxPanel } from "@/components/cash-box-panel";
 import { SeasonProgressCard } from "@/components/season-progress-card";
+import { BrandLogo } from "@/components/brand-logo";
 
 
 export function AdminDashboard() {
