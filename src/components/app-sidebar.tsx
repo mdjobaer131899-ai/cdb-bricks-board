@@ -25,6 +25,7 @@ const ALL_ITEMS = [
   { title: "প্রোডাকশন", url: "/production", icon: Package, roles: ["admin", "manager"] as const },
   { title: "স্টক / ইনভেন্টরি", url: "/inventory", icon: Boxes, roles: ["admin", "manager"] as const },
   { title: "কাঁচামাল", url: "/inventory/raw-materials", icon: Package, roles: ["admin", "manager"] as const },
+  { title: "সরবরাহকারী", url: "/suppliers", icon: Building2, roles: ["admin", "manager"] as const },
   { title: "শ্রমিক", url: "/workers", icon: Users2, roles: ["admin", "manager"] as const },
   { title: "গাড়ি", url: "/vehicles", icon: Truck, roles: ["admin", "manager"] as const },
   { title: "অ্যাকাউন্টস", url: "/accounts", icon: BookOpen, roles: ["admin"] as const },
