@@ -236,6 +236,7 @@ function NewEntryPage() {
           </CardContent>
         </Card>
 
+        {isAdmin && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">গ্রাহক</CardTitle>
@@ -326,6 +327,7 @@ function NewEntryPage() {
             )}
           </CardContent>
         </Card>
+        )}
 
 
         <Card>
