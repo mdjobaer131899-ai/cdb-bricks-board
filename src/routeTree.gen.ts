@@ -19,6 +19,7 @@ import { Route as AuthenticatedVehiclesRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticated/seasons'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedProductionRouteImport } from './routes/_authenticated/production'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
@@ -88,6 +89,11 @@ const AuthenticatedSuppliersRoute = AuthenticatedSuppliersRouteImport.update({
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSeasonsRoute = AuthenticatedSeasonsRouteImport.update({
+  id: '/seasons',
+  path: '/seasons',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
@@ -219,6 +225,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/production': typeof AuthenticatedProductionRoute
   '/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -247,6 +254,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/production': typeof AuthenticatedProductionRoute
   '/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/_authenticated/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/_authenticated/production': typeof AuthenticatedProductionRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/_authenticated/seasons': typeof AuthenticatedSeasonsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
@@ -316,6 +325,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/production'
     | '/reports'
+    | '/seasons'
     | '/settings'
     | '/suppliers'
     | '/users'
@@ -344,6 +354,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/production'
     | '/reports'
+    | '/seasons'
     | '/settings'
     | '/suppliers'
     | '/users'
@@ -377,6 +388,7 @@ export interface FileRouteTypes {
     | '/_authenticated/inventory'
     | '/_authenticated/production'
     | '/_authenticated/reports'
+    | '/_authenticated/seasons'
     | '/_authenticated/settings'
     | '/_authenticated/suppliers'
     | '/_authenticated/users'
@@ -476,6 +488,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/seasons': {
+      id: '/_authenticated/seasons'
+      path: '/seasons'
+      fullPath: '/seasons'
+      preLoaderRoute: typeof AuthenticatedSeasonsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/reports': {
@@ -726,6 +745,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRouteWithChildren
   AuthenticatedProductionRoute: typeof AuthenticatedProductionRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRouteWithChildren
+  AuthenticatedSeasonsRoute: typeof AuthenticatedSeasonsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
@@ -746,6 +766,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedInventoryRoute: AuthenticatedInventoryRouteWithChildren,
   AuthenticatedProductionRoute: AuthenticatedProductionRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRouteWithChildren,
+  AuthenticatedSeasonsRoute: AuthenticatedSeasonsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,

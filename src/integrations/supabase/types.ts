@@ -796,6 +796,45 @@ export type Database = {
           },
         ]
       }
+      seasons: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          end_date: string
+          id: string
+          is_active: boolean
+          name: string
+          note: string | null
+          start_date: string
+          target_production: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          end_date: string
+          id?: string
+          is_active?: boolean
+          name: string
+          note?: string | null
+          start_date: string
+          target_production?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          end_date?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          note?: string | null
+          start_date?: string
+          target_production?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       stock_ledger: {
         Row: {
           brick_type_id: string

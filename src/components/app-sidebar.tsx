@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Package, Boxes, BookOpen, Users2, Truck, Lock, Building2 } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Package, Boxes, BookOpen, Users2, Truck, Lock, Building2, CalendarRange } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -30,6 +30,7 @@ const ALL_ITEMS = [
   { title: "গাড়ি", url: "/vehicles", icon: Truck, roles: ["admin", "manager"] as const },
   { title: "অ্যাকাউন্টস", url: "/accounts", icon: BookOpen, roles: ["admin"] as const },
   { title: "মাসিক ক্লোজিং", url: "/accounts/closing", icon: Lock, roles: ["admin"] as const },
+  { title: "মৌসুম", url: "/seasons", icon: CalendarRange, roles: ["admin", "manager"] as const },
   { title: "রিপোর্ট", url: "/reports", icon: BarChart3, roles: ["admin", "manager"] as const },
   { title: "উৎপাদন খরচ", url: "/reports/production-cost", icon: Factory, roles: ["admin", "manager"] as const },
   { title: "ইউজার", url: "/users", icon: UserCog, roles: ["admin"] as const },
