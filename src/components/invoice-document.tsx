@@ -156,6 +156,7 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, { data: InvoiceData }>
           ]).map((n, i) => <p key={i} style={{ margin: "3px 0" }}>{n}</p>)}
           <p style={{ margin: "10px 0 3px" }}>এটি একটি কম্পিউটার-জেনারেটেড ইনভয়েস, কোনো স্বাক্ষরের প্রয়োজন নেই।</p>
         </div>
+        </div>
       </div>
     );
   }
