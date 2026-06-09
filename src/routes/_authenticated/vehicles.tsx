@@ -154,13 +154,21 @@ function VehiclesPage() {
         )}
       </div>
 
-      <Card><CardContent className="p-0">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-base">গাড়ির তালিকা</CardTitle>
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-8 h-9" placeholder="খুঁজুন..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
         {vehiclesQ.isLoading ? <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> :
-        (vehiclesQ.data ?? []).length === 0 ? <div className="py-10 text-center text-sm text-muted-foreground">কোনো গাড়ি নেই</div> :
+        filteredVehicles.length === 0 ? <div className="py-10 text-center text-sm text-muted-foreground">কোনো গাড়ি নেই</div> :
         <Table>
           <TableHeader><TableRow><TableHead>নম্বর</TableHead><TableHead>ধরন</TableHead><TableHead>ড্রাইভার</TableHead><TableHead className="text-right">এ মাসের ট্রিপ</TableHead><TableHead className="text-right">এ মাসের খরচ</TableHead><TableHead></TableHead></TableRow></TableHeader>
           <TableBody>
-            {(vehiclesQ.data ?? []).map((v: any) => (
+            {filteredVehicles.map((v: any) => (
               <TableRow key={v.id}>
                 <TableCell className="font-mono font-medium">{v.vehicle_no}</TableCell>
                 <TableCell><Badge variant="outline">{v.type}</Badge></TableCell>
@@ -168,36 +176,72 @@ function VehiclesPage() {
                 <TableCell className="text-right tabular-nums">{bn(tripsQ.data?.get(v.vehicle_no) ?? 0)}</TableCell>
                 <TableCell className="text-right tabular-nums">৳ {bn(monthlyCost.get(v.id) ?? 0)}</TableCell>
                 <TableCell>
-                  <Dialog open={expOpen === v.id} onOpenChange={(o) => setExpOpen(o ? v.id : null)}>
-                    <DialogTrigger asChild><Button size="sm" variant="outline">খরচ যোগ</Button></DialogTrigger>
-                    <DialogContent className="max-w-sm">
-                      <DialogHeader><DialogTitle>{v.vehicle_no} — খরচ</DialogTitle></DialogHeader>
-                      <div className="space-y-3">
-                        <div>
-                          <Label>ক্যাটাগরি</Label>
-                          <Select value={expForm.category} onValueChange={(c) => setExpForm({ ...expForm, category: c })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="জ্বালানি">জ্বালানি</SelectItem>
-                              <SelectItem value="মেরামত">মেরামত</SelectItem>
-                              <SelectItem value="টোল">টোল</SelectItem>
-                              <SelectItem value="অন্যান্য">অন্যান্য</SelectItem>
-                            </SelectContent>
-                          </Select>
+                  <div className="flex justify-end gap-1">
+                    <Dialog open={expOpen === v.id} onOpenChange={(o) => setExpOpen(o ? v.id : null)}>
+                      <DialogTrigger asChild><Button size="sm" variant="outline">খরচ যোগ</Button></DialogTrigger>
+                      <DialogContent className="max-w-sm">
+                        <DialogHeader><DialogTitle>{v.vehicle_no} — খরচ</DialogTitle></DialogHeader>
+                        <div className="space-y-3">
+                          <div>
+                            <Label>ক্যাটাগরি</Label>
+                            <Select value={expForm.category} onValueChange={(c) => setExpForm({ ...expForm, category: c })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="জ্বালানি">জ্বালানি</SelectItem>
+                                <SelectItem value="মেরামত">মেরামত</SelectItem>
+                                <SelectItem value="টোল">টোল</SelectItem>
+                                <SelectItem value="অন্যান্য">অন্যান্য</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div><Label>পরিমাণ (৳)</Label><Input type="number" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} /></div>
+                          <div><Label>তারিখ</Label><Input type="date" value={expForm.expense_date} onChange={(e) => setExpForm({ ...expForm, expense_date: e.target.value })} /></div>
+                          <div><Label>নোট</Label><Input value={expForm.note} onChange={(e) => setExpForm({ ...expForm, note: e.target.value })} /></div>
                         </div>
-                        <div><Label>পরিমাণ (৳)</Label><Input type="number" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} /></div>
-                        <div><Label>তারিখ</Label><Input type="date" value={expForm.expense_date} onChange={(e) => setExpForm({ ...expForm, expense_date: e.target.value })} /></div>
-                        <div><Label>নোট</Label><Input value={expForm.note} onChange={(e) => setExpForm({ ...expForm, note: e.target.value })} /></div>
-                      </div>
-                      <DialogFooter><Button onClick={() => addExpense.mutate(v.id)} disabled={addExpense.isPending}>সংরক্ষণ</Button></DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                        <DialogFooter><Button onClick={() => addExpense.mutate(v.id)} disabled={addExpense.isPending}>সংরক্ষণ</Button></DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    {isAdmin && <Button size="sm" variant="ghost" onClick={() => setEditVeh({ id: v.id, vehicle_no: v.vehicle_no, type: v.type, driver_name: v.driver_name ?? "", driver_phone: v.driver_phone ?? "", capacity: v.capacity ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>}
+                    {isAdmin && <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${v.vehicle_no}" মুছে ফেলবেন?`)) delVeh.mutate(v.id); }}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>}
-      </CardContent></Card>
+        </CardContent>
+      </Card>
+
+      {/* Edit vehicle dialog */}
+      <Dialog open={!!editVeh} onOpenChange={(o) => !o && setEditVeh(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>গাড়ি সম্পাদনা</DialogTitle></DialogHeader>
+          {editVeh && (
+            <div className="space-y-3">
+              <div><Label>গাড়ি নম্বর</Label><Input value={editVeh.vehicle_no} onChange={(e) => setEditVeh({ ...editVeh, vehicle_no: e.target.value })} /></div>
+              <div>
+                <Label>ধরন</Label>
+                <Select value={editVeh.type} onValueChange={(v) => setEditVeh({ ...editVeh, type: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ট্রাক">ট্রাক</SelectItem>
+                    <SelectItem value="পিকআপ">পিকআপ</SelectItem>
+                    <SelectItem value="ট্রলি">ট্রলি</SelectItem>
+                    <SelectItem value="অন্যান্য">অন্যান্য</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>ড্রাইভার</Label><Input value={editVeh.driver_name} onChange={(e) => setEditVeh({ ...editVeh, driver_name: e.target.value })} /></div>
+              <div><Label>ড্রাইভার ফোন</Label><Input value={editVeh.driver_phone} onChange={(e) => setEditVeh({ ...editVeh, driver_phone: e.target.value })} /></div>
+              <div><Label>ধারণক্ষমতা</Label><Input type="number" value={editVeh.capacity} onChange={(e) => setEditVeh({ ...editVeh, capacity: e.target.value })} /></div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditVeh(null)}>বাতিল</Button>
+            <Button onClick={() => updVeh.mutate(editVeh)} disabled={updVeh.isPending}>সংরক্ষণ</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader><CardTitle className="text-base">সাম্প্রতিক খরচ</CardTitle></CardHeader>
