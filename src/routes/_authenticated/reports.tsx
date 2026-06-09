@@ -658,6 +658,8 @@ function CustomerProfitReport() {
       </Card>
     </div>
   );
+}
+
 
 /* ---------------- 6. Season Report ---------------- */
 type SeasonRow = { id: string; name: string; start_date: string; end_date: string | null; target_production: number | null; is_active: boolean };
