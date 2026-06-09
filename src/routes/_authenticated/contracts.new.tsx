@@ -36,11 +36,14 @@ function NewContractPage() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const qty = Number(brickQty) || 0;
+  const isCash = contractType === "cash";
   const r = Number(rate) || 0;
   const advance = Number(advancePaid) || 0;
+  // For cash contracts: total bricks = advance / rate (auto). For others: user enters brick qty.
+  const qty = isCash ? (r > 0 ? Math.floor(advance / r) : 0) : (Number(brickQty) || 0);
   const truckQty = useMemo(() => (qty > 0 ? qty / 2000 : 0), [qty]);
   const totalValue = useMemo(() => qty * r, [qty, r]);
+
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
