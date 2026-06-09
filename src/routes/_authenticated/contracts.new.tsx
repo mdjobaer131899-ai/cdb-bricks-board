@@ -134,29 +134,43 @@ function NewContractPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>মোট ইট (পিস) *</Label>
-                <Input type="number" min="1" value={brickQty} onChange={(e) => setBrickQty(e.target.value)} placeholder="যেমন: ১০০০০০" required />
-              </div>
+            {isCash ? (
               <div className="space-y-1.5">
                 <Label>প্রতি ইট রেট (৳) *</Label>
                 <Input type="number" step="0.01" min="0" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="যেমন: ১২" required />
+                <p className="text-[11px] text-muted-foreground">মোট ইট ও ট্রাক স্বয়ংক্রিয়ভাবে হিসাব হবে (অগ্রিম ÷ রেট)</p>
               </div>
-            </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>মোট ইট (পিস) *</Label>
+                  <Input type="number" min="1" value={brickQty} onChange={(e) => setBrickQty(e.target.value)} placeholder="যেমন: ১০০০০০" required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>প্রতি ইট রেট (৳) *</Label>
+                  <Input type="number" step="0.01" min="0" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="যেমন: ১২" required />
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-md border bg-muted/40 p-3">
-                <div className="text-xs text-muted-foreground">মোট ট্রাক (২০০০ পিস = ১ ট্রাক)</div>
-                <div className="mt-1 text-xl font-bold tabular-nums">{bn(truckQty.toFixed(2))}</div>
-                <div className="mt-1 text-[10px] text-muted-foreground">স্বয়ংক্রিয় — সম্পাদনযোগ্য নয়</div>
+                <div className="text-xs text-muted-foreground">মোট ইট (পিস)</div>
+                <div className="mt-1 text-xl font-bold tabular-nums">{bn(qty)}</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">{isCash ? "অগ্রিম ÷ রেট" : "ইনপুট"}</div>
               </div>
-              <div className="rounded-md border bg-primary/5 p-3">
+              <div className="rounded-md border bg-muted/40 p-3">
+                <div className="text-xs text-muted-foreground">মোট ট্রাক (২০০০ পিস)</div>
+                <div className="mt-1 text-xl font-bold tabular-nums">{bn(truckQty.toFixed(2))}</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">স্বয়ংক্রিয়</div>
+              </div>
+              <div className="col-span-2 rounded-md border bg-primary/5 p-3">
                 <div className="text-xs text-muted-foreground">মোট চুক্তি মূল্য</div>
                 <div className="mt-1 text-xl font-bold text-primary tabular-nums">৳ {bn(totalValue)}</div>
                 <div className="mt-1 text-[10px] text-muted-foreground">পিস × রেট</div>
               </div>
             </div>
+
 
             <div className="space-y-1.5">
               <Label>মন্তব্য</Label>
