@@ -13,6 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { BrandLogo } from "@/components/brand-logo";
 
 type Item = { title: string; url: string; icon: any; roles: readonly ("admin" | "manager")[] };
 type Group = { label: string; items: Item[] };
