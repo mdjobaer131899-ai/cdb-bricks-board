@@ -1,12 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { FilePlus2, FileText, HandCoins, Receipt, UserPlus, Zap } from "lucide-react";
+import { FilePlus2, FileText, HandCoins, Receipt, UserPlus, Zap, Banknote } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const actions = [
   { to: "/contracts/new" as const, label: "নতুন বুকিং", icon: FileText, tone: "from-primary/15 to-primary/5 text-primary" },
   { to: "/entries/new" as const, label: "নতুন চালান", icon: FilePlus2, tone: "from-warning/15 to-warning/5 text-warning" },
+  { to: "/entries/new" as const, label: "নগদ বিক্রি", icon: Banknote, tone: "from-accent/15 to-accent/5 text-accent-foreground" },
   { to: "/collections" as const, label: "নতুন কালেকশন", icon: HandCoins, tone: "from-success/15 to-success/5 text-success" },
-  { to: "/" as const, label: "নতুন ব্যয়", icon: Receipt, tone: "from-destructive/15 to-destructive/5 text-destructive", hash: "expense" as const },
+  { to: "/" as const, label: "নতুন ব্যয়", icon: Receipt, tone: "from-destructive/15 to-destructive/5 text-destructive" },
   { to: "/customers" as const, label: "নতুন গ্রাহক", icon: UserPlus, tone: "from-info/15 to-info/5 text-info" },
 ];
 
@@ -19,7 +20,7 @@ export function QuickActions() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {actions.map((a) => (
             <Link
               key={a.label}

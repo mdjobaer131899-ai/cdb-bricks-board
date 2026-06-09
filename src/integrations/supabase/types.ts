@@ -189,6 +189,7 @@ export type Database = {
           created_at: string
           created_by: string
           customer_id: string
+          delivered_quantity: number
           expiry_date: string | null
           fixed_rate: number | null
           id: string
@@ -208,6 +209,7 @@ export type Database = {
           created_at?: string
           created_by: string
           customer_id: string
+          delivered_quantity?: number
           expiry_date?: string | null
           fixed_rate?: number | null
           id?: string
@@ -227,6 +229,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           customer_id?: string
+          delivered_quantity?: number
           expiry_date?: string | null
           fixed_rate?: number | null
           id?: string
@@ -249,6 +252,7 @@ export type Database = {
       customers: {
         Row: {
           address: string | null
+          advance_balance: number
           created_at: string
           created_by: string | null
           id: string
@@ -259,6 +263,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          advance_balance?: number
           created_at?: string
           created_by?: string | null
           id?: string
@@ -269,6 +274,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          advance_balance?: number
           created_at?: string
           created_by?: string | null
           id?: string
@@ -467,6 +473,14 @@ export type Database = {
           _old_value?: Json
         }
         Returns: string
+      }
+      recompute_contract_delivered: {
+        Args: { _contract_id: string }
+        Returns: undefined
+      }
+      recompute_customer_advance: {
+        Args: { _customer_id: string }
+        Returns: undefined
       }
     }
     Enums: {

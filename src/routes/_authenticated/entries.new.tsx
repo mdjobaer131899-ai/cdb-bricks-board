@@ -86,6 +86,7 @@ function NewEntryPage() {
   const [saleDate, setSaleDate] = useState(isoDate(new Date()));
   const [customerId, setCustomerId] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
+  const [contractId, setContractId] = useState<string>("");
   const [driverName, setDriverName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [brickTypeId, setBrickTypeId] = useState("");
@@ -96,6 +97,34 @@ function NewEntryPage() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [addCustOpen, setAddCustOpen] = useState(false);
+
+  // Active contracts for selected customer
+  const contractsQ = useQuery({
+    queryKey: ["customer-active-contracts", customerId],
+    enabled: !!customerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("id, contract_no, contract_type, fixed_rate, booked_quantity, delivered_quantity")
+        .eq("customer_id", customerId)
+        .eq("status", "active")
+        .order("priority", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Reset contract when customer changes
+  useEffect(() => { setContractId(""); }, [customerId]);
+
+  // Auto-apply contract's fixed rate to unit price
+  useEffect(() => {
+    if (!contractId || !contractsQ.data) return;
+    const c = contractsQ.data.find((x) => x.id === contractId);
+    if (c?.fixed_rate && isAdmin && !isAdvance) {
+      setUnitPrice(String(c.fixed_rate));
+    }
+  }, [contractId, contractsQ.data, isAdmin, isAdvance]);
 
   useEffect(() => {
     generateNextChallanNo().then(setChallanNo);
@@ -152,6 +181,7 @@ function NewEntryPage() {
     const { error } = await supabase.from("sales_entries").insert({
       challan_no: challanNo.trim(),
       customer_id: customerId,
+      contract_id: contractId || null,
       brick_type_id: brickTypeId,
       custom_brick_name: isOthers ? customBrickName.trim() : null,
       quantity: finalQuantity,
@@ -267,8 +297,36 @@ function NewEntryPage() {
                 </Command>
               </PopoverContent>
             </Popover>
+
+            {customerId && (
+              <div className="mt-3 space-y-1.5">
+                <Label>সক্রিয় চুক্তি (ঐচ্ছিক — নগদ বিক্রির জন্য খালি রাখুন)</Label>
+                <Select value={contractId || "none"} onValueChange={(v) => setContractId(v === "none" ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={contractsQ.isLoading ? "লোড হচ্ছে..." : "চুক্তি বেছে নিন বা নগদ বিক্রি"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— নগদ বিক্রি (চুক্তি ছাড়া) —</SelectItem>
+                    {(contractsQ.data ?? []).map((c) => {
+                      const remaining = Math.max(0, Number(c.booked_quantity) - Number(c.delivered_quantity));
+                      return (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.contract_no} • {c.contract_type === "yearly_fixed" ? "বার্ষিক" : c.contract_type === "short_term" ? "স্বল্পমেয়াদী" : "নগদ"}
+                          {c.fixed_rate ? ` • ৳${bn(c.fixed_rate)}` : ""}
+                          {Number(c.booked_quantity) > 0 ? ` • বাকি ${bn(remaining)}` : ""}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {(contractsQ.data?.length ?? 0) === 0 && !contractsQ.isLoading && (
+                  <p className="text-xs text-muted-foreground">এই গ্রাহকের কোনো সক্রিয় চুক্তি নেই।</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
+
 
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">ডেলিভারি ও ইটের তথ্য</CardTitle></CardHeader>

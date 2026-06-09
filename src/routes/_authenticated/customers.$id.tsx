@@ -30,13 +30,39 @@ function CustomerDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customers")
-        .select("id, name, phone, address")
+        .select("id, name, phone, address, advance_balance")
         .eq("id", id)
         .single();
       if (error) throw error;
       return data;
     },
   });
+
+  const contractsQ = useQuery({
+    queryKey: ["customer-contracts", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("id, contract_no, status, contract_type, booked_quantity, delivered_quantity, booked_value, fixed_rate")
+        .eq("customer_id", id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const collectionsTotalQ = useQuery({
+    queryKey: ["customer-collections-total", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("collections")
+        .select("amount")
+        .eq("customer_id", id);
+      if (error) throw error;
+      return (data ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
+    },
+  });
+
 
   const txQ = useQuery({
     queryKey: ["customer-transactions", id],
@@ -152,7 +178,7 @@ function CustomerDetailPage() {
             {customer.address && <div>ঠিকানা: {customer.address}</div>}
           </div>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div className="rounded-lg border p-3">
             <div className="text-xs text-muted-foreground">মোট লেনদেন</div>
             <div className="text-lg font-semibold tabular-nums">{bn(totals.count)} টি</div>
@@ -167,6 +193,36 @@ function CustomerDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 360 Summary: Contracts, Collections, Advance, Due */}
+      {(() => {
+        const contracts = contractsQ.data ?? [];
+        const totalCollected = collectionsTotalQ.data ?? 0;
+        const totalBookedQty = contracts.reduce((s, c) => s + Number(c.booked_quantity || 0), 0);
+        const totalDeliveredQty = contracts.reduce((s, c) => s + Number(c.delivered_quantity || 0), 0);
+        const totalBookedValue = contracts.reduce((s, c) => s + Number(c.booked_value || 0), 0);
+        const advance = Number(customer.advance_balance || 0);
+        // Due = approved sales - collections (positive = customer owes)
+        const due = totals.approved - totalCollected;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">গ্রাহক ৩৬০° সারসংক্ষেপ</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Mini label="মোট চুক্তি বুকিং (পিস)" value={bn(totalBookedQty)} />
+              <Mini label="ডেলিভারি হয়েছে" value={bn(totalDeliveredQty)} />
+              <Mini label="চুক্তি বাকি" value={bn(Math.max(0, totalBookedQty - totalDeliveredQty))} tone="warning" />
+              <Mini label="মোট চুক্তি মূল্য" value={`৳ ${bn(totalBookedValue)}`} />
+              <Mini label="মোট কালেকশন" value={`৳ ${bn(totalCollected)}`} tone="success" />
+              <Mini label="অগ্রিম জমা" value={`৳ ${bn(advance)}`} tone={advance > 0 ? "success" : undefined} />
+              <Mini label={due >= 0 ? "মোট বকেয়া" : "অতিরিক্ত জমা"} value={`৳ ${bn(Math.abs(Math.round(due)))}`} tone={due > 0 ? "destructive" : "success"} />
+              <Mini label="সক্রিয় চুক্তি" value={`${bn(contracts.filter((c) => c.status === "active").length)} টি`} />
+            </CardContent>
+          </Card>
+        );
+      })()}
+
 
       <Card>
         <CardHeader className="space-y-4">
@@ -238,6 +294,19 @@ function CustomerDetailPage() {
       </Card>
 
       <CustomerLedger customerId={customer.id} customerName={customer.name} />
+    </div>
+  );
+}
+
+function Mini({ label, value, tone }: { label: string; value: string; tone?: "success" | "warning" | "destructive" }) {
+  const cls =
+    tone === "success" ? "text-success" :
+    tone === "warning" ? "text-warning" :
+    tone === "destructive" ? "text-destructive" : "";
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`text-base font-semibold tabular-nums ${cls}`}>{value}</div>
     </div>
   );
 }
