@@ -176,9 +176,12 @@ function CustomerDetailPage() {
         <Button variant="outline" size="sm" onClick={() => navigate({ to: "/customers" })}>
           <ArrowLeft className="mr-2 h-4 w-4" /> ফিরে যান
         </Button>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={handleShare}>
             <Share2 className="mr-2 h-4 w-4" /> শেয়ার
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownload}>
+            <Download className="mr-2 h-4 w-4" /> ডাউনলোড
           </Button>
           <Button size="sm" onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" /> প্রিন্ট
