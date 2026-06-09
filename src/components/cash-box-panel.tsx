@@ -399,6 +399,25 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));
   const [note, setNote] = useState("");
+  const [workerId, setWorkerId] = useState<string>("");
+  const [materialId, setMaterialId] = useState<string>("");
+
+  const workersQ = useQuery({
+    queryKey: ["workers-active-select"],
+    enabled: open && category === "শ্রমিক বেতন",
+    queryFn: async () => {
+      const { data } = await supabase.from("workers").select("id, name").eq("active", true).order("name");
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+  const materialsQ = useQuery({
+    queryKey: ["materials-active-select"],
+    enabled: open && category === "কাঁচামাল কেনা",
+    queryFn: async () => {
+      const { data } = await supabase.from("raw_materials").select("id, name").eq("active", true).order("name");
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
 
   type ExpenseInput = { category: string; amount: number; expense_date: string; note: string | null };
   const createFn = useServerFn(createExpense);
@@ -407,7 +426,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     onSuccess: () => {
       toast.success("ব্যয় যোগ হয়েছে");
       setOpen(false);
-      setCategory(""); setCustomCategory(""); setAmount(""); setNote("");
+      setCategory(""); setCustomCategory(""); setAmount(""); setNote(""); setWorkerId(""); setMaterialId("");
       onDone();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -419,7 +438,16 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     const amt = Number(amount);
     if (!finalCat) return toast.error("খাত নির্বাচন করুন");
     if (!Number.isFinite(amt) || amt <= 0) return toast.error("টাকার পরিমাণ সঠিক নয়");
-    mut.mutate({ category: finalCat, amount: amt, expense_date: date, note: note || null });
+    let finalNote = note.trim();
+    if (category === "শ্রমিক বেতন" && workerId) {
+      const w = workersQ.data?.find((x) => x.id === workerId);
+      if (w) finalNote = `শ্রমিক: ${w.name}${finalNote ? " — " + finalNote : ""}`;
+    }
+    if (category === "কাঁচামাল কেনা" && materialId) {
+      const m = materialsQ.data?.find((x) => x.id === materialId);
+      if (m) finalNote = `উপকরণ: ${m.name}${finalNote ? " — " + finalNote : ""}`;
+    }
+    mut.mutate({ category: finalCat, amount: amt, expense_date: date, note: finalNote || null });
   };
 
   return (
