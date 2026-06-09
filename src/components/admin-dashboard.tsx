@@ -14,6 +14,7 @@ import { QuickActions } from "@/components/quick-actions";
 import { StockSummaryCard } from "@/components/stock-summary-card";
 import { DailyIncomeExpenseFolders } from "@/components/daily-folders";
 import { CashBoxPanel } from "@/components/cash-box-panel";
+import { SeasonProgressCard } from "@/components/season-progress-card";
 
 export function AdminDashboard() {
   const today = useMemo(() => new Date(), []);
