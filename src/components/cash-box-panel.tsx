@@ -25,7 +25,9 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
 
 const EXPENSE_CATEGORIES = [
+  "শ্রমিক বেতন",
   "শ্রমিক মজুরি",
+  "কাঁচামাল কেনা",
   "জ্বালানি / কয়লা",
   "মাটি ক্রয়",
   "যন্ত্রপাতি / মেরামত",
@@ -397,6 +399,25 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));
   const [note, setNote] = useState("");
+  const [workerId, setWorkerId] = useState<string>("");
+  const [materialId, setMaterialId] = useState<string>("");
+
+  const workersQ = useQuery({
+    queryKey: ["workers-active-select"],
+    enabled: open && category === "শ্রমিক বেতন",
+    queryFn: async () => {
+      const { data } = await supabase.from("workers").select("id, name").eq("active", true).order("name");
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+  const materialsQ = useQuery({
+    queryKey: ["materials-active-select"],
+    enabled: open && category === "কাঁচামাল কেনা",
+    queryFn: async () => {
+      const { data } = await supabase.from("raw_materials").select("id, name").eq("active", true).order("name");
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
 
   type ExpenseInput = { category: string; amount: number; expense_date: string; note: string | null };
   const createFn = useServerFn(createExpense);
@@ -405,7 +426,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     onSuccess: () => {
       toast.success("ব্যয় যোগ হয়েছে");
       setOpen(false);
-      setCategory(""); setCustomCategory(""); setAmount(""); setNote("");
+      setCategory(""); setCustomCategory(""); setAmount(""); setNote(""); setWorkerId(""); setMaterialId("");
       onDone();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -417,7 +438,16 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     const amt = Number(amount);
     if (!finalCat) return toast.error("খাত নির্বাচন করুন");
     if (!Number.isFinite(amt) || amt <= 0) return toast.error("টাকার পরিমাণ সঠিক নয়");
-    mut.mutate({ category: finalCat, amount: amt, expense_date: date, note: note || null });
+    let finalNote = note.trim();
+    if (category === "শ্রমিক বেতন" && workerId) {
+      const w = workersQ.data?.find((x) => x.id === workerId);
+      if (w) finalNote = `শ্রমিক: ${w.name}${finalNote ? " — " + finalNote : ""}`;
+    }
+    if (category === "কাঁচামাল কেনা" && materialId) {
+      const m = materialsQ.data?.find((x) => x.id === materialId);
+      if (m) finalNote = `উপকরণ: ${m.name}${finalNote ? " — " + finalNote : ""}`;
+    }
+    mut.mutate({ category: finalCat, amount: amt, expense_date: date, note: finalNote || null });
   };
 
   return (
@@ -452,6 +482,33 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
               />
             )}
           </div>
+
+          {category === "শ্রমিক বেতন" && (
+            <div className="space-y-1">
+              <Label>কোন শ্রমিক? (ঐচ্ছিক)</Label>
+              <Select value={workerId} onValueChange={setWorkerId}>
+                <SelectTrigger><SelectValue placeholder="শ্রমিক নির্বাচন" /></SelectTrigger>
+                <SelectContent>
+                  {(workersQ.data ?? []).map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {category === "কাঁচামাল কেনা" && (
+            <div className="space-y-1">
+              <Label>কোন উপকরণ? (ঐচ্ছিক)</Label>
+              <Select value={materialId} onValueChange={setMaterialId}>
+                <SelectTrigger><SelectValue placeholder="উপকরণ নির্বাচন" /></SelectTrigger>
+                <SelectContent>
+                  {(materialsQ.data ?? []).map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">

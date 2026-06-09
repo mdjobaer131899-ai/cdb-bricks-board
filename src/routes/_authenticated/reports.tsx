@@ -17,6 +17,7 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { exportReportPdf, type PdfColumn } from "@/lib/pdf-export";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/reports")({
@@ -41,18 +42,22 @@ function ReportsPage() {
         <p className="text-sm text-muted-foreground">বিক্রয় বিশ্লেষণ ও PDF এক্সপোর্ট</p>
       </div>
       <Tabs defaultValue="daily">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
           <TabsTrigger value="daily">দৈনিক</TabsTrigger>
           <TabsTrigger value="range">তারিখ পরিসীমা</TabsTrigger>
           <TabsTrigger value="customer">গ্রাহক সারাংশ</TabsTrigger>
           <TabsTrigger value="advance">অগ্রিম চালান</TabsTrigger>
           <TabsTrigger value="profit">গ্রাহকভিত্তিক বিশ্লেষণ</TabsTrigger>
+          <TabsTrigger value="season">মৌসুম</TabsTrigger>
+          <TabsTrigger value="annual">বার্ষিক</TabsTrigger>
         </TabsList>
         <TabsContent value="daily" className="mt-4"><DailyReport /></TabsContent>
         <TabsContent value="range" className="mt-4"><RangeReport /></TabsContent>
         <TabsContent value="customer" className="mt-4"><CustomerReport /></TabsContent>
         <TabsContent value="advance" className="mt-4"><AdvanceReport /></TabsContent>
         <TabsContent value="profit" className="mt-4"><CustomerProfitReport /></TabsContent>
+        <TabsContent value="season" className="mt-4"><SeasonReport /></TabsContent>
+        <TabsContent value="annual" className="mt-4"><AnnualReport /></TabsContent>
       </Tabs>
     </div>
   );
@@ -652,5 +657,277 @@ function CustomerProfitReport() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+
+/* ---------------- 6. Season Report ---------------- */
+type SeasonRow = { id: string; name: string; start_date: string; end_date: string | null; target_production: number | null; is_active: boolean };
+
+async function fetchSeasonTotals(s: SeasonRow) {
+  const from = s.start_date;
+  const to = s.end_date ?? isoDate(new Date());
+  const [prodRes, salesRes, colRes, expRes, wpRes, rmRes] = await Promise.all([
+    supabase.from("production_entries").select("quantity").gte("production_date", from).lte("production_date", to),
+    supabase.from("sales_entries").select("quantity, total_amount").eq("status", "approved").gte("sale_date", from).lte("sale_date", to),
+    supabase.from("collections").select("amount").gte("payment_date", from).lte("payment_date", to),
+    supabase.from("expenses").select("amount").gte("expense_date", from).lte("expense_date", to),
+    supabase.from("worker_payments").select("amount").gte("payment_date", from).lte("payment_date", to),
+    supabase.from("raw_material_purchases").select("total_amount").gte("purchase_date", from).lte("purchase_date", to),
+  ]);
+  const sum = (rows: any[] | null, k: string) => (rows ?? []).reduce((a, r) => a + Number(r[k] || 0), 0);
+  const production = sum(prodRes.data, "quantity");
+  const soldBricks = sum(salesRes.data, "quantity");
+  const income = sum(salesRes.data, "total_amount");
+  const collection = sum(colRes.data, "amount");
+  const expGeneral = sum(expRes.data, "amount");
+  const expWorker = sum(wpRes.data, "amount");
+  const expRaw = sum(rmRes.data, "total_amount");
+  const expense = expGeneral + expWorker + expRaw;
+  return { production, soldBricks, income, collection, expense, expGeneral, expWorker, expRaw, net: income - expense };
+}
+
+function SeasonReport() {
+  const admin = useAdminName();
+  const [selectedId, setSelectedId] = useState<string>("");
+  const seasonsQ = useQuery({
+    queryKey: ["seasons-all"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("seasons").select("id, name, start_date, end_date, target_production, is_active").order("start_date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as SeasonRow[];
+    },
+  });
+
+  const seasons = seasonsQ.data ?? [];
+  const active = seasons.find((s) => s.is_active);
+  const current = seasons.find((s) => s.id === selectedId) ?? active ?? seasons[0];
+
+  const totalsQ = useQuery({
+    queryKey: ["season-totals", current?.id],
+    queryFn: () => fetchSeasonTotals(current!),
+    enabled: !!current,
+  });
+
+  async function onExport() {
+    if (!current || !totalsQ.data) return;
+    const t = totalsQ.data;
+    await downloadPdf({
+      filename: `season-${current.name}.pdf`,
+      reportTitle: "Season Report — মৌসুমভিত্তিক লাভ-ক্ষতি",
+      subtitle: `${current.name} (${current.start_date} → ${current.end_date ?? "চলমান"})`,
+      adminName: admin,
+      columns: [
+        { header: "বিভাগ", dataKey: "k" },
+        { header: "পরিমাণ", dataKey: "v", align: "right" },
+      ],
+      rows: [
+        { k: "মোট উৎপাদন (ইট)", v: bn(t.production) },
+        { k: "মোট বিক্রি (ইট)", v: bn(t.soldBricks) },
+        { k: "মোট আয়", v: "৳ " + bn(t.income) },
+        { k: "মোট কালেকশন", v: "৳ " + bn(t.collection) },
+        { k: "সাধারণ ব্যয়", v: "৳ " + bn(t.expGeneral) },
+        { k: "শ্রমিক খরচ", v: "৳ " + bn(t.expWorker) },
+        { k: "কাঁচামাল খরচ", v: "৳ " + bn(t.expRaw) },
+        { k: "মোট ব্যয়", v: "৳ " + bn(t.expense) },
+        { k: "নিট লাভ", v: "৳ " + bn(t.net) },
+      ],
+    });
+  }
+
+  if (seasonsQ.isLoading) return <div className="flex items-center justify-center p-8"><Loader2 className="h-5 w-5 animate-spin" /></div>;
+  if (seasons.length === 0) return <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">কোনো মৌসুম তৈরি হয়নি</CardContent></Card>;
+
+  const t = totalsQ.data;
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-base">মৌসুমভিত্তিক লাভ-ক্ষতি</CardTitle>
+          <div className="flex gap-2 items-center">
+            <Select value={current?.id ?? ""} onValueChange={setSelectedId}>
+              <SelectTrigger className="w-[220px]"><SelectValue placeholder="মৌসুম নির্বাচন" /></SelectTrigger>
+              <SelectContent>
+                {seasons.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}{s.is_active ? " (সক্রিয়)" : ""}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={onExport} disabled={!t}>
+              <FileDown className="mr-2 h-4 w-4" />Export PDF
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {totalsQ.isLoading || !t ? (
+            <div className="flex items-center justify-center p-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <SummaryBox label="মোট উৎপাদন" value={bn(t.production) + " ইট"} />
+                <SummaryBox label="মোট বিক্রি" value={bn(t.soldBricks) + " ইট"} />
+                <SummaryBox label="মোট আয়" value={"৳ " + bn(t.income)} />
+                <SummaryBox label="মোট কালেকশন" value={"৳ " + bn(t.collection)} />
+                <SummaryBox label="মোট ব্যয়" value={"৳ " + bn(t.expense)} />
+                <SummaryBox label="নিট লাভ" value={"৳ " + bn(t.net)} tone={t.net >= 0 ? "success" : "destructive"} />
+              </div>
+
+              <div className="mt-5">
+                <h3 className="text-sm font-semibold mb-2">খরচের বিভাজন</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>খরচের বিভাগ</TableHead><TableHead className="text-right">পরিমাণ</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow><TableCell>সাধারণ ব্যয় (expenses)</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expGeneral)}</TableCell></TableRow>
+                    <TableRow><TableCell>শ্রমিক খরচ (worker_payments)</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expWorker)}</TableCell></TableRow>
+                    <TableRow><TableCell>কাঁচামাল খরচ (raw_material_purchases)</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expRaw)}</TableCell></TableRow>
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow><TableCell className="font-semibold">মোট ব্যয়</TableCell><TableCell className="text-right tabular-nums font-bold">৳ {bn(t.expense)}</TableCell></TableRow>
+                  </TableFooter>
+                </Table>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SummaryBox({ label, value, tone }: { label: string; value: string; tone?: "success" | "destructive" }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={cn("text-lg font-bold tabular-nums mt-1", tone === "success" && "text-emerald-600", tone === "destructive" && "text-destructive")}>{value}</div>
+    </div>
+  );
+}
+
+/* ---------------- 7. Annual Report ---------------- */
+const BN_MONTHS = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+
+async function fetchAnnual(year: number) {
+  const from = `${year}-01-01`;
+  const to = `${year}-12-31`;
+  const [salesRes, colRes, expRes, wpRes, rmRes] = await Promise.all([
+    supabase.from("sales_entries").select("sale_date, total_amount").eq("status", "approved").gte("sale_date", from).lte("sale_date", to),
+    supabase.from("collections").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
+    supabase.from("expenses").select("expense_date, amount").gte("expense_date", from).lte("expense_date", to),
+    supabase.from("worker_payments").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
+    supabase.from("raw_material_purchases").select("purchase_date, total_amount").gte("purchase_date", from).lte("purchase_date", to),
+  ]);
+  const months = Array.from({ length: 12 }, () => ({ sales: 0, collection: 0, expense: 0 }));
+  const bucket = (date: string) => new Date(date).getMonth();
+  (salesRes.data ?? []).forEach((r: any) => { months[bucket(r.sale_date)].sales += Number(r.total_amount || 0); });
+  (colRes.data ?? []).forEach((r: any) => { months[bucket(r.payment_date)].collection += Number(r.amount || 0); });
+  (expRes.data ?? []).forEach((r: any) => { months[bucket(r.expense_date)].expense += Number(r.amount || 0); });
+  (wpRes.data ?? []).forEach((r: any) => { months[bucket(r.payment_date)].expense += Number(r.amount || 0); });
+  (rmRes.data ?? []).forEach((r: any) => { months[bucket(r.purchase_date)].expense += Number(r.total_amount || 0); });
+  return months;
+}
+
+function AnnualReport() {
+  const admin = useAdminName();
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState<number>(currentYear);
+  const years = useMemo(() => {
+    const arr: number[] = [];
+    for (let y = currentYear; y >= 2023; y--) arr.push(y);
+    return arr;
+  }, [currentYear]);
+
+  const q = useQuery({ queryKey: ["annual-report", year], queryFn: () => fetchAnnual(year) });
+  const months = q.data ?? [];
+  const totals = months.reduce((t, m) => ({ sales: t.sales + m.sales, collection: t.collection + m.collection, expense: t.expense + m.expense }), { sales: 0, collection: 0, expense: 0 });
+  const totalNet = totals.sales - totals.expense;
+
+  async function onExport() {
+    await downloadPdf({
+      filename: `annual-report-${year}.pdf`,
+      reportTitle: "Annual Summary — বার্ষিক সারসংক্ষেপ",
+      subtitle: `বছর: ${year}`,
+      adminName: admin,
+      columns: [
+        { header: "মাস", dataKey: "month" },
+        { header: "বিক্রি", dataKey: "sales", align: "right" },
+        { header: "কালেকশন", dataKey: "collection", align: "right" },
+        { header: "ব্যয়", dataKey: "expense", align: "right" },
+        { header: "নিট", dataKey: "net", align: "right" },
+      ],
+      rows: months.map((m, i) => ({
+        month: BN_MONTHS[i],
+        sales: "৳ " + bn(m.sales),
+        collection: "৳ " + bn(m.collection),
+        expense: "৳ " + bn(m.expense),
+        net: "৳ " + bn(m.sales - m.expense),
+      })),
+      footerSummary: [
+        { label: "মোট বিক্রি", value: "৳ " + bn(totals.sales) },
+        { label: "মোট কালেকশন", value: "৳ " + bn(totals.collection) },
+        { label: "মোট ব্যয়", value: "৳ " + bn(totals.expense) },
+        { label: "নিট লাভ", value: "৳ " + bn(totalNet) },
+      ],
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+        <CardTitle className="text-base">বার্ষিক সারসংক্ষেপ</CardTitle>
+        <div className="flex gap-2 items-center">
+          <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={onExport} disabled={q.isLoading}>
+            <FileDown className="mr-2 h-4 w-4" />Export PDF
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        {q.isLoading ? <LoadingTable /> : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>মাস</TableHead>
+                  <TableHead className="text-right">বিক্রি</TableHead>
+                  <TableHead className="text-right">কালেকশন</TableHead>
+                  <TableHead className="text-right">ব্যয়</TableHead>
+                  <TableHead className="text-right">নিট</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {months.map((m, i) => {
+                  const net = m.sales - m.expense;
+                  return (
+                    <TableRow key={i}>
+                      <TableCell>{BN_MONTHS[i]}</TableCell>
+                      <TableCell className="text-right tabular-nums">৳ {bn(m.sales)}</TableCell>
+                      <TableCell className="text-right tabular-nums">৳ {bn(m.collection)}</TableCell>
+                      <TableCell className="text-right tabular-nums">৳ {bn(m.expense)}</TableCell>
+                      <TableCell className={cn("text-right tabular-nums font-semibold", net > 0 ? "text-emerald-600" : net < 0 ? "text-destructive" : "")}>৳ {bn(net)}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell className="font-semibold">সর্বমোট</TableCell>
+                  <TableCell className="text-right tabular-nums font-bold">৳ {bn(totals.sales)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-bold">৳ {bn(totals.collection)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-bold">৳ {bn(totals.expense)}</TableCell>
+                  <TableCell className={cn("text-right tabular-nums font-bold", totalNet > 0 ? "text-emerald-600" : totalNet < 0 ? "text-destructive" : "")}>৳ {bn(totalNet)}</TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
