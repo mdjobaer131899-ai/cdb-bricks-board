@@ -4,14 +4,14 @@ interface PrintOptions {
   bodyHtml: string;
 }
 
-const _esc = (s: string) =>
+export const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 export function printReport({ title, subtitle, bodyHtml }: PrintOptions) {
   const w = window.open("", "_blank", "width=960,height=720");
   if (!w) return;
-  const safeTitle = _esc(title);
-  const safeSubtitle = subtitle ? _esc(subtitle) : "";
+  const safeTitle = escapeHtml(title);
+  const safeSubtitle = subtitle ? escapeHtml(subtitle) : "";
   w.document.open();
   w.document.write(`<!doctype html>
 <html lang="bn">
