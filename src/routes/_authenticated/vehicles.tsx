@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Truck, Loader2 } from "lucide-react";
+import { Plus, Truck, Loader2, Pencil, Trash2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -26,6 +26,8 @@ function VehiclesPage() {
   const isAdmin = me?.role === "admin";
   const [openNew, setOpenNew] = useState(false);
   const [expOpen, setExpOpen] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [editVeh, setEditVeh] = useState<any | null>(null);
 
   const vehiclesQ = useQuery({
     queryKey: ["vehicles"],
