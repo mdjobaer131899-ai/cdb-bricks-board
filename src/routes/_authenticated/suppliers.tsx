@@ -140,6 +140,27 @@ function SuppliersPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const delSupplier = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("suppliers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["suppliers"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const filteredSuppliers = useMemo(() => {
+    const list = suppliersQ.data ?? [];
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter((s: any) =>
+      (s.name ?? "").toLowerCase().includes(q) ||
+      (s.phone ?? "").toLowerCase().includes(q) ||
+      (s.material_type ?? "").toLowerCase().includes(q) ||
+      (s.address ?? "").toLowerCase().includes(q)
+    );
+  }, [suppliersQ.data, search]);
+
   const openNew = () => setDialog({ open: true, mode: "new", form: emptyForm });
   const openEdit = (s: any) => setDialog({
     open: true, mode: "edit",
@@ -170,9 +191,16 @@ function SuppliersPage() {
 
         <TabsContent value="list">
           <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardTitle className="text-base">সরবরাহকারী</CardTitle>
+              <div className="relative w-full max-w-xs">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input className="pl-8 h-9" placeholder="খুঁজুন..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+            </CardHeader>
             <CardContent className="p-0">
               {suppliersQ.isLoading ? <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> :
-              (suppliersQ.data ?? []).length === 0 ? <div className="py-10 text-center text-sm text-muted-foreground">কোনো সরবরাহকারী নেই</div> :
+              filteredSuppliers.length === 0 ? <div className="py-10 text-center text-sm text-muted-foreground">কোনো সরবরাহকারী নেই</div> :
               <Table>
                 <TableHeader><TableRow>
                   <TableHead>নাম</TableHead>
@@ -183,7 +211,7 @@ function SuppliersPage() {
                   <TableHead></TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {(suppliersQ.data ?? []).map((s: any) => {
+                  {filteredSuppliers.map((s: any) => {
                     const t = totals.get(s.id) ?? { purchased: 0, paid: 0 };
                     const due = Math.max(0, t.purchased - t.paid);
                     return (
@@ -200,6 +228,7 @@ function SuppliersPage() {
                           <div className="flex justify-end gap-1">
                             {isAdmin && <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Pencil className="h-3.5 w-3.5" /></Button>}
                             {isAdmin && <Button size="sm" variant="outline" onClick={() => openPay(s.id)}>পেমেন্ট</Button>}
+                            {isAdmin && <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${s.name}" মুছে ফেলবেন?`)) delSupplier.mutate(s.id); }}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -207,31 +236,6 @@ function SuppliersPage() {
                   })}
                 </TableBody>
               </Table>}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="payments">
-          <Card>
-            <CardHeader><CardTitle className="text-base">সাম্প্রতিক পেমেন্ট</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader><TableRow><TableHead>তারিখ</TableHead><TableHead>সরবরাহকারী</TableHead><TableHead>নোট</TableHead><TableHead className="text-right">পরিমাণ</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {(paymentsQ.data ?? []).slice(0, 100).map((p: any) => {
-                    const s = (suppliersQ.data ?? []).find((x: any) => x.id === p.supplier_id);
-                    return (
-                      <TableRow key={p.id}>
-                        <TableCell className="text-xs">{bnDate(p.payment_date)}</TableCell>
-                        <TableCell>{s?.name ?? "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.note || "—"}</TableCell>
-                        <TableCell className="text-right tabular-nums">৳ {bn(p.amount)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {(paymentsQ.data ?? []).length === 0 && <TableRow><TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">কোনো পেমেন্ট নেই</TableCell></TableRow>}
-                </TableBody>
-              </Table>
             </CardContent>
           </Card>
         </TabsContent>
