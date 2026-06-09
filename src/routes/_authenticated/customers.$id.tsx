@@ -297,3 +297,16 @@ function CustomerDetailPage() {
     </div>
   );
 }
+
+function Mini({ label, value, tone }: { label: string; value: string; tone?: "success" | "warning" | "destructive" }) {
+  const cls =
+    tone === "success" ? "text-success" :
+    tone === "warning" ? "text-warning" :
+    tone === "destructive" ? "text-destructive" : "";
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`text-base font-semibold tabular-nums ${cls}`}>{value}</div>
+    </div>
+  );
+}
