@@ -25,6 +25,8 @@ function RawMaterialsPage() {
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [editRow, setEditRow] = useState<any | null>(null);
 
   const typesQ = useQuery({
     queryKey: ["raw-materials"],
