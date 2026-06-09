@@ -414,5 +414,83 @@ export function buildAssistantTools(supabase: DB) {
         return { date, cash_income: income, total_expense: expense, net_cash: income - expense };
       },
     }),
+
+    /** Current stock balances per brick type. */
+    getStockSummary: tool({
+      description:
+        "Get current stock (inventory) balance for each brick type from the live stock ledger. Returns items with quantity and unit (পিস/ফুট).",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const { data, error } = await (supabase as any).from("current_stock").select("brick_name, quantity");
+        if (error) throw new Error(error.message);
+        const items = (data ?? []).map((r: any) => ({
+          brick: r.brick_name,
+          quantity: Number(r.quantity || 0),
+          unit: unitFor(r.brick_name),
+        }));
+        const total_pieces = items.filter((i) => i.unit === "পিস").reduce((s, i) => s + i.quantity, 0);
+        return { items, total_pieces };
+      },
+    }),
+
+    /** Profit & Loss summary from the double-entry journal. */
+    getProfitLossSummary: tool({
+      description:
+        "Get overall profit & loss summary (total income, total expense, net profit) from the accounting journal. Optionally pass a date range to scope.",
+      inputSchema: z.object({
+        from: z.string().optional().describe("ISO start date YYYY-MM-DD"),
+        to: z.string().optional().describe("ISO end date YYYY-MM-DD"),
+      }),
+      execute: async ({ from, to }) => {
+        if (!from && !to) {
+          const { data, error } = await (supabase as any).from("profit_loss_summary").select("*").single();
+          if (error) throw new Error(error.message);
+          return {
+            scope: "all_time",
+            total_income: Number(data?.total_income || 0),
+            total_expense: Number(data?.total_expense || 0),
+            net_profit: Number(data?.net_profit || 0),
+          };
+        }
+        let q = (supabase as any)
+          .from("journal_lines")
+          .select("debit, credit, entry:journal_entries!inner(entry_date), account:accounts!inner(account_type)");
+        if (from) q = q.gte("entry.entry_date", from);
+        if (to) q = q.lte("entry.entry_date", to);
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+        let income = 0, expense = 0;
+        for (const r of (data ?? []) as any[]) {
+          const t = r.account?.account_type;
+          const d = Number(r.debit || 0), c = Number(r.credit || 0);
+          if (t === "income") income += c - d;
+          if (t === "expense") expense += d - c;
+        }
+        return { scope: { from, to }, total_income: income, total_expense: expense, net_profit: income - expense };
+      },
+    }),
+
+    /** Trial balance / chart-of-accounts balances. */
+    getTrialBalance: tool({
+      description: "Get trial balance: each account with its total debit, credit and current balance.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const { data, error } = await (supabase as any)
+          .from("trial_balance")
+          .select("code, name, name_bn, account_type, total_debit, total_credit, balance");
+        if (error) throw new Error(error.message);
+        return {
+          accounts: (data ?? []).map((r: any) => ({
+            code: r.code,
+            name: r.name_bn || r.name,
+            type: r.account_type,
+            debit: Number(r.total_debit || 0),
+            credit: Number(r.total_credit || 0),
+            balance: Number(r.balance || 0),
+          })),
+        };
+      },
+    }),
   };
 }
+
