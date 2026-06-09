@@ -25,7 +25,9 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
 
 const EXPENSE_CATEGORIES = [
+  "শ্রমিক বেতন",
   "শ্রমিক মজুরি",
+  "কাঁচামাল কেনা",
   "জ্বালানি / কয়লা",
   "মাটি ক্রয়",
   "যন্ত্রপাতি / মেরামত",
