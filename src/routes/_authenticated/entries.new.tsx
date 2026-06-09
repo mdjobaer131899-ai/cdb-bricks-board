@@ -181,6 +181,7 @@ function NewEntryPage() {
     const { error } = await supabase.from("sales_entries").insert({
       challan_no: challanNo.trim(),
       customer_id: customerId,
+      contract_id: contractId || null,
       brick_type_id: brickTypeId,
       custom_brick_name: isOthers ? customBrickName.trim() : null,
       quantity: finalQuantity,
