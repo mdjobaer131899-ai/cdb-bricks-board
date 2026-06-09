@@ -85,7 +85,39 @@ function VehiclesPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  return (
+  const updVeh = useMutation({
+    mutationFn: async (v: any) => {
+      if (!v.vehicle_no) throw new Error("গাড়ি নম্বর দিন");
+      const { error } = await supabase.from("vehicles").update({
+        vehicle_no: v.vehicle_no, type: v.type, driver_name: v.driver_name || null,
+        driver_phone: v.driver_phone || null, capacity: v.capacity ? Number(v.capacity) : null,
+      }).eq("id", v.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("আপডেট হয়েছে"); setEditVeh(null); qc.invalidateQueries({ queryKey: ["vehicles"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const delVeh = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("vehicles").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["vehicles"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const filteredVehicles = useMemo(() => {
+    const list = vehiclesQ.data ?? [];
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter((v: any) =>
+      (v.vehicle_no ?? "").toLowerCase().includes(q) ||
+      (v.driver_name ?? "").toLowerCase().includes(q) ||
+      (v.type ?? "").toLowerCase().includes(q)
+    );
+  }, [vehiclesQ.data, search]);
+
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
