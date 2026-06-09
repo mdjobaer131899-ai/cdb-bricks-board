@@ -608,6 +608,7 @@ export type Database = {
           payment_method: string
           purchase_date: string
           quantity: number
+          supplier_id: string | null
           supplier_name: string | null
           total_amount: number
           unit_price: number
@@ -622,6 +623,7 @@ export type Database = {
           payment_method?: string
           purchase_date?: string
           quantity: number
+          supplier_id?: string | null
           supplier_name?: string | null
           total_amount: number
           unit_price: number
@@ -636,6 +638,7 @@ export type Database = {
           payment_method?: string
           purchase_date?: string
           quantity?: number
+          supplier_id?: string | null
           supplier_name?: string | null
           total_amount?: number
           unit_price?: number
@@ -647,6 +650,13 @@ export type Database = {
             columns: ["material_id"]
             isOneToOne: false
             referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raw_material_purchases_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -833,6 +843,77 @@ export type Database = {
             referencedColumns: ["brick_type_id"]
           },
         ]
+      }
+      supplier_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          payment_date: string
+          supplier_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          payment_date?: string
+          supplier_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          payment_date?: string
+          supplier_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_payments_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suppliers: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          material_type: string | null
+          name: string
+          note: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          material_type?: string | null
+          name: string
+          note?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          material_type?: string | null
+          name?: string
+          note?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
