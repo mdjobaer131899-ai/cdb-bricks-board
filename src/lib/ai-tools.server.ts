@@ -428,7 +428,7 @@ export function buildAssistantTools(supabase: DB) {
           quantity: Number(r.quantity || 0),
           unit: unitFor(r.brick_name),
         }));
-        const total_pieces = items.filter((i) => i.unit === "পিস").reduce((s, i) => s + i.quantity, 0);
+        const total_pieces = items.filter((i: any) => i.unit === "পিস").reduce((s: number, i: any) => s + i.quantity, 0);
         return { items, total_pieces };
       },
     }),
