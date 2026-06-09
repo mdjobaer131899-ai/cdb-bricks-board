@@ -297,8 +297,36 @@ function NewEntryPage() {
                 </Command>
               </PopoverContent>
             </Popover>
+
+            {customerId && (
+              <div className="mt-3 space-y-1.5">
+                <Label>সক্রিয় চুক্তি (ঐচ্ছিক — নগদ বিক্রির জন্য খালি রাখুন)</Label>
+                <Select value={contractId || "none"} onValueChange={(v) => setContractId(v === "none" ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={contractsQ.isLoading ? "লোড হচ্ছে..." : "চুক্তি বেছে নিন বা নগদ বিক্রি"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— নগদ বিক্রি (চুক্তি ছাড়া) —</SelectItem>
+                    {(contractsQ.data ?? []).map((c) => {
+                      const remaining = Math.max(0, Number(c.booked_quantity) - Number(c.delivered_quantity));
+                      return (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.contract_no} • {c.contract_type === "yearly_fixed" ? "বার্ষিক" : c.contract_type === "short_term" ? "স্বল্পমেয়াদী" : "নগদ"}
+                          {c.fixed_rate ? ` • ৳${bn(c.fixed_rate)}` : ""}
+                          {Number(c.booked_quantity) > 0 ? ` • বাকি ${bn(remaining)}` : ""}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {(contractsQ.data?.length ?? 0) === 0 && !contractsQ.isLoading && (
+                  <p className="text-xs text-muted-foreground">এই গ্রাহকের কোনো সক্রিয় চুক্তি নেই।</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
+
 
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">ডেলিভারি ও ইটের তথ্য</CardTitle></CardHeader>
