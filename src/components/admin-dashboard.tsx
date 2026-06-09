@@ -114,7 +114,6 @@ export function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold tracking-tight md:text-2xl">অ্যাডমিন ড্যাশবোর্ড</h1>
         <p className="text-sm text-muted-foreground">
           আজ {today.toLocaleDateString("bn-BD", { day: "2-digit", month: "long", year: "numeric" })}
         </p>
@@ -122,33 +121,25 @@ export function AdminDashboard() {
 
       <QuickActions />
 
-      {/* Compact key stats only — no charts */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* Compact key stats — horizontal cards */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {todayStatsQ.isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[110px] rounded-xl" />)
+          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[68px] rounded-xl" />)
         ) : (
           <>
             <StatCard label="আজকের বিক্রয়" value={`৳ ${bn(t?.approvedAmount ?? 0)}`} icon={DollarSign} tone="success" />
             <StatCard label="আজকের কালেকশন" value={`৳ ${bn(t?.collection ?? 0)}`} icon={HandCoins} tone="primary" />
-            <StatCard label="আজকের ডেলিভারি" value={bn(t?.deliveries ?? 0)} icon={Truck} tone="info" hint={`${bn(t?.challans ?? 0)} চালান`} />
+            <StatCard label="আজকের ডেলিভারি" value={bn(t?.deliveries ?? 0)} icon={Truck} tone="info" />
             <StatCard label="অপেক্ষমাণ অনুমোদন" value={bn(t?.pending ?? 0)} icon={Clock} tone="warning" badge={t?.pending ?? 0} />
           </>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <StatCard label="মোট বকেয়া" value={`৳ ${bn(due?.due ?? 0)}`} icon={AlertTriangle} tone="destructive" />
         <StatCard label="মোট গ্রাহক" value={bn(customersQ.data ?? 0)} icon={Users} tone="primary" />
-        <StatCard label="মাসিক লেনদেন" value={bn(sales.length)} icon={FileText} tone="info" />
-        <StatCard label="হাতে নগদ" value={`৳ ${bn(0)}`} icon={Wallet} tone="success" hint="শীঘ্রই" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="আজকের কাঁচামাল খরচ" value={`৳ ${bn(n?.rmToday ?? 0)}`} icon={Package} tone="warning" />
-        <StatCard label="আজকের শ্রমিক খরচ" value={`৳ ${bn(n?.wpToday ?? 0)}`} icon={Users2} tone="warning" />
-        <StatCard label="চলতি মাসের নিট লাভ" value={`৳ ${bn(n?.netProfit ?? 0)}`} icon={TrendingUp} tone={(n?.netProfit ?? 0) >= 0 ? "success" : "destructive"} />
-        <StatCard label="কম স্টক সতর্কতা" value={bn(n?.lowStock?.length ?? 0)} icon={AlertTriangle} tone={(n?.lowStock?.length ?? 0) > 0 ? "destructive" : "info"} hint={(n?.lowStock ?? []).map((m: any) => m.name).join(", ") || "—"} />
-      </div>
 
       <StockSummaryCard />
 
