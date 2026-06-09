@@ -178,7 +178,7 @@ function CustomerDetailPage() {
             {customer.address && <div>ঠিকানা: {customer.address}</div>}
           </div>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div className="rounded-lg border p-3">
             <div className="text-xs text-muted-foreground">মোট লেনদেন</div>
             <div className="text-lg font-semibold tabular-nums">{bn(totals.count)} টি</div>
@@ -193,6 +193,36 @@ function CustomerDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 360 Summary: Contracts, Collections, Advance, Due */}
+      {(() => {
+        const contracts = contractsQ.data ?? [];
+        const totalCollected = collectionsTotalQ.data ?? 0;
+        const totalBookedQty = contracts.reduce((s, c) => s + Number(c.booked_quantity || 0), 0);
+        const totalDeliveredQty = contracts.reduce((s, c) => s + Number(c.delivered_quantity || 0), 0);
+        const totalBookedValue = contracts.reduce((s, c) => s + Number(c.booked_value || 0), 0);
+        const advance = Number(customer.advance_balance || 0);
+        // Due = approved sales - collections (positive = customer owes)
+        const due = totals.approved - totalCollected;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">গ্রাহক ৩৬০° সারসংক্ষেপ</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Mini label="মোট চুক্তি বুকিং (পিস)" value={bn(totalBookedQty)} />
+              <Mini label="ডেলিভারি হয়েছে" value={bn(totalDeliveredQty)} />
+              <Mini label="চুক্তি বাকি" value={bn(Math.max(0, totalBookedQty - totalDeliveredQty))} tone="warning" />
+              <Mini label="মোট চুক্তি মূল্য" value={`৳ ${bn(totalBookedValue)}`} />
+              <Mini label="মোট কালেকশন" value={`৳ ${bn(totalCollected)}`} tone="success" />
+              <Mini label="অগ্রিম জমা" value={`৳ ${bn(advance)}`} tone={advance > 0 ? "success" : undefined} />
+              <Mini label={due >= 0 ? "মোট বকেয়া" : "অতিরিক্ত জমা"} value={`৳ ${bn(Math.abs(Math.round(due)))}`} tone={due > 0 ? "destructive" : "success"} />
+              <Mini label="সক্রিয় চুক্তি" value={`${bn(contracts.filter((c) => c.status === "active").length)} টি`} />
+            </CardContent>
+          </Card>
+        );
+      })()}
+
 
       <Card>
         <CardHeader className="space-y-4">
