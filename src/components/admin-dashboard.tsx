@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, DollarSign, Truck, Clock, Users, Wallet, HandCoins, AlertTriangle, Package, CheckCircle2, TrendingUp, Users2 } from "lucide-react";
+import { DollarSign, Truck, Clock, Users, HandCoins, AlertTriangle, Package, CheckCircle2 } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter";
 import { RecentSalesTable } from "@/components/recent-sales-table";
@@ -12,9 +12,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { AiAssistantFab } from "@/components/ai-assistant-fab";
 import { QuickActions } from "@/components/quick-actions";
 import { StockSummaryCard } from "@/components/stock-summary-card";
-import { DailyIncomeExpenseFolders } from "@/components/daily-folders";
 import { CashBoxPanel } from "@/components/cash-box-panel";
 import { SeasonProgressCard } from "@/components/season-progress-card";
+
 
 export function AdminDashboard() {
   const today = useMemo(() => new Date(), []);
