@@ -483,6 +483,33 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
             )}
           </div>
 
+          {category === "শ্রমিক বেতন" && (
+            <div className="space-y-1">
+              <Label>কোন শ্রমিক? (ঐচ্ছিক)</Label>
+              <Select value={workerId} onValueChange={setWorkerId}>
+                <SelectTrigger><SelectValue placeholder="শ্রমিক নির্বাচন" /></SelectTrigger>
+                <SelectContent>
+                  {(workersQ.data ?? []).map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {category === "কাঁচামাল কেনা" && (
+            <div className="space-y-1">
+              <Label>কোন উপকরণ? (ঐচ্ছিক)</Label>
+              <Select value={materialId} onValueChange={setMaterialId}>
+                <SelectTrigger><SelectValue placeholder="উপকরণ নির্বাচন" /></SelectTrigger>
+                <SelectContent>
+                  {(materialsQ.data ?? []).map((m) => (
+                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <Label>টাকা *</Label>
