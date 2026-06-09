@@ -209,8 +209,31 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
     onDone();
   }
 
+  const contactsSupported = !isEdit && typeof window !== "undefined" && "contacts" in navigator && "ContactsManager" in window;
+
+  async function pickContact() {
+    try {
+      // @ts-expect-error - Contact Picker API is not in TS lib yet
+      const contacts = await navigator.contacts.select(["name", "tel"], { multiple: false });
+      if (!contacts || contacts.length === 0) return;
+      const c = contacts[0];
+      const pickedName = Array.isArray(c.name) ? c.name[0] : c.name;
+      const pickedTel = Array.isArray(c.tel) ? c.tel[0] : c.tel;
+      if (pickedName) setName(String(pickedName));
+      if (pickedTel) setPhone(String(pickedTel).replace(/\s+/g, ""));
+      toast.success("কন্টাক্ট থেকে তথ্য নেওয়া হয়েছে");
+    } catch (err: any) {
+      toast.error("কন্টাক্ট অ্যাক্সেস ব্যর্থ — ম্যানুয়ালি লিখুন");
+    }
+  }
+
   return (
     <form onSubmit={onSubmit} className="space-y-3">
+      {contactsSupported && (
+        <Button type="button" variant="outline" className="w-full" onClick={pickContact}>
+          📱 ফোন কন্টাক্ট থেকে নির্বাচন করুন
+        </Button>
+      )}
       <div className="space-y-1.5"><Label>নাম *</Label><Input value={name} onChange={(e) => setName(e.target.value)} required /></div>
       <div className="space-y-1.5"><Label>মোবাইল {!isEdit && "*"}</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" required={!isEdit} /></div>
       <div className="space-y-1.5"><Label>ঠিকানা {!isEdit && "*"}</Label><Input value={address} onChange={(e) => setAddress(e.target.value)} required={!isEdit} /></div>
