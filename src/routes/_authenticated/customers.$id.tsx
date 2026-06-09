@@ -30,13 +30,39 @@ function CustomerDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("customers")
-        .select("id, name, phone, address")
+        .select("id, name, phone, address, advance_balance")
         .eq("id", id)
         .single();
       if (error) throw error;
       return data;
     },
   });
+
+  const contractsQ = useQuery({
+    queryKey: ["customer-contracts", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("id, contract_no, status, contract_type, booked_quantity, delivered_quantity, booked_value, fixed_rate")
+        .eq("customer_id", id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const collectionsTotalQ = useQuery({
+    queryKey: ["customer-collections-total", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("collections")
+        .select("amount")
+        .eq("customer_id", id);
+      if (error) throw error;
+      return (data ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
+    },
+  });
+
 
   const txQ = useQuery({
     queryKey: ["customer-transactions", id],
