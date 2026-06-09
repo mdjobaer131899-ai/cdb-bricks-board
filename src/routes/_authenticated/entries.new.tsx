@@ -155,7 +155,7 @@ function NewEntryPage() {
       toast.error("সকল প্রয়োজনীয় তথ্য পূরণ করুন");
       return;
     }
-    if (isAdmin && !customerId) {
+    if (!customerId) {
       toast.error("গ্রাহক নির্বাচন করুন");
       return;
     }
@@ -180,7 +180,7 @@ function NewEntryPage() {
 
     const { error } = await supabase.from("sales_entries").insert({
       challan_no: challanNo.trim(),
-      customer_id: isAdmin ? customerId : null,
+      customer_id: customerId,
       contract_id: isAdmin ? (contractId || null) : null,
       brick_type_id: brickTypeId,
       custom_brick_name: isOthers ? customBrickName.trim() : null,
@@ -236,7 +236,6 @@ function NewEntryPage() {
           </CardContent>
         </Card>
 
-        {isAdmin && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">গ্রাহক</CardTitle>
@@ -299,7 +298,7 @@ function NewEntryPage() {
               </PopoverContent>
             </Popover>
 
-            {customerId && (
+            {isAdmin && customerId && (
               <div className="mt-3 space-y-1.5">
                 <Label>সক্রিয় চুক্তি (ঐচ্ছিক — নগদ বিক্রির জন্য খালি রাখুন)</Label>
                 <Select value={contractId || "none"} onValueChange={(v) => setContractId(v === "none" ? "" : v)}>
@@ -327,7 +326,7 @@ function NewEntryPage() {
             )}
           </CardContent>
         </Card>
-        )}
+
 
 
         <Card>
