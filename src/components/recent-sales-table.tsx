@@ -32,7 +32,7 @@ export function RecentSalesTable({
   const navigate = useNavigate();
   const showActions = Boolean(onDelete);
   const showAmount = isAdmin === true;
-  const colCount = (showActions ? 1 : 0) + (showAmount ? 9 : 8);
+  const colCount = (showActions ? 1 : 0) + (showAmount ? 8 : 7);
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
