@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Users2, Loader2, Wallet, Pencil } from "lucide-react";
+import { Plus, Users2, Loader2, Wallet, Pencil, Trash2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -51,6 +51,7 @@ function WorkersPage() {
   const isAdmin = me?.role === "admin";
 
   const [filter, setFilter] = useState<"all" | "active" | "inactive">("active");
+  const [search, setSearch] = useState("");
   const [workerDialog, setWorkerDialog] = useState<{ open: boolean; mode: "new" | "edit"; form: WorkerForm }>({
     open: false, mode: "new", form: emptyForm,
   });
@@ -90,11 +91,28 @@ function WorkersPage() {
   }, [payQ.data]);
 
   const filteredWorkers = useMemo(() => {
-    const list = workersQ.data ?? [];
-    if (filter === "active") return list.filter((w: any) => w.active);
-    if (filter === "inactive") return list.filter((w: any) => !w.active);
+    let list = workersQ.data ?? [];
+    if (filter === "active") list = list.filter((w: any) => w.active);
+    else if (filter === "inactive") list = list.filter((w: any) => !w.active);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((w: any) =>
+        (w.name ?? "").toLowerCase().includes(q) ||
+        (w.phone ?? "").toLowerCase().includes(q) ||
+        (w.role ?? "").toLowerCase().includes(q)
+      );
+    }
     return list;
-  }, [workersQ.data, filter]);
+  }, [workersQ.data, filter, search]);
+
+  const delWorker = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("workers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["workers"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const saveWorker = useMutation({
     mutationFn: async () => {
@@ -179,16 +197,22 @@ function WorkersPage() {
 
         <TabsContent value="list">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">শ্রমিক</CardTitle>
-              <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
-                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">সক্রিয়</SelectItem>
-                  <SelectItem value="inactive">নিষ্ক্রিয়</SelectItem>
-                  <SelectItem value="all">সব</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <div className="relative w-44">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input className="pl-8 h-9" placeholder="খুঁজুন..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                </div>
+                <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
+                  <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">সক্রিয়</SelectItem>
+                    <SelectItem value="inactive">নিষ্ক্রিয়</SelectItem>
+                    <SelectItem value="all">সব</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {workersQ.isLoading ? <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> :
@@ -222,6 +246,7 @@ function WorkersPage() {
                           <div className="flex justify-end gap-1">
                             {isAdmin && <Button size="sm" variant="ghost" onClick={() => openEdit(w)}><Pencil className="h-3.5 w-3.5" /></Button>}
                             {isAdmin && <Button size="sm" variant="outline" onClick={() => openPay(w.id)}>পেমেন্ট</Button>}
+                            {isAdmin && <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${w.name}" মুছে ফেলবেন?`)) delWorker.mutate(w.id); }}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>}
                           </div>
                         </TableCell>
                       </TableRow>

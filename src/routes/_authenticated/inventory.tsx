@@ -1,11 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { Boxes, TrendingDown, TrendingUp, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Boxes, TrendingDown, TrendingUp, Loader2, Plus, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
-import { bn, bnDate } from "@/lib/format";
+import { useCurrentUser } from "@/lib/use-current-user";
+import { fetchActiveBrickTypes } from "@/lib/sales-queries";
+import { bn, bnDate, isoDate } from "@/lib/format";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({ meta: [{ title: "স্টক — CDB Bricks" }] }),
@@ -13,6 +23,12 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 });
 
 function InventoryPage() {
+  const qc = useQueryClient();
+  const { data: me } = useCurrentUser();
+  const isAdmin = me?.role === "admin";
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
   const stockQ = useQuery({
     queryKey: ["current-stock"],
     queryFn: async () => {
@@ -33,19 +49,52 @@ function InventoryPage() {
         .select("id, ref_date, change, ref_type, note, brick_type:brick_types(name)")
         .order("ref_date", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(200);
       if (error) throw error;
       return data ?? [];
     },
   });
 
+  const bricksQ = useQuery({ queryKey: ["brick-types-active"], queryFn: fetchActiveBrickTypes });
+
+  const filteredMovements = useMemo(() => {
+    const list = movementsQ.data ?? [];
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter((m: any) =>
+      (m.brick_type?.name ?? "").toLowerCase().includes(q) ||
+      (m.note ?? "").toLowerCase().includes(q) ||
+      (m.ref_date ?? "").includes(q)
+    );
+  }, [movementsQ.data, search]);
+
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold md:text-2xl flex items-center gap-2">
-          <Boxes className="h-6 w-6 text-primary" /> স্টক / ইনভেন্টরি
-        </h1>
-        <p className="text-sm text-muted-foreground">প্রতিটি ইটের ধরনের বর্তমান মজুদ — উৎপাদন ও বিক্রির ভিত্তিতে রিয়েল-টাইম</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-bold md:text-2xl flex items-center gap-2">
+            <Boxes className="h-6 w-6 text-primary" /> স্টক / ইনভেন্টরি
+          </h1>
+          <p className="text-sm text-muted-foreground">বর্তমান মজুদ — উৎপাদন ও বিক্রির ভিত্তিতে রিয়েল-টাইম</p>
+        </div>
+        {isAdmin && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-1 h-4 w-4" /> নতুন স্টক এন্ট্রি</Button>
+            </DialogTrigger>
+            <StockEntryDialog
+              bricks={bricksQ.data ?? []}
+              userId={me?.user.id}
+              onClose={() => setOpen(false)}
+              onSaved={() => {
+                qc.invalidateQueries({ queryKey: ["current-stock"] });
+                qc.invalidateQueries({ queryKey: ["stock-movements"] });
+                qc.invalidateQueries({ queryKey: ["production-entries"] });
+                setOpen(false);
+              }}
+            />
+          </Dialog>
+        )}
       </div>
 
       <Card>
@@ -69,11 +118,17 @@ function InventoryPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">স্টক চলাচল</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-base">স্টক চলাচল</CardTitle>
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-8" placeholder="খুঁজুন..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           {movementsQ.isLoading ? (
             <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
-          ) : (movementsQ.data ?? []).length === 0 ? (
+          ) : filteredMovements.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">কোনো মুভমেন্ট নেই</div>
           ) : (
             <div className="overflow-x-auto">
@@ -88,7 +143,7 @@ function InventoryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(movementsQ.data ?? []).map((m) => {
+                  {filteredMovements.map((m: any) => {
                     const isIn = Number(m.change) > 0;
                     return (
                       <TableRow key={m.id}>
@@ -116,5 +171,66 @@ function InventoryPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function StockEntryDialog({ bricks, userId, onClose, onSaved }: { bricks: Array<{ id: string; name: string }>; userId?: string; onClose: () => void; onSaved: () => void }) {
+  const [date, setDate] = useState(isoDate(new Date()));
+  const [brickId, setBrickId] = useState("");
+  const [qty, setQty] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!brickId || !qty || !userId) { toast.error("সব ঘর পূরণ করুন"); return; }
+    setBusy(true);
+    const { error } = await supabase.from("production_entries").insert({
+      production_date: date,
+      brick_type_id: brickId,
+      quantity: Number(qty),
+      notes: notes || null,
+      created_by: userId,
+    });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("স্টকে যোগ করা হয়েছে");
+    onSaved();
+  }
+
+  return (
+    <DialogContent>
+      <DialogHeader><DialogTitle>নতুন স্টক এন্ট্রি</DialogTitle></DialogHeader>
+      <form onSubmit={submit} className="space-y-3">
+        <div className="space-y-1.5">
+          <Label>তারিখ</Label>
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </div>
+        <div className="space-y-1.5">
+          <Label>ইটের ধরন</Label>
+          <Select value={brickId} onValueChange={setBrickId}>
+            <SelectTrigger><SelectValue placeholder="বেছে নিন" /></SelectTrigger>
+            <SelectContent>
+              {bricks.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>পরিমাণ</Label>
+          <Input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} required />
+        </div>
+        <div className="space-y-1.5">
+          <Label>মন্তব্য (ঐচ্ছিক)</Label>
+          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>বাতিল</Button>
+          <Button type="submit" disabled={busy}>
+            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            সংরক্ষণ
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
   );
 }

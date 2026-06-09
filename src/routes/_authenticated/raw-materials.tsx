@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Boxes, Loader2, Trash2 } from "lucide-react";
+import { Plus, Boxes, Loader2, Trash2, Pencil, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,6 +25,8 @@ function RawMaterialsPage() {
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [editRow, setEditRow] = useState<any | null>(null);
 
   const typesQ = useQuery({
     queryKey: ["raw-materials"],
@@ -125,6 +127,34 @@ function RawMaterialsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updMut = useMutation({
+    mutationFn: async (r: any) => {
+      const qty = Number(r.quantity);
+      const price = Number(r.unit_price);
+      if (!(qty > 0) || !(price >= 0)) throw new Error("পরিমাণ ও মূল্য চেক করুন");
+      const { error } = await supabase.from("raw_material_purchases").update({
+        material_id: r.material_id, supplier_id: r.supplier_id || null,
+        quantity: qty, unit_price: price, total_amount: qty * price,
+        purchase_date: r.purchase_date, note: r.note || null,
+      }).eq("id", r.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("আপডেট হয়েছে"); setEditRow(null); qc.invalidateQueries({ queryKey: ["raw-material-purchases"] }); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const filtered = useMemo(() => {
+    const list = purchasesQ.data ?? [];
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter((p: any) =>
+      (p.material?.name ?? "").toLowerCase().includes(q) ||
+      (p.supplier?.name ?? "").toLowerCase().includes(q) ||
+      (p.note ?? "").toLowerCase().includes(q) ||
+      (p.purchase_date ?? "").includes(q)
+    );
+  }, [purchasesQ.data, search]);
+
   const total = (Number(form.quantity) || 0) * (Number(form.unit_price) || 0);
 
   return (
@@ -194,11 +224,17 @@ function RawMaterialsPage() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">কেনার ইতিহাস</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-base">কেনার ইতিহাস</CardTitle>
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-8" placeholder="খুঁজুন..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           {purchasesQ.isLoading ? (
             <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
-          ) : (purchasesQ.data ?? []).length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">কোনো তথ্য নেই</div>
           ) : (
             <div className="overflow-x-auto">
@@ -215,7 +251,7 @@ function RawMaterialsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(purchasesQ.data ?? []).map((p: any) => (
+                  {filtered.map((p: any) => (
                     <TableRow key={p.id}>
                       <TableCell className="text-xs whitespace-nowrap">{bnDate(p.purchase_date)}</TableCell>
                       <TableCell>{p.material?.name ?? "—"}</TableCell>
@@ -225,9 +261,18 @@ function RawMaterialsPage() {
                       <TableCell className="text-right tabular-nums font-semibold">৳ {bn(p.total_amount)}</TableCell>
                       {isAdmin && (
                         <TableCell>
-                          <Button size="icon" variant="ghost" onClick={() => { if (confirm("মুছে ফেলবেন?")) delMut.mutate(p.id); }}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button size="icon" variant="ghost" onClick={() => setEditRow({
+                              id: p.id, material_id: p.material_id, supplier_id: p.supplier_id ?? "",
+                              quantity: String(p.quantity), unit_price: String(p.unit_price),
+                              purchase_date: p.purchase_date, note: p.note ?? "",
+                            })}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button size="icon" variant="ghost" onClick={() => { if (confirm("মুছে ফেলবেন?")) delMut.mutate(p.id); }}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>
@@ -238,6 +283,46 @@ function RawMaterialsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>কেনা সম্পাদনা</DialogTitle></DialogHeader>
+          {editRow && (
+            <div className="space-y-3">
+              <div>
+                <Label>উপকরণ</Label>
+                <Select value={editRow.material_id} onValueChange={(v) => setEditRow({ ...editRow, material_id: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(typesQ.data ?? []).map((m: any) => <SelectItem key={m.id} value={m.id}>{m.name} ({m.unit})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>সরবরাহকারী</Label>
+                <Select value={editRow.supplier_id || "none"} onValueChange={(v) => setEditRow({ ...editRow, supplier_id: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— নেই —</SelectItem>
+                    {(suppliersQ.data ?? []).map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label>পরিমাণ</Label><Input type="number" value={editRow.quantity} onChange={(e) => setEditRow({ ...editRow, quantity: e.target.value })} /></div>
+                <div><Label>একক মূল্য</Label><Input type="number" value={editRow.unit_price} onChange={(e) => setEditRow({ ...editRow, unit_price: e.target.value })} /></div>
+              </div>
+              <div><Label>তারিখ</Label><Input type="date" value={editRow.purchase_date} onChange={(e) => setEditRow({ ...editRow, purchase_date: e.target.value })} /></div>
+              <div><Label>নোট</Label><Textarea rows={2} value={editRow.note} onChange={(e) => setEditRow({ ...editRow, note: e.target.value })} /></div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditRow(null)}>বাতিল</Button>
+            <Button onClick={() => updMut.mutate(editRow)} disabled={updMut.isPending}>সংরক্ষণ</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
