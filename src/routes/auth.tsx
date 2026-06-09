@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/brand-logo";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -37,11 +38,9 @@ function AuthPage() {
           </div>
         </div>
         <div className="text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-elegant">
-            <Factory className="h-7 w-7" />
-          </div>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight">CDB Bricks — সেলস ম্যানেজমেন্ট সিস্টেম</h1>
-          <p className="text-sm text-muted-foreground">চালান, বিক্রয় ও গ্রাহক ব্যবস্থাপনা</p>
+          <BrandLogo className="mx-auto h-20 w-20 drop-shadow-md" />
+          <h1 className="mt-3 bg-gradient-to-r from-[#e85d3a] via-[#f7931e] to-[#c2410c] bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">সি ডি বি ব্রিকস</h1>
+          <p className="text-sm text-muted-foreground">কাপাসিয়া, গাজীপুর</p>
         </div>
         <Card>
           <CardHeader className="pb-2">
