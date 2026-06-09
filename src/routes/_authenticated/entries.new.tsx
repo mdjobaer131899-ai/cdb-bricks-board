@@ -93,7 +93,7 @@ function NewEntryPage() {
   const [customBrickName, setCustomBrickName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
-  const [isAdvance, setIsAdvance] = useState(false);
+  const isAdvance = false; // advance delivery option removed per requirement
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [addCustOpen, setAddCustOpen] = useState(false);
