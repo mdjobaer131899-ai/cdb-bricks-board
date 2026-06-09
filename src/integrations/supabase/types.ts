@@ -1023,6 +1023,8 @@ export type Database = {
           created_at: string
           daily_wage: number
           id: string
+          join_date: string | null
+          monthly_salary: number
           name: string
           note: string | null
           phone: string | null
@@ -1034,6 +1036,8 @@ export type Database = {
           created_at?: string
           daily_wage?: number
           id?: string
+          join_date?: string | null
+          monthly_salary?: number
           name: string
           note?: string | null
           phone?: string | null
@@ -1045,6 +1049,8 @@ export type Database = {
           created_at?: string
           daily_wage?: number
           id?: string
+          join_date?: string | null
+          monthly_salary?: number
           name?: string
           note?: string | null
           phone?: string | null
