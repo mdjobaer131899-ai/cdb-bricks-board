@@ -121,38 +121,53 @@ function CustomerDetailPage() {
   const customer = customerQ.data;
   if (!customer) return <div className="p-6 text-sm text-muted-foreground">গ্রাহক পাওয়া যায়নি।</div>;
 
-  function handlePrint() {
-    window.print();
-  }
+  const invoiceRef = useRef<HTMLDivElement>(null);
+
+  const invoiceData: InvoiceData = {
+    invoiceNo: `CUST-${customer.id.slice(0, 6).toUpperCase()}`,
+    date: selectedDate || (filteredRows[filteredRows.length - 1]?.sale_date ?? new Date().toISOString().slice(0, 10)),
+    customerRef: customer.phone ?? null,
+    salesPerson: "—",
+    paymentTerms: selectedDate ? `তারিখ: ${bnDate(selectedDate)}` : "সম্পূর্ণ লেনদেন",
+    to: {
+      name: customer.name,
+      lines: [customer.phone ?? "", customer.address ?? ""].filter(Boolean),
+    },
+    deliverTo: null,
+    items: filteredRows.map((r) => {
+      const brick = r.brick_type?.name === "অন্যান্য" ? (r.custom_brick_name || "অন্যান্য") : (r.brick_type?.name ?? "—");
+      const unit = Number(r.total_amount) && Number(r.quantity) ? Number(r.total_amount) / Number(r.quantity) : 0;
+      return {
+        code: r.challan_no,
+        description: brick,
+        subDescription: `${bnDate(r.sale_date)} • ${r.status === "approved" ? "অনুমোদিত" : r.status === "pending" ? "অপেক্ষমাণ" : "প্রত্যাখ্যাত"}`,
+        quantity: Number(r.quantity),
+        unit: "পিস",
+        price: Math.round(unit),
+        total: Number(r.total_amount),
+      };
+    }),
+    subtotal: totals.approved + totals.pending,
+    total: totals.approved + totals.pending,
+  };
 
   async function handleShare() {
-    if (!customer) return;
-    const lines = [
-      `গ্রাহক: ${customer.name}`,
-      customer.phone ? `মোবাইল: ${customer.phone}` : null,
-      customer.address ? `ঠিকানা: ${customer.address}` : null,
-      "",
-      "লেনদেন:",
-        ...filteredRows.map((r) => {
-        const brick = r.brick_type?.name === "অন্যান্য" ? (r.custom_brick_name || "অন্যান্য") : (r.brick_type?.name ?? "—");
-        return `${bnDate(r.sale_date)} • ${r.challan_no} • ${brick} • পরিমাণ ${bn(r.quantity)} • ৳${bn(Number(r.total_amount))} (${r.status === "approved" ? "অনুমোদিত" : r.status === "pending" ? "অপেক্ষমাণ" : "প্রত্যাখ্যাত"})`;
-      }),
-      "",
-      `মোট অনুমোদিত: ৳${bn(totals.approved)}`,
-      `মোট অপেক্ষমাণ: ৳${bn(totals.pending)}`,
-    ].filter(Boolean).join("\n");
+    if (!invoiceRef.current) return;
+    await shareNodeAsImage(invoiceRef.current, {
+      title: `${customer!.name} — লেনদেন`,
+      text: `${customer!.name} এর সম্পূর্ণ লেনদেন হিসাব`,
+      filename: `${customer!.name}-history.png`,
+    });
+  }
 
-    const shareData = { title: `${customer.name} — লেনদেন`, text: lines };
-    try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-      } else {
-        await navigator.clipboard.writeText(lines);
-        toast.success("লেনদেনের তথ্য কপি করা হয়েছে");
-      }
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") toast.error("শেয়ার করা যায়নি");
-    }
+  async function handleDownload() {
+    if (!invoiceRef.current) return;
+    await downloadNodeAsImage(invoiceRef.current, `${customer!.name}-history.png`);
+  }
+
+  function handlePrint() {
+    if (!invoiceRef.current) return;
+    printNode(invoiceRef.current, `${customer!.name} — লেনদেন`);
   }
 
   return (
