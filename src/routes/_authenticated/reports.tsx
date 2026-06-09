@@ -42,18 +42,22 @@ function ReportsPage() {
         <p className="text-sm text-muted-foreground">বিক্রয় বিশ্লেষণ ও PDF এক্সপোর্ট</p>
       </div>
       <Tabs defaultValue="daily">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
           <TabsTrigger value="daily">দৈনিক</TabsTrigger>
           <TabsTrigger value="range">তারিখ পরিসীমা</TabsTrigger>
           <TabsTrigger value="customer">গ্রাহক সারাংশ</TabsTrigger>
           <TabsTrigger value="advance">অগ্রিম চালান</TabsTrigger>
           <TabsTrigger value="profit">গ্রাহকভিত্তিক বিশ্লেষণ</TabsTrigger>
+          <TabsTrigger value="season">মৌসুম</TabsTrigger>
+          <TabsTrigger value="annual">বার্ষিক</TabsTrigger>
         </TabsList>
         <TabsContent value="daily" className="mt-4"><DailyReport /></TabsContent>
         <TabsContent value="range" className="mt-4"><RangeReport /></TabsContent>
         <TabsContent value="customer" className="mt-4"><CustomerReport /></TabsContent>
         <TabsContent value="advance" className="mt-4"><AdvanceReport /></TabsContent>
         <TabsContent value="profit" className="mt-4"><CustomerProfitReport /></TabsContent>
+        <TabsContent value="season" className="mt-4"><SeasonReport /></TabsContent>
+        <TabsContent value="annual" className="mt-4"><AnnualReport /></TabsContent>
       </Tabs>
     </div>
   );
