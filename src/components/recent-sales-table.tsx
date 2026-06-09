@@ -100,7 +100,7 @@ export function RecentSalesTable({
                           <Badge className="bg-warning/20 text-warning-foreground hover:bg-warning/30">অপেক্ষমাণ</Badge>
                         )}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-muted-foreground">{e.manager_name}</TableCell>
+                      {/* manager cell removed */}
                       <TableCell className="text-muted-foreground text-xs">{bnDate(e.sale_date)}</TableCell>
                       {showActions && (
                         <TableCell className="text-right">
