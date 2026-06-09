@@ -313,6 +313,11 @@ function CustomerDetailPage() {
       </Card>
 
       <CustomerLedger customerId={customer.id} customerName={customer.name} />
+
+      {/* Off-screen invoice for capture/print */}
+      <div style={{ position: "fixed", left: -10000, top: 0, width: 880, pointerEvents: "none", opacity: 0 }} aria-hidden>
+        <InvoiceDocument ref={invoiceRef} data={invoiceData} />
+      </div>
     </div>
   );
 }
