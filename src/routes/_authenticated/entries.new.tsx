@@ -236,7 +236,6 @@ function NewEntryPage() {
           </CardContent>
         </Card>
 
-        {isAdmin && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
             <CardTitle className="text-base">গ্রাহক</CardTitle>
@@ -299,7 +298,7 @@ function NewEntryPage() {
               </PopoverContent>
             </Popover>
 
-            {customerId && (
+            {isAdmin && customerId && (
               <div className="mt-3 space-y-1.5">
                 <Label>সক্রিয় চুক্তি (ঐচ্ছিক — নগদ বিক্রির জন্য খালি রাখুন)</Label>
                 <Select value={contractId || "none"} onValueChange={(v) => setContractId(v === "none" ? "" : v)}>
@@ -327,7 +326,7 @@ function NewEntryPage() {
             )}
           </CardContent>
         </Card>
-        )}
+
 
 
         <Card>
