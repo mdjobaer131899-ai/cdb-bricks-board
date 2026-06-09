@@ -701,7 +701,7 @@ export type Database = {
           created_at: string
           created_by: string
           custom_brick_name: string | null
-          customer_id: string
+          customer_id: string | null
           driver_name: string | null
           id: string
           notes: string | null
@@ -723,7 +723,7 @@ export type Database = {
           created_at?: string
           created_by: string
           custom_brick_name?: string | null
-          customer_id: string
+          customer_id?: string | null
           driver_name?: string | null
           id?: string
           notes?: string | null
@@ -745,7 +745,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           custom_brick_name?: string | null
-          customer_id?: string
+          customer_id?: string | null
           driver_name?: string | null
           id?: string
           notes?: string | null

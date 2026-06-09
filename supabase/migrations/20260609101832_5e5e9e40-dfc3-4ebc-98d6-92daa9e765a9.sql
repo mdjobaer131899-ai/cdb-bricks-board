@@ -1,0 +1,1 @@
+ALTER TABLE public.sales_entries ALTER COLUMN customer_id DROP NOT NULL;
