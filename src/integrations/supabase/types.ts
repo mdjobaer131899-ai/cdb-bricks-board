@@ -176,6 +176,13 @@ export type Database = {
             foreignKeyName: "collections_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
+            referencedRelation: "contract_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collections_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
             referencedRelation: "contracts"
             referencedColumns: ["id"]
           },
@@ -224,6 +231,13 @@ export type Database = {
             foreignKeyName: "contract_payments_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
+            referencedRelation: "contract_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_payments_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
             referencedRelation: "contracts"
             referencedColumns: ["id"]
           },
@@ -248,6 +262,7 @@ export type Database = {
           priority: number
           start_date: string
           status: Database["public"]["Enums"]["contract_status"]
+          truck_quantity: number | null
           updated_at: string
         }
         Insert: {
@@ -268,6 +283,7 @@ export type Database = {
           priority?: number
           start_date?: string
           status?: Database["public"]["Enums"]["contract_status"]
+          truck_quantity?: number | null
           updated_at?: string
         }
         Update: {
@@ -288,6 +304,7 @@ export type Database = {
           priority?: number
           start_date?: string
           status?: Database["public"]["Enums"]["contract_status"]
+          truck_quantity?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -628,6 +645,13 @@ export type Database = {
             foreignKeyName: "sales_entries_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
+            referencedRelation: "contract_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_entries_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
             referencedRelation: "contracts"
             referencedColumns: ["id"]
           },
@@ -723,6 +747,74 @@ export type Database = {
           total_debit: number | null
         }
         Relationships: []
+      }
+      contract_summary: {
+        Row: {
+          booked_quantity: number | null
+          booked_value: number | null
+          collected_amount: number | null
+          contract_no: string | null
+          contract_type: Database["public"]["Enums"]["contract_type"] | null
+          customer_id: string | null
+          delivered_quantity: number | null
+          delivered_trucks: number | null
+          delivered_value: number | null
+          due_amount: number | null
+          fixed_rate: number | null
+          id: string | null
+          remaining_quantity: number | null
+          remaining_trucks: number | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["contract_status"] | null
+          truck_quantity: number | null
+        }
+        Insert: {
+          booked_quantity?: number | null
+          booked_value?: number | null
+          collected_amount?: never
+          contract_no?: string | null
+          contract_type?: Database["public"]["Enums"]["contract_type"] | null
+          customer_id?: string | null
+          delivered_quantity?: never
+          delivered_trucks?: never
+          delivered_value?: never
+          due_amount?: never
+          fixed_rate?: number | null
+          id?: string | null
+          remaining_quantity?: never
+          remaining_trucks?: never
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["contract_status"] | null
+          truck_quantity?: number | null
+        }
+        Update: {
+          booked_quantity?: number | null
+          booked_value?: number | null
+          collected_amount?: never
+          contract_no?: string | null
+          contract_type?: Database["public"]["Enums"]["contract_type"] | null
+          customer_id?: string | null
+          delivered_quantity?: never
+          delivered_trucks?: never
+          delivered_value?: never
+          due_amount?: never
+          fixed_rate?: number | null
+          id?: string | null
+          remaining_quantity?: never
+          remaining_trucks?: never
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["contract_status"] | null
+          truck_quantity?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contracts_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       current_stock: {
         Row: {

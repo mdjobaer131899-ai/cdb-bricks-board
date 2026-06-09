@@ -56,9 +56,14 @@ export function AiAssistantFab() {
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        headers: (): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {}),
+        // Re-read session on every send so expired tokens auto-refresh.
+        headers: async (): Promise<Record<string, string>> => {
+          const { data } = await supabase.auth.getSession();
+          const t = data.session?.access_token;
+          return t ? { Authorization: `Bearer ${t}` } : {};
+        },
       }),
-    [token],
+    [],
   );
 
   const { messages, sendMessage, status, error, stop } = useChat({
