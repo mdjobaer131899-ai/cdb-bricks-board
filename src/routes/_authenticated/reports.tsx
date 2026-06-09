@@ -17,6 +17,7 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { exportReportPdf, type PdfColumn } from "@/lib/pdf-export";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/reports")({
