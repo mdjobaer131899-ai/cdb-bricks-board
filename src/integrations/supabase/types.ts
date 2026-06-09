@@ -318,6 +318,54 @@ export type Database = {
         }
         Relationships: []
       }
+      production_entries: {
+        Row: {
+          brick_type_id: string
+          created_at: string
+          created_by: string
+          id: string
+          notes: string | null
+          production_date: string
+          quantity: number
+          updated_at: string
+        }
+        Insert: {
+          brick_type_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          notes?: string | null
+          production_date?: string
+          quantity: number
+          updated_at?: string
+        }
+        Update: {
+          brick_type_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          production_date?: string
+          quantity?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_entries_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "brick_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_entries_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "current_stock"
+            referencedColumns: ["brick_type_id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -418,6 +466,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "sales_entries_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "current_stock"
+            referencedColumns: ["brick_type_id"]
+          },
+          {
             foreignKeyName: "sales_entries_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
@@ -430,6 +485,54 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_ledger: {
+        Row: {
+          brick_type_id: string
+          change: number
+          created_at: string
+          id: string
+          note: string | null
+          ref_date: string
+          ref_id: string
+          ref_type: string
+        }
+        Insert: {
+          brick_type_id: string
+          change: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          ref_date?: string
+          ref_id: string
+          ref_type: string
+        }
+        Update: {
+          brick_type_id?: string
+          change?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          ref_date?: string
+          ref_id?: string
+          ref_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_ledger_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "brick_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_ledger_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "current_stock"
+            referencedColumns: ["brick_type_id"]
           },
         ]
       }
@@ -456,7 +559,14 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      current_stock: {
+        Row: {
+          brick_name: string | null
+          brick_type_id: string | null
+          quantity: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       expire_old_contracts: { Args: never; Returns: undefined }
