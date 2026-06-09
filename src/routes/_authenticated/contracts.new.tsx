@@ -29,6 +29,8 @@ function NewContractPage() {
 
   const [customerId, setCustomerId] = useState("");
   const [contractDate, setContractDate] = useState(isoDate(new Date()));
+  const [contractType, setContractType] = useState<"yearly_fixed" | "cash">("yearly_fixed");
+  const [advancePaid, setAdvancePaid] = useState("");
   const [brickQty, setBrickQty] = useState("");
   const [rate, setRate] = useState("");
   const [notes, setNotes] = useState("");
@@ -36,6 +38,7 @@ function NewContractPage() {
 
   const qty = Number(brickQty) || 0;
   const r = Number(rate) || 0;
+  const advance = Number(advancePaid) || 0;
   const truckQty = useMemo(() => (qty > 0 ? qty / 2000 : 0), [qty]);
   const totalValue = useMemo(() => qty * r, [qty, r]);
 
@@ -44,6 +47,7 @@ function NewContractPage() {
     if (!customerId) return toast.error("গ্রাহক নির্বাচন করুন");
     if (qty <= 0) return toast.error("ইটের পরিমাণ দিন");
     if (r <= 0) return toast.error("প্রতি ইট রেট দিন");
+    if (contractType === "cash" && advance <= 0) return toast.error("নগদ চুক্তির জন্য অগ্রিম পরিমাণ দিন");
 
     setBusy(true);
     try {
@@ -53,6 +57,8 @@ function NewContractPage() {
           contract_date: contractDate,
           total_brick_quantity: qty,
           per_brick_rate: r,
+          contract_type: contractType,
+          advance_paid: contractType === "cash" ? advance : 0,
           notes: notes || null,
         },
       });
