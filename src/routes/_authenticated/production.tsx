@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Package, Loader2 } from "lucide-react";
+import { Plus, Trash2, Package, Loader2, Pencil, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,10 +21,14 @@ export const Route = createFileRoute("/_authenticated/production")({
   component: ProductionPage,
 });
 
+type EditRow = { id: string; production_date: string; brick_type_id: string; quantity: string; notes: string };
+
 function ProductionPage() {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const [open, setOpen] = useState(false);
+  const [editRow, setEditRow] = useState<EditRow | null>(null);
+  const [search, setSearch] = useState("");
 
   const bricksQ = useQuery({ queryKey: ["brick-types-active"], queryFn: fetchActiveBrickTypes });
   const listQ = useQuery({
@@ -32,10 +36,10 @@ function ProductionPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("production_entries")
-        .select("id, production_date, quantity, notes, created_at, brick_type:brick_types(name)")
+        .select("id, production_date, brick_type_id, quantity, notes, created_at, brick_type:brick_types(name)")
         .order("production_date", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(300);
       if (error) throw error;
       return data ?? [];
     },
@@ -50,14 +54,47 @@ function ProductionPage() {
       toast.success("মুছে ফেলা হয়েছে");
       qc.invalidateQueries({ queryKey: ["production-entries"] });
       qc.invalidateQueries({ queryKey: ["current-stock"] });
+      qc.invalidateQueries({ queryKey: ["stock-movements"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "ব্যর্থ"),
+  });
+
+  const updMut = useMutation({
+    mutationFn: async (r: EditRow) => {
+      const qty = Number(r.quantity);
+      if (!(qty > 0)) throw new Error("পরিমাণ লিখুন");
+      const { error } = await supabase.from("production_entries").update({
+        production_date: r.production_date,
+        brick_type_id: r.brick_type_id,
+        quantity: qty,
+        notes: r.notes || null,
+      }).eq("id", r.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("আপডেট হয়েছে");
+      setEditRow(null);
+      qc.invalidateQueries({ queryKey: ["production-entries"] });
+      qc.invalidateQueries({ queryKey: ["current-stock"] });
+      qc.invalidateQueries({ queryKey: ["stock-movements"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const rows = listQ.data ?? [];
   const todayTotal = rows
     .filter((r) => r.production_date === isoDate(new Date()))
     .reduce((s, r) => s + Number(r.quantity), 0);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return rows;
+    const q = search.toLowerCase();
+    return rows.filter((r: any) =>
+      (r.brick_type?.name ?? "").toLowerCase().includes(q) ||
+      (r.notes ?? "").toLowerCase().includes(q) ||
+      (r.production_date ?? "").includes(q)
+    );
+  }, [rows, search]);
 
   return (
     <div className="space-y-5">
@@ -93,12 +130,18 @@ function ProductionPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">সাম্প্রতিক উৎপাদন</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <CardTitle className="text-base">সাম্প্রতিক উৎপাদন</CardTitle>
+          <div className="relative w-full max-w-xs">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input className="pl-8" placeholder="খুঁজুন..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           {listQ.isLoading ? (
             <div className="flex h-32 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
-          ) : rows.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">এখনো কোনো এন্ট্রি নেই</div>
+          ) : filtered.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">কোনো এন্ট্রি নেই</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -112,16 +155,24 @@ function ProductionPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((r) => (
+                  {filtered.map((r: any) => (
                     <TableRow key={r.id}>
                       <TableCell className="text-xs">{bnDate(r.production_date)}</TableCell>
                       <TableCell>{r.brick_type?.name ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums font-semibold">{bn(r.quantity)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{r.notes ?? "—"}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => delMut.mutate(r.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => setEditRow({
+                            id: r.id, production_date: r.production_date, brick_type_id: r.brick_type_id,
+                            quantity: String(r.quantity), notes: r.notes ?? "",
+                          })}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => { if (confirm("মুছে ফেলবেন?")) delMut.mutate(r.id); }}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -131,6 +182,42 @@ function ProductionPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editRow} onOpenChange={(o) => !o && setEditRow(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>প্রোডাকশন সম্পাদনা</DialogTitle></DialogHeader>
+          {editRow && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>তারিখ</Label>
+                <Input type="date" value={editRow.production_date} onChange={(e) => setEditRow({ ...editRow, production_date: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>ইটের ধরন</Label>
+                <Select value={editRow.brick_type_id} onValueChange={(v) => setEditRow({ ...editRow, brick_type_id: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(bricksQ.data ?? []).map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>পরিমাণ</Label>
+                <Input type="number" value={editRow.quantity} onChange={(e) => setEditRow({ ...editRow, quantity: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>মন্তব্য</Label>
+                <Textarea rows={2} value={editRow.notes} onChange={(e) => setEditRow({ ...editRow, notes: e.target.value })} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditRow(null)}>বাতিল</Button>
+            <Button onClick={() => editRow && updMut.mutate(editRow)} disabled={updMut.isPending}>সংরক্ষণ</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
