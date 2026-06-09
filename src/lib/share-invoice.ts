@@ -71,10 +71,11 @@ export function printNode(node: HTMLElement, title = "ইনভয়েস") {
     return;
   }
   const html = node.outerHTML;
+  const safeTitle = title.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
   w.document.open();
   w.document.write(`<!doctype html>
 <html lang="bn"><head><meta charset="utf-8"/>
-<title>${title}</title>
+<title>${safeTitle}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap">

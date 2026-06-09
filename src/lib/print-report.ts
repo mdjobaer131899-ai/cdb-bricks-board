@@ -4,15 +4,20 @@ interface PrintOptions {
   bodyHtml: string;
 }
 
+export const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
 export function printReport({ title, subtitle, bodyHtml }: PrintOptions) {
   const w = window.open("", "_blank", "width=960,height=720");
   if (!w) return;
+  const safeTitle = escapeHtml(title);
+  const safeSubtitle = subtitle ? escapeHtml(subtitle) : "";
   w.document.open();
   w.document.write(`<!doctype html>
 <html lang="bn">
 <head>
   <meta charset="utf-8" />
-  <title>${title}</title>
+  <title>${safeTitle}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap">
@@ -46,8 +51,8 @@ export function printReport({ title, subtitle, bodyHtml }: PrintOptions) {
   <div class="head">
     <div>
       <div class="brand">CDB Bricks Ltd.</div>
-      <h1>${title}</h1>
-      ${subtitle ? `<h2>${subtitle}</h2>` : ""}
+      <h1>${safeTitle}</h1>
+      ${safeSubtitle ? `<h2>${safeSubtitle}</h2>` : ""}
     </div>
     <div class="meta">
       প্রিন্ট তারিখ<br/>${new Date().toLocaleString("bn-BD")}
@@ -62,5 +67,3 @@ export function printReport({ title, subtitle, bodyHtml }: PrintOptions) {
   w.document.close();
 }
 
-export const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
