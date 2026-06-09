@@ -86,6 +86,7 @@ function NewEntryPage() {
   const [saleDate, setSaleDate] = useState(isoDate(new Date()));
   const [customerId, setCustomerId] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
+  const [contractId, setContractId] = useState<string>("");
   const [driverName, setDriverName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [brickTypeId, setBrickTypeId] = useState("");
@@ -96,6 +97,34 @@ function NewEntryPage() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [addCustOpen, setAddCustOpen] = useState(false);
+
+  // Active contracts for selected customer
+  const contractsQ = useQuery({
+    queryKey: ["customer-active-contracts", customerId],
+    enabled: !!customerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("id, contract_no, contract_type, fixed_rate, booked_quantity, delivered_quantity")
+        .eq("customer_id", customerId)
+        .eq("status", "active")
+        .order("priority", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Reset contract when customer changes
+  useEffect(() => { setContractId(""); }, [customerId]);
+
+  // Auto-apply contract's fixed rate to unit price
+  useEffect(() => {
+    if (!contractId || !contractsQ.data) return;
+    const c = contractsQ.data.find((x) => x.id === contractId);
+    if (c?.fixed_rate && isAdmin && !isAdvance) {
+      setUnitPrice(String(c.fixed_rate));
+    }
+  }, [contractId, contractsQ.data, isAdmin, isAdvance]);
 
   useEffect(() => {
     generateNextChallanNo().then(setChallanNo);
