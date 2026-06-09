@@ -152,6 +152,8 @@ export function AdminDashboard() {
 
       <StockSummaryCard />
 
+      <SeasonProgressCard />
+
       {/* New: daily folders */}
       <DailyIncomeExpenseFolders />
 
