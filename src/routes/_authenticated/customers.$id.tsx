@@ -122,7 +122,6 @@ function CustomerDetailPage() {
   const customer = customerQ.data;
   if (!customer) return <div className="p-6 text-sm text-muted-foreground">গ্রাহক পাওয়া যায়নি।</div>;
 
-  const invoiceRef = useRef<HTMLDivElement>(null);
 
   const invoiceData: InvoiceData = {
     invoiceNo: `CUST-${customer.id.slice(0, 6).toUpperCase()}`,
