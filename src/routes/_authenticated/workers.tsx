@@ -148,13 +148,14 @@ function WorkersPage() {
       const amt = Number(payDialog.amount);
       if (!payDialog.workerId) throw new Error("শ্রমিক নির্বাচন করুন");
       if (!(amt > 0)) throw new Error("পরিমাণ লিখুন");
+      if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
       const { error } = await supabase.from("worker_payments").insert({
         worker_id: payDialog.workerId,
         amount: amt,
         payment_date: payDialog.date,
         payment_type: payDialog.type,
         note: payDialog.note || null,
-        created_by: me?.user.id ?? null,
+        created_by: me.user.id,
       });
       if (error) throw error;
     },
