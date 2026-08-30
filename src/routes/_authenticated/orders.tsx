@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -57,7 +58,7 @@ function OrdersPage() {
   const customersQ = useQuery({
     queryKey: ["customers-basic"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("customers").select("id,name,phone").order("name");
+      const { data, error } = await sdb.from("customers").select("id,name,phone").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -66,7 +67,7 @@ function OrdersPage() {
   const brickTypesQ = useQuery({
     queryKey: ["brick-types"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("brick_types").select("id,name,is_active").order("name");
+      const { data, error } = await sdb.from("brick_types").select("id,name,is_active").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -75,7 +76,7 @@ function OrdersPage() {
   const vehiclesQ = useQuery({
     queryKey: ["vehicles-basic"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("vehicles").select("id,vehicle_no,driver_name,active").order("vehicle_no");
+      const { data, error } = await sdb.from("vehicles").select("id,vehicle_no,driver_name,active").order("vehicle_no");
       if (error) throw error;
       return data ?? [];
     },
@@ -84,7 +85,7 @@ function OrdersPage() {
   const ordersQ = useQuery({
     queryKey: ["orders"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("orders").select("*").order("order_date", { ascending: false });
+      const { data, error } = await sdb.from("orders").select("*").order("order_date", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -93,7 +94,7 @@ function OrdersPage() {
   const deliveriesQ = useQuery({
     queryKey: ["deliveries"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("deliveries").select("*").order("delivery_date", { ascending: false }).limit(300);
+      const { data, error } = await sdb.from("deliveries").select("*").order("delivery_date", { ascending: false }).limit(300);
       if (error) throw error;
       return data ?? [];
     },
@@ -139,11 +140,11 @@ function OrdersPage() {
         note: f.note || null,
       };
       if (oDlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("orders").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("orders").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
         if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-        const { error } = await supabase.from("orders").insert({ ...payload, created_by: me.user.id });
+        const { error } = await sdb.from("orders").insert({ ...payload, created_by: me.user.id });
         if (error) throw error;
       }
     },
@@ -157,7 +158,7 @@ function OrdersPage() {
 
   const delOrder = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("orders").delete().eq("id", id);
+      const { error } = await sdb.from("orders").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["orders"] }); },
@@ -181,11 +182,11 @@ function OrdersPage() {
         note: f.note || null,
       };
       if (dDlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("deliveries").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("deliveries").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
         if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-        const { error } = await supabase.from("deliveries").insert({ ...payload, created_by: me.user.id });
+        const { error } = await sdb.from("deliveries").insert({ ...payload, created_by: me.user.id });
         if (error) throw error;
       }
     },
@@ -199,7 +200,7 @@ function OrdersPage() {
 
   const delDelivery = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("deliveries").delete().eq("id", id);
+      const { error } = await sdb.from("deliveries").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["deliveries"] }); },

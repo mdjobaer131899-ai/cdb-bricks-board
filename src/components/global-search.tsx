@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate } from "@/lib/format";
 
 interface CustomerHit { kind: "customer"; id: string; name: string; phone: string | null; address: string | null; }
@@ -42,9 +43,9 @@ export function GlobalSearch() {
       try {
         const like = `%${term}%`;
         const [cRes, sRes, kRes] = await Promise.all([
-          supabase.from("customers").select("id, name, phone, address").or(`name.ilike.${like},phone.ilike.${like}`).limit(8),
-          supabase.from("sales_entries").select("id, challan_no, sale_date, vehicle_number, customer:customers(name)").or(`challan_no.ilike.${like},vehicle_number.ilike.${like}`).limit(8),
-          supabase.from("contracts").select("id, contract_no, customer:customers(name)").ilike("contract_no", like).limit(8),
+          sdb.from("customers").select("id, name, phone, address").or(`name.ilike.${like},phone.ilike.${like}`).limit(8),
+          sdb.from("sales_entries").select("id, challan_no, sale_date, vehicle_number, customer:customers(name)").or(`challan_no.ilike.${like},vehicle_number.ilike.${like}`).limit(8),
+          sdb.from("contracts").select("id, contract_no, customer:customers(name)").ilike("contract_no", like).limit(8),
         ]);
         const all: Hit[] = [
           ...((cRes.data ?? []).map((c) => ({ kind: "customer" as const, id: c.id, name: c.name, phone: c.phone, address: c.address }))),

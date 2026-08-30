@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -31,16 +32,16 @@ function VehiclesPage() {
 
   const vehiclesQ = useQuery({
     queryKey: ["vehicles"],
-    queryFn: async () => (await supabase.from("vehicles").select("*").order("vehicle_no")).data ?? [],
+    queryFn: async () => (await sdb.from("vehicles").select("*").order("vehicle_no")).data ?? [],
   });
   const expensesQ = useQuery({
     queryKey: ["vehicle-expenses"],
-    queryFn: async () => (await supabase.from("vehicle_expenses").select("*").order("expense_date", { ascending: false })).data ?? [],
+    queryFn: async () => (await sdb.from("vehicle_expenses").select("*").order("expense_date", { ascending: false })).data ?? [],
   });
   const tripsQ = useQuery({
     queryKey: ["vehicle-trips"],
     queryFn: async () => {
-      const { data } = await supabase.from("sales_entries").select("vehicle_number").eq("status", "approved").not("vehicle_number", "is", null);
+      const { data } = await sdb.from("sales_entries").select("vehicle_number").eq("status", "approved").not("vehicle_number", "is", null);
       const map = new Map<string, number>();
       (data ?? []).forEach((s: any) => { if (s.vehicle_number) map.set(s.vehicle_number, (map.get(s.vehicle_number) ?? 0) + 1); });
       return map;
@@ -61,7 +62,7 @@ function VehiclesPage() {
   const createVeh = useMutation({
     mutationFn: async () => {
       if (!form.vehicle_no) throw new Error("গাড়ি নম্বর দিন");
-      const { error } = await supabase.from("vehicles").insert({
+      const { error } = await sdb.from("vehicles").insert({
         vehicle_no: form.vehicle_no, type: form.type, driver_name: form.driver_name || null,
         driver_phone: form.driver_phone || null, capacity: form.capacity ? Number(form.capacity) : null,
       });
@@ -75,7 +76,7 @@ function VehiclesPage() {
   const addExpense = useMutation({
     mutationFn: async (vehicleId: string) => {
       if (!(Number(expForm.amount) > 0)) throw new Error("পরিমাণ লিখুন");
-      const { error } = await supabase.from("vehicle_expenses").insert({
+      const { error } = await sdb.from("vehicle_expenses").insert({
         vehicle_id: vehicleId, category: expForm.category, amount: Number(expForm.amount),
         expense_date: expForm.expense_date, note: expForm.note || null, created_by: me?.user.id ?? null,
       });
@@ -88,7 +89,7 @@ function VehiclesPage() {
   const updVeh = useMutation({
     mutationFn: async (v: any) => {
       if (!v.vehicle_no) throw new Error("গাড়ি নম্বর দিন");
-      const { error } = await supabase.from("vehicles").update({
+      const { error } = await sdb.from("vehicles").update({
         vehicle_no: v.vehicle_no, type: v.type, driver_name: v.driver_name || null,
         driver_phone: v.driver_phone || null, capacity: v.capacity ? Number(v.capacity) : null,
       }).eq("id", v.id);
@@ -100,7 +101,7 @@ function VehiclesPage() {
 
   const delVeh = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("vehicles").delete().eq("id", id);
+      const { error } = await sdb.from("vehicles").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["vehicles"] }); },

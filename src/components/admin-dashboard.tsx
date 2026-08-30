@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { fetchSales } from "@/lib/sales-queries";
 import { bn, isoDate } from "@/lib/format";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { AiAssistantFab } from "@/components/ai-assistant-fab";
 import { QuickActions } from "@/components/quick-actions";
 import { StockSummaryCard } from "@/components/stock-summary-card";
@@ -35,9 +36,9 @@ export function AdminDashboard() {
     queryKey: ["dash", "today", todayIso],
     queryFn: async () => {
       const [salesRes, payRes, colRes] = await Promise.all([
-        supabase.from("sales_entries").select("quantity, total_amount, status, vehicle_number").eq("sale_date", todayIso),
-        supabase.from("contract_payments").select("amount").eq("payment_date", todayIso),
-        supabase.from("collections").select("amount").is("contract_id", null).eq("payment_date", todayIso),
+        sdb.from("sales_entries").select("quantity, total_amount, status, vehicle_number").eq("sale_date", todayIso),
+        sdb.from("contract_payments").select("amount").eq("payment_date", todayIso),
+        sdb.from("collections").select("amount").is("contract_id", null).eq("payment_date", todayIso),
       ]);
       const sales = salesRes.data ?? [];
       const approved = sales.filter((s) => s.status === "approved");
@@ -57,7 +58,7 @@ export function AdminDashboard() {
   const customersQ = useQuery({
     queryKey: ["customers-count"],
     queryFn: async () => {
-      const { count } = await supabase.from("customers").select("id", { count: "exact", head: true });
+      const { count } = await sdb.from("customers").select("id", { count: "exact", head: true });
       return count ?? 0;
     },
   });
@@ -66,9 +67,9 @@ export function AdminDashboard() {
     queryKey: ["dashboard-due"],
     queryFn: async () => {
       const [salesRes, payRes, colRes] = await Promise.all([
-        supabase.from("sales_entries").select("total_amount").eq("status", "approved"),
-        supabase.from("contract_payments").select("amount"),
-        supabase.from("collections").select("amount").is("contract_id", null),
+        sdb.from("sales_entries").select("total_amount").eq("status", "approved"),
+        sdb.from("contract_payments").select("amount"),
+        sdb.from("collections").select("amount").is("contract_id", null),
       ]);
       const totalSales = (salesRes.data ?? []).reduce((a, b) => a + Number(b.total_amount || 0), 0);
       const contractPay = (payRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);

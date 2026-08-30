@@ -18,6 +18,7 @@ import { bn, bnDate, isoDate } from "@/lib/format";
 import { exportReportPdf, type PdfColumn } from "@/lib/pdf-export";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/reports")({
@@ -668,12 +669,12 @@ async function fetchSeasonTotals(s: SeasonRow) {
   const from = s.start_date;
   const to = s.end_date ?? isoDate(new Date());
   const [prodRes, salesRes, colRes, expRes, wpRes, rmRes] = await Promise.all([
-    supabase.from("production_entries").select("quantity").gte("production_date", from).lte("production_date", to),
-    supabase.from("sales_entries").select("quantity, total_amount").eq("status", "approved").gte("sale_date", from).lte("sale_date", to),
-    supabase.from("collections").select("amount").gte("payment_date", from).lte("payment_date", to),
-    supabase.from("expenses").select("amount").gte("expense_date", from).lte("expense_date", to),
-    supabase.from("worker_payments").select("amount").gte("payment_date", from).lte("payment_date", to),
-    supabase.from("raw_material_purchases").select("total_amount").gte("purchase_date", from).lte("purchase_date", to),
+    sdb.from("production_entries").select("quantity").gte("production_date", from).lte("production_date", to),
+    sdb.from("sales_entries").select("quantity, total_amount").eq("status", "approved").gte("sale_date", from).lte("sale_date", to),
+    sdb.from("collections").select("amount").gte("payment_date", from).lte("payment_date", to),
+    sdb.from("expenses").select("amount").gte("expense_date", from).lte("expense_date", to),
+    sdb.from("worker_payments").select("amount").gte("payment_date", from).lte("payment_date", to),
+    sdb.from("raw_material_purchases").select("total_amount").gte("purchase_date", from).lte("purchase_date", to),
   ]);
   const sum = (rows: any[] | null, k: string) => (rows ?? []).reduce((a, r) => a + Number(r[k] || 0), 0);
   const production = sum(prodRes.data, "quantity");
@@ -693,7 +694,7 @@ function SeasonReport() {
   const seasonsQ = useQuery({
     queryKey: ["seasons-all"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("seasons").select("id, name, start_date, end_date, target_production, is_active").order("start_date", { ascending: false });
+      const { data, error } = await sdb.from("seasons").select("id, name, start_date, end_date, target_production, is_active").order("start_date", { ascending: false });
       if (error) throw error;
       return (data ?? []) as SeasonRow[];
     },
@@ -812,11 +813,11 @@ async function fetchAnnual(year: number) {
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
   const [salesRes, colRes, expRes, wpRes, rmRes] = await Promise.all([
-    supabase.from("sales_entries").select("sale_date, total_amount").eq("status", "approved").gte("sale_date", from).lte("sale_date", to),
-    supabase.from("collections").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
-    supabase.from("expenses").select("expense_date, amount").gte("expense_date", from).lte("expense_date", to),
-    supabase.from("worker_payments").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
-    supabase.from("raw_material_purchases").select("purchase_date, total_amount").gte("purchase_date", from).lte("purchase_date", to),
+    sdb.from("sales_entries").select("sale_date, total_amount").eq("status", "approved").gte("sale_date", from).lte("sale_date", to),
+    sdb.from("collections").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
+    sdb.from("expenses").select("expense_date, amount").gte("expense_date", from).lte("expense_date", to),
+    sdb.from("worker_payments").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
+    sdb.from("raw_material_purchases").select("purchase_date, total_amount").gte("purchase_date", from).lte("purchase_date", to),
   ]);
   const months = Array.from({ length: 12 }, () => ({ sales: 0, collection: 0, expense: 0 }));
   const bucket = (date: string) => new Date(date).getMonth();

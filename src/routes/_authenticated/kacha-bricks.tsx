@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/stat-card";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -50,7 +51,7 @@ function KachaBricksPage() {
   const sardarsQ = useQuery({
     queryKey: ["sardars"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("sardars").select("id,name,is_active").order("name");
+      const { data, error } = await sdb.from("sardars").select("id,name,is_active").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -59,7 +60,7 @@ function KachaBricksPage() {
   const entriesQ = useQuery({
     queryKey: ["kacha-brick-entries"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("kacha_brick_entries").select("*").order("entry_date", { ascending: false }).limit(300);
+      const { data, error } = await sdb.from("kacha_brick_entries").select("*").order("entry_date", { ascending: false }).limit(300);
       if (error) throw error;
       return data ?? [];
     },
@@ -95,11 +96,11 @@ function KachaBricksPage() {
         note: f.note || null,
       };
       if (dlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("kacha_brick_entries").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("kacha_brick_entries").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
         if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-        const { error } = await supabase.from("kacha_brick_entries").insert({ ...payload, created_by: me.user.id });
+        const { error } = await sdb.from("kacha_brick_entries").insert({ ...payload, created_by: me.user.id });
         if (error) throw error;
       }
     },
@@ -114,7 +115,7 @@ function KachaBricksPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("kacha_brick_entries").delete().eq("id", id);
+      const { error } = await sdb.from("kacha_brick_entries").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["kacha-brick-entries"] }); },

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { bn, bnDate, isoDate } from "@/lib/format";
@@ -185,7 +186,7 @@ function StockEntryDialog({ bricks, userId, onClose, onSaved }: { bricks: Array<
     e.preventDefault();
     if (!brickId || !qty || !userId) { toast.error("সব ঘর পূরণ করুন"); return; }
     setBusy(true);
-    const { error } = await supabase.from("production_entries").insert({
+    const { error } = await sdb.from("production_entries").insert({
       production_date: date,
       brick_type_id: brickId,
       quantity: Number(qty),

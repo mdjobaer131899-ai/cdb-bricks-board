@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -29,7 +30,7 @@ function RawMaterialsPage() {
   const materialsQ = useQuery({
     queryKey: ["raw-materials"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("raw_materials").select("*").order("name");
+      const { data, error } = await sdb.from("raw_materials").select("*").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -77,7 +78,7 @@ function RawMaterialsPage() {
       if (!form.material_id) throw new Error("উপকরণ নির্বাচন করুন");
       if (!(qty > 0)) throw new Error("পরিমাণ লিখুন");
       if (!(price >= 0)) throw new Error("একক মূল্য লিখুন");
-      const { error } = await supabase.from("raw_material_purchases").insert({
+      const { error } = await sdb.from("raw_material_purchases").insert({
         material_id: form.material_id,
         supplier_name: form.supplier_name || null,
         quantity: qty,

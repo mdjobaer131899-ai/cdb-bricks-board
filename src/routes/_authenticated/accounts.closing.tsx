@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -34,11 +35,11 @@ function ClosingPage() {
     queryKey: ["closing-summary", ym],
     queryFn: async () => {
       const [salesRes, collRes, expRes, rmpRes, wpRes] = await Promise.all([
-        supabase.from("sales_entries").select("total_amount").eq("status", "approved").gte("sale_date", first).lte("sale_date", last),
-        supabase.from("collections").select("amount").gte("payment_date", first).lte("payment_date", last),
-        supabase.from("expenses").select("amount").gte("expense_date", first).lte("expense_date", last),
-        supabase.from("raw_material_purchases").select("total_amount").gte("purchase_date", first).lte("purchase_date", last),
-        supabase.from("worker_payments").select("amount").gte("payment_date", first).lte("payment_date", last),
+        sdb.from("sales_entries").select("total_amount").eq("status", "approved").gte("sale_date", first).lte("sale_date", last),
+        sdb.from("collections").select("amount").gte("payment_date", first).lte("payment_date", last),
+        sdb.from("expenses").select("amount").gte("expense_date", first).lte("expense_date", last),
+        sdb.from("raw_material_purchases").select("total_amount").gte("purchase_date", first).lte("purchase_date", last),
+        sdb.from("worker_payments").select("amount").gte("payment_date", first).lte("payment_date", last),
       ]);
       const sum = (rows: any[] | null, key: string) => (rows ?? []).reduce((s, r) => s + Number(r[key] || 0), 0);
       const sales = sum(salesRes.data, "total_amount");
@@ -52,14 +53,14 @@ function ClosingPage() {
 
   const closedQ = useQuery({
     queryKey: ["closed-months"],
-    queryFn: async () => (await supabase.from("closed_months").select("*").order("year", { ascending: false }).order("month", { ascending: false })).data ?? [],
+    queryFn: async () => (await sdb.from("closed_months").select("*").order("year", { ascending: false }).order("month", { ascending: false })).data ?? [],
   });
 
   const isClosed = (closedQ.data ?? []).some((c: any) => c.year === year && c.month === month);
 
   const closeMut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("closed_months").insert({ year, month, closed_by: me?.user.id ?? null, snapshot: summary.data as any });
+      const { error } = await sdb.from("closed_months").insert({ year, month, closed_by: me?.user.id ?? null, snapshot: summary.data as any });
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মাস বন্ধ করা হয়েছে"); qc.invalidateQueries({ queryKey: ["closed-months"] }); },
@@ -68,7 +69,7 @@ function ClosingPage() {
 
   const reopenMut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("closed_months").delete().eq("year", year).eq("month", month);
+      const { error } = await sdb.from("closed_months").delete().eq("year", year).eq("month", month);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মাস পুনরায় খোলা হয়েছে"); qc.invalidateQueries({ queryKey: ["closed-months"] }); },

@@ -15,6 +15,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { isoDate, bn } from "@/lib/format";
@@ -261,7 +262,7 @@ function EditEntryPage() {
   async function handleDelete() {
     if (!entry) return;
     setBusy(true);
-    const { error } = await supabase.from("sales_entries").delete().eq("id", entry.id);
+    const { error } = await sdb.from("sales_entries").delete().eq("id", entry.id);
     setBusy(false);
     setConfirmDelete(false);
     if (error) { toast.error(error.message); return; }

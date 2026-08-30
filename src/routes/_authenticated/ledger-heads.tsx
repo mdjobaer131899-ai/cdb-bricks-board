@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -49,7 +50,7 @@ function LedgerHeadsPage() {
   const headsQ = useQuery({
     queryKey: ["ledger-heads"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("ledger_heads").select("*").order("kind").order("name");
+      const { data, error } = await sdb.from("ledger_heads").select("*").order("kind").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -90,10 +91,10 @@ function LedgerHeadsPage() {
       if (!f.name.trim()) throw new Error("খাতের নাম দিন");
       const payload = { name: f.name.trim(), kind: f.kind, unit: f.unit.trim() || null, note: f.note || null, is_active: f.is_active };
       if (headDlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("ledger_heads").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("ledger_heads").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("ledger_heads").insert(payload);
+        const { error } = await sdb.from("ledger_heads").insert(payload);
         if (error) throw error;
       }
     },
@@ -107,7 +108,7 @@ function LedgerHeadsPage() {
 
   const delHead = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("ledger_heads").delete().eq("id", id);
+      const { error } = await sdb.from("ledger_heads").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["ledger-heads"] }); },
@@ -132,11 +133,11 @@ function LedgerHeadsPage() {
         note: f.note || null,
       };
       if (entryDlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("ledger_head_entries").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("ledger_head_entries").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
         if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-        const { error } = await supabase.from("ledger_head_entries").insert({ ...payload, created_by: me.user.id });
+        const { error } = await sdb.from("ledger_head_entries").insert({ ...payload, created_by: me.user.id });
         if (error) throw error;
       }
     },
@@ -150,7 +151,7 @@ function LedgerHeadsPage() {
 
   const delEntry = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("ledger_head_entries").delete().eq("id", id);
+      const { error } = await sdb.from("ledger_head_entries").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["ledger-head-entries"] }); },

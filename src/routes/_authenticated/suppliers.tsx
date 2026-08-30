@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -51,7 +52,7 @@ function SuppliersPage() {
   const suppliersQ = useQuery({
     queryKey: ["suppliers"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("suppliers").select("*").order("name");
+      const { data, error } = await sdb.from("suppliers").select("*").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -60,7 +61,7 @@ function SuppliersPage() {
   const purchasesQ = useQuery({
     queryKey: ["raw-purchases-by-supplier"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("raw_material_purchases").select("supplier_id,total_amount");
+      const { data, error } = await sdb.from("raw_material_purchases").select("supplier_id,total_amount");
       if (error) throw error;
       return data ?? [];
     },
@@ -69,7 +70,7 @@ function SuppliersPage() {
   const paymentsQ = useQuery({
     queryKey: ["supplier-payments"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("supplier_payments").select("*").order("payment_date", { ascending: false });
+      const { data, error } = await sdb.from("supplier_payments").select("*").order("payment_date", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -103,10 +104,10 @@ function SuppliersPage() {
         note: f.note || null,
       };
       if (dialog.mode === "edit" && f.id) {
-        const { error } = await supabase.from("suppliers").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("suppliers").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("suppliers").insert(payload);
+        const { error } = await sdb.from("suppliers").insert(payload);
         if (error) throw error;
       }
     },
@@ -123,7 +124,7 @@ function SuppliersPage() {
       const amt = Number(payDialog.amount);
       if (!payDialog.supplierId) throw new Error("সরবরাহকারী নির্বাচন করুন");
       if (!(amt > 0)) throw new Error("পরিমাণ লিখুন");
-      const { error } = await supabase.from("supplier_payments").insert({
+      const { error } = await sdb.from("supplier_payments").insert({
         supplier_id: payDialog.supplierId,
         amount: amt,
         payment_date: payDialog.date,
@@ -142,7 +143,7 @@ function SuppliersPage() {
 
   const delSupplier = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("suppliers").delete().eq("id", id);
+      const { error } = await sdb.from("suppliers").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["suppliers"] }); },

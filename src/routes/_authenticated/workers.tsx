@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -62,7 +63,7 @@ function WorkersPage() {
   const workersQ = useQuery({
     queryKey: ["workers"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("workers").select("*").order("name");
+      const { data, error } = await sdb.from("workers").select("*").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -71,7 +72,7 @@ function WorkersPage() {
   const payQ = useQuery({
     queryKey: ["worker-payments"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("worker_payments").select("*").order("payment_date", { ascending: false });
+      const { data, error } = await sdb.from("worker_payments").select("*").order("payment_date", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -107,7 +108,7 @@ function WorkersPage() {
 
   const delWorker = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("workers").delete().eq("id", id);
+      const { error } = await sdb.from("workers").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["workers"] }); },
@@ -128,10 +129,10 @@ function WorkersPage() {
         active: f.active,
       };
       if (workerDialog.mode === "edit" && f.id) {
-        const { error } = await supabase.from("workers").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("workers").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("workers").insert(payload);
+        const { error } = await sdb.from("workers").insert(payload);
         if (error) throw error;
       }
     },
@@ -149,7 +150,7 @@ function WorkersPage() {
       if (!payDialog.workerId) throw new Error("শ্রমিক নির্বাচন করুন");
       if (!(amt > 0)) throw new Error("পরিমাণ লিখুন");
       if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-      const { error } = await supabase.from("worker_payments").insert({
+      const { error } = await sdb.from("worker_payments").insert({
         worker_id: payDialog.workerId,
         amount: amt,
         payment_date: payDialog.date,

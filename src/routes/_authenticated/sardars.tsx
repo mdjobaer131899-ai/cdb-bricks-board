@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -48,7 +49,7 @@ function SardarsPage() {
   const groupsQ = useQuery({
     queryKey: ["sardar-groups"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("sardar_groups").select("*").order("name");
+      const { data, error } = await sdb.from("sardar_groups").select("*").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -57,7 +58,7 @@ function SardarsPage() {
   const sardarsQ = useQuery({
     queryKey: ["sardars"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("sardars").select("*").order("name");
+      const { data, error } = await sdb.from("sardars").select("*").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -66,7 +67,7 @@ function SardarsPage() {
   const kachaQ = useQuery({
     queryKey: ["kacha-by-sardar"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("kacha_brick_entries").select("sardar_id,quantity,amount,entry_type");
+      const { data, error } = await sdb.from("kacha_brick_entries").select("sardar_id,quantity,amount,entry_type");
       if (error) throw error;
       return data ?? [];
     },
@@ -108,10 +109,10 @@ function SardarsPage() {
         is_active: f.is_active,
       };
       if (dlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("sardars").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("sardars").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("sardars").insert(payload);
+        const { error } = await sdb.from("sardars").insert(payload);
         if (error) throw error;
       }
     },
@@ -125,7 +126,7 @@ function SardarsPage() {
 
   const delSardar = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("sardars").delete().eq("id", id);
+      const { error } = await sdb.from("sardars").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["sardars"] }); },
@@ -138,10 +139,10 @@ function SardarsPage() {
       if (!f.name.trim()) throw new Error("গ্রুপের নাম দিন");
       const payload = { name: f.name.trim(), note: f.note || null };
       if (gDlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("sardar_groups").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("sardar_groups").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("sardar_groups").insert(payload);
+        const { error } = await sdb.from("sardar_groups").insert(payload);
         if (error) throw error;
       }
     },
@@ -155,7 +156,7 @@ function SardarsPage() {
 
   const delGroup = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("sardar_groups").delete().eq("id", id);
+      const { error } = await sdb.from("sardar_groups").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["sardar-groups"] }); },

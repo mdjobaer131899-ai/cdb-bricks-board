@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/accounts")({
@@ -17,7 +18,7 @@ function AccountsPage() {
   const tbQ = useQuery({
     queryKey: ["trial-balance"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("trial_balance").select("*");
+      const { data, error } = await sdb.from("trial_balance").select("*");
       if (error) throw error;
       return data ?? [];
     },
@@ -26,7 +27,7 @@ function AccountsPage() {
   const plQ = useQuery({
     queryKey: ["profit-loss"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profit_loss_summary").select("*").single();
+      const { data, error } = await sdb.from("profit_loss_summary").select("*").single();
       if (error) throw error;
       return data;
     },

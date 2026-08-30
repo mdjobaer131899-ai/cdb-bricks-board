@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { fetchAllCustomers, fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, isoDate } from "@/lib/format";
@@ -178,7 +179,7 @@ function NewEntryPage() {
     const finalQuantity = isOthers ? 0 : Number(quantity);
     const finalTotal = isAdmin && !advanceFlag ? finalQuantity * finalUnitPrice : 0;
 
-    const { error } = await supabase.from("sales_entries").insert({
+    const { error } = await sdb.from("sales_entries").insert({
       challan_no: challanNo.trim(),
       customer_id: customerId,
       contract_id: isAdmin ? (contractId || null) : null,

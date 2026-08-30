@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { ArrowLeft, Printer, Share2, Loader2, Pencil, Download, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { InvoiceDocument, type InvoiceData } from "@/components/invoice-document";
 import { shareNodeAsImage, downloadNodeAsImage, printNode } from "@/lib/share-invoice";
@@ -45,7 +46,7 @@ function ChallanDetailPage() {
     queryKey: ["challan-detail-manager", entryQ.data?.created_by],
     enabled: !!entryQ.data,
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name").eq("id", entryQ.data!.created_by).maybeSingle();
+      const { data } = await sdb.from("profiles").select("id, full_name").eq("id", entryQ.data!.created_by).maybeSingle();
       return data?.full_name ?? "";
     },
   });
