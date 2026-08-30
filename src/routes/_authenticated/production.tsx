@@ -37,7 +37,7 @@ function ProductionPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("production_entries")
-        .select("id, production_date, brick_type_id, quantity, notes, created_at, brick_type:brick_types(name)")
+        .select("id, production_date, brick_type_id, quantity, notes, created_at, total_cost, cost_per_brick, brick_type:brick_types(name)")
         .order("production_date", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(300);
@@ -151,6 +151,8 @@ function ProductionPage() {
                     <TableHead>তারিখ</TableHead>
                     <TableHead>ইটের ধরন</TableHead>
                     <TableHead className="text-right">পরিমাণ</TableHead>
+                    <TableHead className="text-right">মোট খরচ</TableHead>
+                    <TableHead className="text-right">প্রতি ইট</TableHead>
                     <TableHead>মন্তব্য</TableHead>
                     <TableHead className="text-right">অ্যাকশন</TableHead>
                   </TableRow>
@@ -161,6 +163,8 @@ function ProductionPage() {
                       <TableCell className="text-xs">{bnDate(r.production_date)}</TableCell>
                       <TableCell>{r.brick_type?.name ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums font-semibold">{bn(r.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums">৳ {bn(Math.round(Number(r.total_cost ?? 0)))}</TableCell>
+                      <TableCell className="text-right tabular-nums text-primary">৳ {Number(r.cost_per_brick ?? 0).toFixed(2)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{r.notes ?? "—"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
