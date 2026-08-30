@@ -104,6 +104,92 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_accounts: {
+        Row: {
+          account_name: string | null
+          account_no: string | null
+          bank_name: string
+          branch: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          note: string | null
+          opening_balance: number
+          updated_at: string
+        }
+        Insert: {
+          account_name?: string | null
+          account_no?: string | null
+          bank_name: string
+          branch?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          note?: string | null
+          opening_balance?: number
+          updated_at?: string
+        }
+        Update: {
+          account_name?: string | null
+          account_no?: string | null
+          bank_name?: string
+          branch?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          note?: string | null
+          opening_balance?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      bank_transactions: {
+        Row: {
+          amount: number
+          bank_account_id: string
+          created_at: string
+          created_by: string
+          direction: string
+          id: string
+          method: string | null
+          note: string | null
+          txn_date: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          bank_account_id: string
+          created_at?: string
+          created_by?: string
+          direction: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          txn_date?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          bank_account_id?: string
+          created_at?: string
+          created_by?: string
+          direction?: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          txn_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_transactions_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brick_types: {
         Row: {
           created_at: string
@@ -380,6 +466,70 @@ export type Database = {
         }
         Relationships: []
       }
+      deliveries: {
+        Row: {
+          created_at: string
+          created_by: string
+          customer_id: string | null
+          delivery_date: string
+          driver_name: string | null
+          id: string
+          note: string | null
+          order_id: string | null
+          quantity: number
+          updated_at: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          customer_id?: string | null
+          delivery_date?: string
+          driver_name?: string | null
+          id?: string
+          note?: string | null
+          order_id?: string | null
+          quantity?: number
+          updated_at?: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          customer_id?: string | null
+          delivery_date?: string
+          driver_name?: string | null
+          id?: string
+          note?: string | null
+          order_id?: string | null
+          quantity?: number
+          updated_at?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deliveries_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount: number
@@ -510,6 +660,212 @@ export type Database = {
             columns: ["entry_id"]
             isOneToOne: false
             referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kacha_brick_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          entry_type: string
+          id: string
+          note: string | null
+          quantity: number
+          rate: number
+          sardar_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          note?: string | null
+          quantity?: number
+          rate?: number
+          sardar_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          note?: string | null
+          quantity?: number
+          rate?: number
+          sardar_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kacha_brick_entries_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ledger_head_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          entry_date: string
+          head_id: string
+          id: string
+          note: string | null
+          party_name: string | null
+          quantity: number | null
+          rate: number | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          entry_date?: string
+          head_id: string
+          id?: string
+          note?: string | null
+          party_name?: string | null
+          quantity?: number | null
+          rate?: number | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          entry_date?: string
+          head_id?: string
+          id?: string
+          note?: string | null
+          party_name?: string | null
+          quantity?: number | null
+          rate?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_head_entries_head_id_fkey"
+            columns: ["head_id"]
+            isOneToOne: false
+            referencedRelation: "ledger_heads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ledger_heads: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          kind: string
+          name: string
+          note: string | null
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind: string
+          name: string
+          note?: string | null
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name?: string
+          note?: string | null
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      orders: {
+        Row: {
+          advance: number
+          brick_type_id: string | null
+          created_at: string
+          created_by: string
+          customer_id: string
+          delivery_date: string | null
+          id: string
+          note: string | null
+          order_date: string
+          order_no: string
+          quantity: number
+          rate: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          advance?: number
+          brick_type_id?: string | null
+          created_at?: string
+          created_by?: string
+          customer_id: string
+          delivery_date?: string | null
+          id?: string
+          note?: string | null
+          order_date?: string
+          order_no: string
+          quantity?: number
+          rate?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          advance?: number
+          brick_type_id?: string | null
+          created_at?: string
+          created_by?: string
+          customer_id?: string
+          delivery_date?: string | null
+          id?: string
+          note?: string | null
+          order_date?: string
+          order_no?: string
+          quantity?: number
+          rate?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "brick_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "current_stock"
+            referencedColumns: ["brick_type_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
         ]
@@ -796,6 +1152,77 @@ export type Database = {
           },
         ]
       }
+      sardar_groups: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          note: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          note?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          note?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sardars: {
+        Row: {
+          address: string | null
+          created_at: string
+          group_id: string | null
+          id: string
+          is_active: boolean
+          name: string
+          note: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          note?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          group_id?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          note?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sardars_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seasons: {
         Row: {
           created_at: string
@@ -831,6 +1258,54 @@ export type Database = {
           note?: string | null
           start_date?: string
           target_production?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      staff_departments: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          note: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          note?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          note?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      staff_designations: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          note: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          note?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          note?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -953,6 +1428,63 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      transfers: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          from_bank_id: string | null
+          from_type: string
+          id: string
+          note: string | null
+          to_bank_id: string | null
+          to_type: string
+          transfer_date: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          from_bank_id?: string | null
+          from_type: string
+          id?: string
+          note?: string | null
+          to_bank_id?: string | null
+          to_type: string
+          transfer_date?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          from_bank_id?: string | null
+          from_type?: string
+          id?: string
+          note?: string | null
+          to_bank_id?: string | null
+          to_type?: string
+          transfer_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfers_from_bank_id_fkey"
+            columns: ["from_bank_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfers_to_bank_id_fkey"
+            columns: ["to_bank_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -1142,6 +1674,8 @@ export type Database = {
           active: boolean
           created_at: string
           daily_wage: number
+          department_id: string | null
+          designation_id: string | null
           id: string
           join_date: string | null
           monthly_salary: number
@@ -1155,6 +1689,8 @@ export type Database = {
           active?: boolean
           created_at?: string
           daily_wage?: number
+          department_id?: string | null
+          designation_id?: string | null
           id?: string
           join_date?: string | null
           monthly_salary?: number
@@ -1168,6 +1704,8 @@ export type Database = {
           active?: boolean
           created_at?: string
           daily_wage?: number
+          department_id?: string | null
+          designation_id?: string | null
           id?: string
           join_date?: string | null
           monthly_salary?: number
@@ -1177,7 +1715,22 @@ export type Database = {
           role?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workers_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "staff_departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workers_designation_id_fkey"
+            columns: ["designation_id"]
+            isOneToOne: false
+            referencedRelation: "staff_designations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
