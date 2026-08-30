@@ -37,12 +37,20 @@ function activeToolLabel(m: UIMessage): string | null {
   return null;
 }
 
+export const OPEN_AI_CHAT_EVENT = "cdb:open-ai-chat";
+
 export function AiAssistantFab() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener(OPEN_AI_CHAT_EVENT, handler);
+    return () => window.removeEventListener(OPEN_AI_CHAT_EVENT, handler);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setToken(data.session?.access_token ?? null));
