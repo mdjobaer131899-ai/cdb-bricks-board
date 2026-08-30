@@ -719,6 +719,13 @@ export type Database = {
             foreignKeyName: "kacha_brick_entries_sardar_id_fkey"
             columns: ["sardar_id"]
             isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "kacha_brick_entries_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
             referencedRelation: "sardars"
             referencedColumns: ["id"]
           },
@@ -1195,6 +1202,182 @@ export type Database = {
         }
         Relationships: []
       }
+      sardar_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          method: string | null
+          note: string | null
+          payment_date: string
+          payment_type: string
+          sardar_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+          payment_type?: string
+          sardar_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+          payment_type?: string
+          sardar_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sardar_payments_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "sardar_payments_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sardar_rates: {
+        Row: {
+          category_id: string
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          note: string | null
+          rate: number
+          sardar_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          note?: string | null
+          rate: number
+          sardar_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          note?: string | null
+          rate?: number
+          sardar_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sardar_rates_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "work_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sardar_rates_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "sardar_rates_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sardar_work_entries: {
+        Row: {
+          amount: number
+          category_id: string
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          note: string | null
+          quantity: number
+          rate: number
+          sardar_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          category_id: string
+          created_at?: string
+          created_by: string
+          entry_date?: string
+          id?: string
+          note?: string | null
+          quantity: number
+          rate: number
+          sardar_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string
+          created_at?: string
+          created_by?: string
+          entry_date?: string
+          id?: string
+          note?: string | null
+          quantity?: number
+          rate?: number
+          sardar_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sardar_work_entries_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "work_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sardar_work_entries_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "sardar_work_entries_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sardars: {
         Row: {
           address: string | null
@@ -1600,6 +1783,42 @@ export type Database = {
         }
         Relationships: []
       }
+      work_categories: {
+        Row: {
+          account_code: string
+          code: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          account_code?: string
+          code: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          account_code?: string
+          code?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       worker_attendance: {
         Row: {
           advance_paid: number
@@ -1847,6 +2066,18 @@ export type Database = {
         }
         Relationships: []
       }
+      sardar_balances: {
+        Row: {
+          balance: number | null
+          name: string | null
+          sardar_id: string | null
+          total_advance: number | null
+          total_due: number | null
+          total_paid: number | null
+          total_quantity: number | null
+        }
+        Relationships: []
+      }
       trial_balance: {
         Row: {
           account_type: Database["public"]["Enums"]["account_type"] | null
@@ -1863,6 +2094,10 @@ export type Database = {
     Functions: {
       acc: { Args: { _code: string }; Returns: string }
       acc_for_method: { Args: { _method: string }; Returns: string }
+      current_sardar_rate: {
+        Args: { _category_id: string; _on_date?: string; _sardar_id: string }
+        Returns: number
+      }
       expense_account_for: { Args: { _category: string }; Returns: string }
       expire_old_contracts: { Args: never; Returns: undefined }
       generate_contract_no: {
