@@ -26,6 +26,7 @@ export function AppHeader() {
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { toggleSidebar } = useSidebar();
 
   async function handleSignOut() {
     await qc.cancelQueries();
