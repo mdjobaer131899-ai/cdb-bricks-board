@@ -13,6 +13,7 @@ import { RecentSalesTable } from "@/components/recent-sales-table";
 import { fetchSales, type SaleRow } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { isoDate } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/challans/")({
@@ -45,7 +46,7 @@ function ChallansPage() {
   async function confirmDelete() {
     if (!pendingDelete) return;
     setBusy(true);
-    const { error } = await supabase.from("sales_entries").delete().eq("id", pendingDelete.id);
+    const { error } = await sdb.from("sales_entries").delete().eq("id", pendingDelete.id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success(`চালান ${pendingDelete.challan_no} মুছে ফেলা হয়েছে`);

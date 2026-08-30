@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { bn, bnDate, isoDate } from "@/lib/format";
@@ -47,7 +48,7 @@ function ProductionPage() {
 
   const delMut = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("production_entries").delete().eq("id", id);
+      const { error } = await sdb.from("production_entries").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -63,7 +64,7 @@ function ProductionPage() {
     mutationFn: async (r: EditRow) => {
       const qty = Number(r.quantity);
       if (!(qty > 0)) throw new Error("পরিমাণ লিখুন");
-      const { error } = await supabase.from("production_entries").update({
+      const { error } = await sdb.from("production_entries").update({
         production_date: r.production_date,
         brick_type_id: r.brick_type_id,
         quantity: qty,
@@ -233,7 +234,7 @@ function NewProductionDialog({ bricks, userId, onClose, onSaved }: { bricks: Arr
     e.preventDefault();
     if (!brickId || !qty || !userId) { toast.error("সব ঘর পূরণ করুন"); return; }
     setBusy(true);
-    const { error } = await supabase.from("production_entries").insert({
+    const { error } = await sdb.from("production_entries").insert({
       production_date: date,
       brick_type_id: brickId,
       quantity: Number(qty),

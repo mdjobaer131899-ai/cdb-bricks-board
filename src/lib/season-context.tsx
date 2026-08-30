@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { setSeasonRange } from "@/lib/season-db";
 
 export type SeasonRow = {
   id: string;
@@ -89,6 +90,10 @@ export function SeasonProvider({ children }: { children: React.ReactNode }) {
       loading: isLoading,
     };
   }, [seasons, seasonId, isLoading]);
+
+  useEffect(() => {
+    setSeasonRange(value.season ? { from: value.from, to: value.to } : null);
+  }, [value.season, value.from, value.to]);
 
   return <SeasonContext.Provider value={value}>{children}</SeasonContext.Provider>;
 }

@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 
 async function fetchCashBalance() {
   const [colRes, expRes] = await Promise.all([
-    supabase.from("collections").select("amount").is("contract_id", null),
-    supabase.from("expenses").select("amount"),
+    sdb.from("collections").select("amount").is("contract_id", null),
+    sdb.from("expenses").select("amount"),
   ]);
   if (colRes.error) throw colRes.error;
   if (expRes.error) throw expRes.error;

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn } from "@/lib/format";
 
 interface CustomerAgg { id: string; name: string; amount: number; }
@@ -26,8 +27,8 @@ async function fetchTopCustomers(): Promise<CustomerAgg[]> {
 
 async function fetchTopDues(): Promise<CustomerAgg[]> {
   const [salesRes, colRes] = await Promise.all([
-    supabase.from("sales_entries").select("total_amount, customer:customers(id, name)").eq("status", "approved"),
-    supabase.from("collections").select("amount, customer_id").is("contract_id", null),
+    sdb.from("sales_entries").select("total_amount, customer:customers(id, name)").eq("status", "approved"),
+    sdb.from("collections").select("amount, customer_id").is("contract_id", null),
   ]);
   const sales = new Map<string, CustomerAgg>();
   for (const r of (salesRes.data ?? []) as Array<{ total_amount: number; customer: { id: string; name: string } | null }>) {

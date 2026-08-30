@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -50,7 +51,7 @@ function ListCard({
   const listQ = useQuery({
     queryKey: [queryKey],
     queryFn: async () => {
-      const { data, error } = await supabase.from(table).select("*").order("name");
+      const { data, error } = await sdb.from(table).select("*").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -59,7 +60,7 @@ function ListCard({
   const workersQ = useQuery({
     queryKey: ["workers-assign"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("workers").select("id,department_id,designation_id");
+      const { data, error } = await sdb.from("workers").select("id,department_id,designation_id");
       if (error) throw error;
       return data ?? [];
     },
@@ -71,10 +72,10 @@ function ListCard({
       if (!f.name.trim()) throw new Error("নাম দিন");
       const payload = { name: f.name.trim(), note: f.note || null };
       if (dlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from(table).update(payload).eq("id", f.id);
+        const { error } = await sdb.from(table).update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from(table).insert(payload);
+        const { error } = await sdb.from(table).insert(payload);
         if (error) throw error;
       }
     },
@@ -88,7 +89,7 @@ function ListCard({
 
   const del = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from(table).delete().eq("id", id);
+      const { error } = await sdb.from(table).delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: [queryKey] }); },

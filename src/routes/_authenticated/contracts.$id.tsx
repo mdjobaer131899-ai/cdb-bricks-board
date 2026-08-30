@@ -14,6 +14,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate } from "@/lib/format";
 import { deleteContract } from "@/lib/contracts.functions";
@@ -28,10 +29,10 @@ export const Route = createFileRoute("/_authenticated/contracts/$id")({
 
 async function fetchContract(id: string) {
   const [contractRes, summaryRes, paymentsRes, salesRes] = await Promise.all([
-    supabase.from("contracts").select("*, customer:customers(id, name, phone, address)").eq("id", id).single(),
-    supabase.from("contract_summary").select("*").eq("id", id).maybeSingle(),
-    supabase.from("contract_payments").select("*").eq("contract_id", id).order("payment_date", { ascending: false }),
-    supabase.from("sales_entries").select("id, challan_no, sale_date, quantity, unit_price, total_amount, status").eq("contract_id", id).order("sale_date", { ascending: false }),
+    sdb.from("contracts").select("*, customer:customers(id, name, phone, address)").eq("id", id).single(),
+    sdb.from("contract_summary").select("*").eq("id", id).maybeSingle(),
+    sdb.from("contract_payments").select("*").eq("contract_id", id).order("payment_date", { ascending: false }),
+    sdb.from("sales_entries").select("id, challan_no, sale_date, quantity, unit_price, total_amount, status").eq("contract_id", id).order("sale_date", { ascending: false }),
   ]);
   if (contractRes.error) throw contractRes.error;
   return {

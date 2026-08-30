@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate } from "@/lib/format";
 import { createCollection, deleteCollection } from "@/lib/collections.functions";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -107,7 +108,7 @@ async function fetchCashLedger(): Promise<CashLedgerRow[]> {
 }
 
 async function fetchCustomers() {
-  const { data, error } = await supabase.from("customers").select("id, name").order("name");
+  const { data, error } = await sdb.from("customers").select("id, name").order("name");
   if (error) throw error;
   return data ?? [];
 }

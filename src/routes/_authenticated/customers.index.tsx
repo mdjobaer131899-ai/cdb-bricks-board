@@ -15,6 +15,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { fetchAllCustomers } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { bnDate } from "@/lib/format";
@@ -57,7 +58,7 @@ function CustomersPage() {
   async function handleDelete() {
     if (!deleting) return;
     setBusy(true);
-    const { error } = await supabase.from("customers").delete().eq("id", deleting.id);
+    const { error } = await sdb.from("customers").delete().eq("id", deleting.id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success("গ্রাহক মুছে ফেলা হয়েছে");
@@ -199,8 +200,8 @@ function CustomerForm({ customer, onDone }: { customer?: Customer; onDone: () =>
       notes: notes || null,
     };
     const { error } = isEdit
-      ? await supabase.from("customers").update(payload).eq("id", customer!.id)
-      : await supabase.from("customers").insert({ ...payload, created_by: me?.user.id ?? null });
+      ? await sdb.from("customers").update(payload).eq("id", customer!.id)
+      : await sdb.from("customers").insert({ ...payload, created_by: me?.user.id ?? null });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     toast.success(isEdit ? "গ্রাহক আপডেট হয়েছে" : "গ্রাহক যুক্ত হয়েছে");

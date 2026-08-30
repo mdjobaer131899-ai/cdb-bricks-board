@@ -5,6 +5,7 @@ import { Factory, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/reports/production-cost")({
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/_authenticated/reports/production-cost")(
 function ProductionCostPage() {
   const prodQ = useQuery({
     queryKey: ["production-cost"],
-    queryFn: async () => (await supabase.from("production_entries").select("*").order("production_date", { ascending: false }).limit(365)).data ?? [],
+    queryFn: async () => (await sdb.from("production_entries").select("*").order("production_date", { ascending: false }).limit(365)).data ?? [],
   });
 
   const monthly = useMemo(() => {

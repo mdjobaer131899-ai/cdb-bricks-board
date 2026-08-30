@@ -18,6 +18,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, isoDate } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
 import { createExpense, deleteExpense } from "@/lib/expenses.functions";
@@ -86,7 +87,7 @@ async function fetchTodayCashBox(todayIso: string) {
 }
 
 async function fetchCustomers() {
-  const { data, error } = await supabase.from("customers").select("id, name").order("name");
+  const { data, error } = await sdb.from("customers").select("id, name").order("name");
   if (error) throw error;
   return data ?? [];
 }
@@ -406,7 +407,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     queryKey: ["workers-active-select"],
     enabled: open && category === "শ্রমিক বেতন",
     queryFn: async () => {
-      const { data } = await supabase.from("workers").select("id, name").eq("active", true).order("name");
+      const { data } = await sdb.from("workers").select("id, name").eq("active", true).order("name");
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
   });
@@ -414,7 +415,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     queryKey: ["materials-active-select"],
     enabled: open && category === "কাঁচামাল কেনা",
     queryFn: async () => {
-      const { data } = await supabase.from("raw_materials").select("id, name").eq("active", true).order("name");
+      const { data } = await sdb.from("raw_materials").select("id, name").eq("active", true).order("name");
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
   });

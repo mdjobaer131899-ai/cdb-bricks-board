@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -53,7 +54,7 @@ function BankPage() {
   const acctsQ = useQuery({
     queryKey: ["bank-accounts"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("bank_accounts").select("*").order("bank_name");
+      const { data, error } = await sdb.from("bank_accounts").select("*").order("bank_name");
       if (error) throw error;
       return data ?? [];
     },
@@ -62,7 +63,7 @@ function BankPage() {
   const txnsQ = useQuery({
     queryKey: ["bank-transactions"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("bank_transactions").select("*").order("txn_date", { ascending: false }).limit(300);
+      const { data, error } = await sdb.from("bank_transactions").select("*").order("txn_date", { ascending: false }).limit(300);
       if (error) throw error;
       return data ?? [];
     },
@@ -71,7 +72,7 @@ function BankPage() {
   const tfQ = useQuery({
     queryKey: ["transfers"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("transfers").select("*").order("transfer_date", { ascending: false }).limit(200);
+      const { data, error } = await sdb.from("transfers").select("*").order("transfer_date", { ascending: false }).limit(200);
       if (error) throw error;
       return data ?? [];
     },
@@ -106,10 +107,10 @@ function BankPage() {
         note: f.note || null,
       };
       if (aDlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("bank_accounts").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("bank_accounts").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("bank_accounts").insert(payload);
+        const { error } = await sdb.from("bank_accounts").insert(payload);
         if (error) throw error;
       }
     },
@@ -123,7 +124,7 @@ function BankPage() {
 
   const delAcct = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("bank_accounts").delete().eq("id", id);
+      const { error } = await sdb.from("bank_accounts").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["bank-accounts"] }); },
@@ -145,11 +146,11 @@ function BankPage() {
         note: f.note || null,
       };
       if (tDlg.mode === "edit" && f.id) {
-        const { error } = await supabase.from("bank_transactions").update(payload).eq("id", f.id);
+        const { error } = await sdb.from("bank_transactions").update(payload).eq("id", f.id);
         if (error) throw error;
       } else {
         if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-        const { error } = await supabase.from("bank_transactions").insert({ ...payload, created_by: me.user.id });
+        const { error } = await sdb.from("bank_transactions").insert({ ...payload, created_by: me.user.id });
         if (error) throw error;
       }
     },
@@ -163,7 +164,7 @@ function BankPage() {
 
   const delTxn = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("bank_transactions").delete().eq("id", id);
+      const { error } = await sdb.from("bank_transactions").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["bank-transactions"] }); },
@@ -178,7 +179,7 @@ function BankPage() {
       if (f.from_type === "bank" && f.from_bank_id === NONE) throw new Error("যে ব্যাংক থেকে, তা নির্বাচন করুন");
       if (f.to_type === "bank" && f.to_bank_id === NONE) throw new Error("যে ব্যাংকে, তা নির্বাচন করুন");
       if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-      const { error } = await supabase.from("transfers").insert({
+      const { error } = await sdb.from("transfers").insert({
         transfer_date: f.transfer_date,
         from_type: f.from_type,
         from_bank_id: f.from_type === "bank" ? f.from_bank_id : null,
@@ -200,7 +201,7 @@ function BankPage() {
 
   const delTf = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("transfers").delete().eq("id", id);
+      const { error } = await sdb.from("transfers").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["transfers"] }); },
