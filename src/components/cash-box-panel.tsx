@@ -124,7 +124,7 @@ export function CashBoxPanel() {
             icon={ArrowDownCircle}
             label="মোট ব্যয় (আজ)"
             value={`৳ ${bn(totals.expense)}`}
-            sub={`${bn(today.data?.expenses.length ?? 0)} টি এন্ট্রি`}
+            sub={`${bn(today.data?.outs.length ?? 0)} টি এন্ট্রি (সরদার/শ্রমিক/গাড়িসহ)`}
             loading={today.isLoading}
           />
           <SummaryBox
