@@ -10,9 +10,29 @@ export const bnDate = (d: string | Date) => {
   return date.toLocaleDateString("bn-BD", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+/** বাংলাদেশ সময় (Asia/Dhaka) অনুযায়ী YYYY-MM-DD */
 export const isoDate = (d: Date) => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Dhaka",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+  return parts; // en-CA → YYYY-MM-DD
+};
+
+/** আজকের তারিখ (ঢাকা সময়) */
+export const todayBD = () => isoDate(new Date());
+
+/** ঢাকা সময় অনুযায়ী তারিখ ও সময় */
+export const bnDateTime = (d: string | Date) => {
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleString("bn-BD", {
+    timeZone: "Asia/Dhaka",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
