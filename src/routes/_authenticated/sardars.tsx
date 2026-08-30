@@ -67,27 +67,87 @@ function SardarsPage() {
   const kachaQ = useQuery({
     queryKey: ["kacha-by-sardar"],
     queryFn: async () => {
-      const { data, error } = await sdb.from("kacha_brick_entries").select("sardar_id,quantity,amount,entry_type");
+      const { data, error } = await sdb.from("kacha_brick_entries").select("id,sardar_id,quantity,amount,entry_type,entry_date,note");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const workQ = useQuery({
+    queryKey: ["sardar-work-by-sardar"],
+    queryFn: async () => {
+      const { data, error } = await sdb
+        .from("sardar_work_entries")
+        .select("id,sardar_id,entry_date,quantity,rate,amount,note,category:work_categories(name,unit)")
+        .order("entry_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const payQ = useQuery({
+    queryKey: ["sardar-payments-by-sardar"],
+    queryFn: async () => {
+      const { data, error } = await sdb
+        .from("sardar_payments")
+        .select("id,sardar_id,payment_date,amount,payment_type,method,note")
+        .order("payment_date", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
   });
 
   const stats = useMemo(() => {
-    const m = new Map<string, { qty: number; amount: number }>();
+    const m = new Map<string, { qty: number; kacha: number; work: number; earned: number; paid: number; due: number }>();
+    const get = (id: string) => {
+      let cur = m.get(id);
+      if (!cur) { cur = { qty: 0, kacha: 0, work: 0, earned: 0, paid: 0, due: 0 }; m.set(id, cur); }
+      return cur;
+    };
     (kachaQ.data ?? []).forEach((k: any) => {
       if (!k.sardar_id) return;
-      const cur = m.get(k.sardar_id) ?? { qty: 0, amount: 0 };
+      const cur = get(k.sardar_id);
       if (k.entry_type === "production") {
         cur.qty += Number(k.quantity || 0);
-        cur.amount += Number(k.amount || 0);
+        cur.kacha += Number(k.amount || 0);
       }
-      m.set(k.sardar_id, cur);
     });
+    (workQ.data ?? []).forEach((w: any) => {
+      if (!w.sardar_id) return;
+      get(w.sardar_id).work += Number(w.amount || 0);
+    });
+    (payQ.data ?? []).forEach((p: any) => {
+      if (!p.sardar_id) return;
+      get(p.sardar_id).paid += Number(p.amount || 0);
+    });
+    for (const v of m.values()) {
+      v.earned = v.kacha + v.work;
+      v.due = v.earned - v.paid;
+    }
     return m;
-  }, [kachaQ.data]);
+  }, [kachaQ.data, workQ.data, payQ.data]);
+
+  const [detail, setDetail] = useState<any | null>(null);
+  const detailRows = useMemo(() => {
+    if (!detail) return [] as Array<{ id: string; date: string; label: string; credit: number; debit: number }>;
+    const rows: Array<{ id: string; date: string; label: string; credit: number; debit: number }> = [];
+    (kachaQ.data ?? []).forEach((k: any) => {
+      if (k.sardar_id !== detail.id || k.entry_type !== "production") return;
+      rows.push({ id: `k-${k.id}`, date: k.entry_date, label: `কাঁচা ইট — ${bn(Number(k.quantity || 0))} পিস`, credit: Number(k.amount || 0), debit: 0 });
+    });
+    (workQ.data ?? []).forEach((w: any) => {
+      if (w.sardar_id !== detail.id) return;
+      rows.push({ id: `w-${w.id}`, date: w.entry_date, label: `${w.category?.name ?? "কাজ"} — ${bn(Number(w.quantity || 0))} ${w.category?.unit ?? ""}`, credit: Number(w.amount || 0), debit: 0 });
+    });
+    (payQ.data ?? []).forEach((p: any) => {
+      if (p.sardar_id !== detail.id) return;
+      rows.push({ id: `p-${p.id}`, date: p.payment_date, label: `পেমেন্ট${p.payment_type === "advance" ? " (অগ্রিম)" : ""}${p.method ? ` • ${p.method}` : ""}`, credit: 0, debit: Number(p.amount || 0) });
+    });
+    return rows.sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [detail, kachaQ.data, workQ.data, payQ.data]);
 
   const groupName = (id: string | null) => (id ? (groupsQ.data ?? []).find((g: any) => g.id === id)?.name ?? "—" : "—");
+
 
   const filtered = useMemo(() => {
     const list = sardarsQ.data ?? [];
