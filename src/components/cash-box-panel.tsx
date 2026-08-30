@@ -178,25 +178,25 @@ export function CashBoxPanel() {
                 <Receipt className="h-3.5 w-3.5" />
                 <span className="text-xs font-semibold">আজকের ব্যয় তালিকা</span>
               </div>
-              <Badge variant="outline" className="text-[10px]">{bn(today.data?.expenses.length ?? 0)}</Badge>
+              <Badge variant="outline" className="text-[10px]">{bn(today.data?.outs.length ?? 0)}</Badge>
             </div>
             <ul className="max-h-64 divide-y overflow-y-auto text-sm">
               {today.isLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <li key={i} className="px-3 py-2"><Skeleton className="h-4 w-full" /></li>
                 ))
-              ) : (today.data?.expenses ?? []).length === 0 ? (
+              ) : (today.data?.outs ?? []).length === 0 ? (
                 <li className="px-3 py-6 text-center text-xs text-muted-foreground">আজ কোনো ব্যয় নেই</li>
               ) : (
-                today.data!.expenses.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                today.data!.outs.map((e) => (
+                  <li key={`${e.kind}-${e.id}`} className="flex items-center justify-between gap-2 px-3 py-2">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{e.category}</p>
                       {e.note && <p className="truncate text-[10px] text-muted-foreground">{e.note}</p>}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-destructive whitespace-nowrap">৳ {bn(e.amount)}</span>
-                      {isAdmin && (
+                      {isAdmin && e.deletable && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive">
