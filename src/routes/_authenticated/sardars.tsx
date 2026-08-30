@@ -260,20 +260,26 @@ function SardarsPage() {
                     <TableHead>গ্রুপ</TableHead>
                     <TableHead className="text-right">কাঁচা ইট</TableHead>
                     <TableHead className="text-right">মোট মজুরি</TableHead>
+                    <TableHead className="text-right">নিয়েছে</TableHead>
+                    <TableHead className="text-right">বাকি</TableHead>
                     <TableHead></TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
                     {filtered.map((s: any) => {
-                      const t = stats.get(s.id) ?? { qty: 0, amount: 0 };
+                      const t = stats.get(s.id) ?? { qty: 0, kacha: 0, work: 0, earned: 0, paid: 0, due: 0 };
                       return (
                         <TableRow key={s.id} className={s.is_active ? "" : "opacity-60"}>
                           <TableCell>
-                            <div className="font-medium">{s.name}</div>
+                            <button type="button" className="text-left font-medium text-primary underline-offset-2 hover:underline" onClick={() => setDetail(s)}>
+                              {s.name}
+                            </button>
                             <div className="text-xs text-muted-foreground">{s.phone || "—"}{s.address ? ` • ${s.address}` : ""}</div>
                           </TableCell>
                           <TableCell><Badge variant="outline">{groupName(s.group_id)}</Badge></TableCell>
                           <TableCell className="text-right tabular-nums">{bn(t.qty)}</TableCell>
-                          <TableCell className="text-right tabular-nums">৳ {bn(t.amount)}</TableCell>
+                          <TableCell className="text-right tabular-nums">৳ {bn(t.earned)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-destructive">৳ {bn(t.paid)}</TableCell>
+                          <TableCell className={`text-right font-semibold tabular-nums ${t.due > 0 ? "text-warning" : "text-success"}`}>৳ {bn(t.due)}</TableCell>
                           <TableCell className="text-right">
                             {isAdmin && (
                               <div className="flex justify-end gap-1">
@@ -292,6 +298,7 @@ function SardarsPage() {
                     })}
                   </TableBody>
                 </Table>
+
               )}
             </CardContent>
           </Card>
