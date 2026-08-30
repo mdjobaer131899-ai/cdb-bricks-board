@@ -257,6 +257,7 @@ export type Database = {
           id: string
           method: string | null
           note: string | null
+          order_id: string | null
           payment_date: string
           updated_at: string
         }
@@ -269,6 +270,7 @@ export type Database = {
           id?: string
           method?: string | null
           note?: string | null
+          order_id?: string | null
           payment_date?: string
           updated_at?: string
         }
@@ -281,6 +283,7 @@ export type Database = {
           id?: string
           method?: string | null
           note?: string | null
+          order_id?: string | null
           payment_date?: string
           updated_at?: string
         }
@@ -304,6 +307,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collections_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -804,6 +814,7 @@ export type Database = {
           created_at: string
           created_by: string
           customer_id: string
+          delivered_quantity: number
           delivery_date: string | null
           id: string
           note: string | null
@@ -811,6 +822,7 @@ export type Database = {
           order_no: string
           quantity: number
           rate: number
+          remaining_quantity: number
           status: string
           updated_at: string
         }
@@ -820,6 +832,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           customer_id: string
+          delivered_quantity?: number
           delivery_date?: string | null
           id?: string
           note?: string | null
@@ -827,6 +840,7 @@ export type Database = {
           order_no: string
           quantity?: number
           rate?: number
+          remaining_quantity?: number
           status?: string
           updated_at?: string
         }
@@ -836,6 +850,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           customer_id?: string
+          delivered_quantity?: number
           delivery_date?: string | null
           id?: string
           note?: string | null
@@ -843,6 +858,7 @@ export type Database = {
           order_no?: string
           quantity?: number
           rate?: number
+          remaining_quantity?: number
           status?: string
           updated_at?: string
         }
@@ -1846,6 +1862,8 @@ export type Database = {
     }
     Functions: {
       acc: { Args: { _code: string }; Returns: string }
+      acc_for_method: { Args: { _method: string }; Returns: string }
+      expense_account_for: { Args: { _category: string }; Returns: string }
       expire_old_contracts: { Args: never; Returns: undefined }
       generate_contract_no: {
         Args: { _type: Database["public"]["Enums"]["contract_type"] }
@@ -1862,12 +1880,20 @@ export type Database = {
         }
         Returns: string
       }
+      recompute_contract_advance: {
+        Args: { _contract_id: string }
+        Returns: undefined
+      }
       recompute_contract_delivered: {
         Args: { _contract_id: string }
         Returns: undefined
       }
       recompute_customer_advance: {
         Args: { _customer_id: string }
+        Returns: undefined
+      }
+      recompute_order_progress: {
+        Args: { _order_id: string }
         Returns: undefined
       }
     }
@@ -1883,6 +1909,14 @@ export type Database = {
         | "manual"
         | "opening"
         | "adjustment"
+        | "raw_material"
+        | "labor"
+        | "vehicle"
+        | "sardar"
+        | "bank"
+        | "transfer"
+        | "supplier"
+        | "production"
       sale_status: "pending" | "approved" | "rejected"
       sale_type: "advance" | "regular"
     }
@@ -2023,6 +2057,14 @@ export const Constants = {
         "manual",
         "opening",
         "adjustment",
+        "raw_material",
+        "labor",
+        "vehicle",
+        "sardar",
+        "bank",
+        "transfer",
+        "supplier",
+        "production",
       ],
       sale_status: ["pending", "approved", "rejected"],
       sale_type: ["advance", "regular"],
