@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { FileText, HandCoins, Receipt, UserPlus, Zap, Banknote } from "lucide-react";
+import { FileText, HandCoins, Receipt, UserPlus, Zap, Banknote, Boxes, ArrowDownToLine, Flame, ArrowUpFromLine } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const actions = [
@@ -8,7 +8,12 @@ const actions = [
   { to: "/collections" as const, label: "নতুন কালেকশন", icon: HandCoins, tone: "from-success/15 to-success/5 text-success" },
   { to: "/" as const, label: "নতুন ব্যয়", icon: Receipt, tone: "from-destructive/15 to-destructive/5 text-destructive" },
   { to: "/customers" as const, label: "নতুন গ্রাহক", icon: UserPlus, tone: "from-info/15 to-info/5 text-info" },
+  { to: "/production-steps/kacha" as const, label: "কাঁচা ইট", icon: Boxes, tone: "from-warning/15 to-warning/5 text-warning" },
+  { to: "/production-steps/load" as const, label: "ইট ঢোকানো", icon: ArrowDownToLine, tone: "from-warning/15 to-warning/5 text-warning" },
+  { to: "/production-steps/burn" as const, label: "ইট পোড়ানো", icon: Flame, tone: "from-warning/15 to-warning/5 text-warning" },
+  { to: "/production-steps/unload" as const, label: "বের করা", icon: ArrowUpFromLine, tone: "from-warning/15 to-warning/5 text-warning" },
 ];
+
 
 
 export function QuickActions() {
