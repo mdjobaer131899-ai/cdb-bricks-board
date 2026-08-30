@@ -1,0 +1,459 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { ArrowDownCircle, ArrowUpCircle, Lock, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import { sdb } from "@/lib/season-db";
+import { bn, bnDate, isoDate } from "@/lib/format";
+import { createCollection } from "@/lib/collections.functions";
+import { createExpense } from "@/lib/expenses.functions";
+import {
+  deleteExpenseWithPassword, deleteIncomeWithPassword, updateExpenseEntry, updateIncomeEntry,
+} from "@/lib/cash-book.functions";
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/_authenticated/cash-book")({
+  head: () => ({
+    meta: [
+      { title: "আয়-ব্যায় হিসাব — CDB Bricks" },
+      { name: "description", content: "নগদ আয় ও ব্যয়ের এন্ট্রি, সম্পাদনা এবং এডমিন পাসওয়ার্ড দিয়ে মুছে ফেলা।" },
+      { property: "og:title", content: "আয়-ব্যায় হিসাব — CDB Bricks" },
+      { property: "og:description", content: "নগদ আয় ও ব্যয়ের সম্পূর্ণ হিসাব এক জায়গায়।" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+    links: [{ rel: "canonical", href: "/cash-book" }],
+  }),
+  component: CashBookPage,
+});
+
+const EXPENSE_CATEGORIES = [
+  "লোড খরচ", "আনলোড খরচ", "ইট বহন / ভাড়া", "মাটি কাটা মজুরি", "ইট সাজানো / বের করা",
+  "শ্রমিক বেতন", "শ্রমিক মজুরি", "কাঁচামাল কেনা", "জ্বালানি / কয়লা", "মাটি ক্রয়",
+  "যন্ত্রপাতি / মেরামত", "গাড়ি ভাড়া / জ্বালানি", "অফিস খরচ", "বিদ্যুৎ / পানি",
+  "খাবার / আপ্যায়ন", "ট্যাক্স / ফি", "অন্যান্য",
+];
+
+const METHODS = ["cash", "bkash", "nagad", "bank"];
+
+type IncomeRow = {
+  id: string; amount: number; payment_date: string; method: string | null; note: string | null;
+  customer_id: string; customer: { name: string } | null;
+};
+type ExpenseRow = {
+  id: string; amount: number; expense_date: string; category: string; note: string | null;
+};
+
+async function fetchIncomes(): Promise<IncomeRow[]> {
+  const { data, error } = await sdb
+    .from("collections")
+    .select("id, amount, payment_date, method, note, customer_id, customer:customers(name)")
+    .is("contract_id", null)
+    .order("payment_date", { ascending: false })
+    .limit(300);
+  if (error) throw error;
+  return (data ?? []) as unknown as IncomeRow[];
+}
+
+async function fetchExpenses(): Promise<ExpenseRow[]> {
+  const { data, error } = await sdb
+    .from("expenses")
+    .select("id, amount, expense_date, category, note")
+    .order("expense_date", { ascending: false })
+    .limit(300);
+  if (error) throw error;
+  return (data ?? []) as unknown as ExpenseRow[];
+}
+
+async function fetchCustomers() {
+  const { data, error } = await sdb.from("customers").select("id, name").order("name");
+  if (error) throw error;
+  return (data ?? []) as Array<{ id: string; name: string }>;
+}
+
+function CashBookPage() {
+  const qc = useQueryClient();
+  const incomes = useQuery({ queryKey: ["cash-book", "incomes"], queryFn: fetchIncomes });
+  const expenses = useQuery({ queryKey: ["cash-book", "expenses"], queryFn: fetchExpenses });
+  const customers = useQuery({ queryKey: ["customers-min"], queryFn: fetchCustomers });
+
+  const invalidate = () => {
+    for (const key of [
+      ["cash-book"], ["cash-box"], ["cash-balance-total"], ["dash", "today"], ["dashboard-due"],
+      ["dashboard-month"], ["collections-list"], ["cash-ledger"], ["trial-balance"], ["profit-loss"],
+    ]) qc.invalidateQueries({ queryKey: key });
+  };
+
+  const totals = useMemo(() => {
+    const inc = (incomes.data ?? []).reduce((a, b) => a + Number(b.amount), 0);
+    const exp = (expenses.data ?? []).reduce((a, b) => a + Number(b.amount), 0);
+    return { inc, exp, net: inc - exp };
+  }, [incomes.data, expenses.data]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <Wallet className="h-5 w-5 text-primary" /> আয়-ব্যায়
+          </h1>
+          <p className="text-sm text-muted-foreground">নগদ আয় ও ব্যয় এন্ট্রি — সম্পাদনা ও মুছে ফেলা (এডমিন পাসওয়ার্ড লাগবে)</p>
+        </div>
+        <div className="flex gap-2">
+          <IncomeDialog customers={customers.data ?? []} onDone={invalidate} />
+          <ExpenseDialog onDone={invalidate} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Stat tone="success" icon={ArrowUpCircle} label="মোট আয়" value={totals.inc} />
+        <Stat tone="destructive" icon={ArrowDownCircle} label="মোট ব্যয়" value={totals.exp} />
+        <Stat tone={totals.net >= 0 ? "primary" : "destructive"} icon={Wallet} label="নিট" value={totals.net} />
+      </div>
+
+      <Tabs defaultValue="expense">
+        <TabsList>
+          <TabsTrigger value="expense">ব্যয় তালিকা</TabsTrigger>
+          <TabsTrigger value="income">আয় তালিকা</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="expense">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">ব্যয় এন্ট্রি</CardTitle>
+              <CardDescription>সর্বশেষ ৩০০টি এন্ট্রি (চলতি মৌসুম)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>তারিখ</TableHead>
+                      <TableHead>খাত</TableHead>
+                      <TableHead>নোট</TableHead>
+                      <TableHead className="text-right">টাকা</TableHead>
+                      <TableHead className="text-right">অ্যাকশন</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {expenses.isLoading ? (
+                      <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+                    ) : (expenses.data ?? []).length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">কোনো ব্যয় এন্ট্রি নেই</TableCell></TableRow>
+                    ) : (
+                      expenses.data!.map((e) => (
+                        <TableRow key={e.id}>
+                          <TableCell className="whitespace-nowrap">{bnDate(e.expense_date)}</TableCell>
+                          <TableCell className="font-medium">{e.category}</TableCell>
+                          <TableCell className="max-w-[200px] truncate text-muted-foreground">{e.note ?? "—"}</TableCell>
+                          <TableCell className="text-right font-bold text-destructive whitespace-nowrap">৳ {bn(e.amount)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <ExpenseDialog row={e} onDone={invalidate} />
+                              <DeleteDialog kind="expense" id={e.id} label={`${e.category} — ৳ ${bn(e.amount)}`} onDone={invalidate} />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="income">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">আয় এন্ট্রি</CardTitle>
+              <CardDescription>নগদ আয় (চুক্তি বহির্ভূত)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>তারিখ</TableHead>
+                      <TableHead>গ্রাহক</TableHead>
+                      <TableHead>মাধ্যম</TableHead>
+                      <TableHead className="text-right">টাকা</TableHead>
+                      <TableHead className="text-right">অ্যাকশন</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {incomes.isLoading ? (
+                      <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+                    ) : (incomes.data ?? []).length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">কোনো আয় এন্ট্রি নেই</TableCell></TableRow>
+                    ) : (
+                      incomes.data!.map((i) => (
+                        <TableRow key={i.id}>
+                          <TableCell className="whitespace-nowrap">{bnDate(i.payment_date)}</TableCell>
+                          <TableCell className="font-medium">{i.customer?.name ?? "—"}</TableCell>
+                          <TableCell className="text-muted-foreground">{i.method ?? "—"}</TableCell>
+                          <TableCell className="text-right font-bold text-success whitespace-nowrap">৳ {bn(i.amount)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <IncomeDialog row={i} customers={customers.data ?? []} onDone={invalidate} />
+                              <DeleteDialog kind="income" id={i.id} label={`${i.customer?.name ?? ""} — ৳ ${bn(i.amount)}`} onDone={invalidate} />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function Stat({ tone, icon: Icon, label, value }: {
+  tone: "success" | "destructive" | "primary";
+  icon: React.ComponentType<{ className?: string }>;
+  label: string; value: number;
+}) {
+  const cls = tone === "success" ? "bg-success/10 text-success border-success/30"
+    : tone === "destructive" ? "bg-destructive/10 text-destructive border-destructive/30"
+    : "bg-primary/10 text-primary border-primary/30";
+  return (
+    <div className={`rounded-lg border p-4 ${cls}`}>
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4" />
+        <span className="text-[11px] font-semibold uppercase tracking-wide">{label}</span>
+      </div>
+      <p className="mt-1 text-2xl font-bold">৳ {bn(Math.abs(value))}</p>
+    </div>
+  );
+}
+
+function ExpenseDialog({ row, onDone }: { row?: ExpenseRow; onDone: () => void }) {
+  const editing = !!row;
+  const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState(row?.category ?? "");
+  const [amount, setAmount] = useState(row ? String(row.amount) : "");
+  const [date, setDate] = useState(row?.expense_date ?? isoDate(new Date()));
+  const [note, setNote] = useState(row?.note ?? "");
+
+  const create = useServerFn(createExpense);
+  const update = useServerFn(updateExpenseEntry);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      const amt = Number(amount);
+      if (!category) throw new Error("খাত নির্বাচন করুন");
+      if (!Number.isFinite(amt) || amt <= 0) throw new Error("টাকার পরিমাণ সঠিক নয়");
+      if (editing) {
+        return update({ data: { id: row!.id, category, amount: amt, expense_date: date, note: note || null } });
+      }
+      return create({ data: { category, amount: amt, expense_date: date, note: note || null } });
+    },
+    onSuccess: () => {
+      toast.success(editing ? "ব্যয় হালনাগাদ হয়েছে" : "ব্যয় যোগ হয়েছে");
+      setOpen(false);
+      if (!editing) { setCategory(""); setAmount(""); setNote(""); }
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {editing ? (
+          <Button variant="ghost" size="icon" className="h-7 w-7"><Pencil className="h-3.5 w-3.5" /></Button>
+        ) : (
+          <Button size="sm" variant="destructive" className="gap-1"><Plus className="h-3.5 w-3.5" />ব্যয় যোগ</Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{editing ? "ব্যয় সম্পাদনা" : "নতুন ব্যয় এন্ট্রি"}</DialogTitle>
+          <DialogDescription>নগদ ব্যয়ের হিসাব সাথে সাথে মূল ক্যাশে প্রভাব ফেলবে।</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
+          <div className="space-y-1">
+            <Label>খাত *</Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger><SelectValue placeholder="খাত নির্বাচন করুন" /></SelectTrigger>
+              <SelectContent>
+                {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label>টাকা *</Label>
+              <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
+            </div>
+            <div className="space-y-1">
+              <Label>তারিখ *</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>নোট</Label>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={mut.isPending}>{editing ? "হালনাগাদ" : "সংরক্ষণ"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function IncomeDialog({ row, customers, onDone }: {
+  row?: IncomeRow; customers: Array<{ id: string; name: string }>; onDone: () => void;
+}) {
+  const editing = !!row;
+  const [open, setOpen] = useState(false);
+  const [customerId, setCustomerId] = useState(row?.customer_id ?? "");
+  const [amount, setAmount] = useState(row ? String(row.amount) : "");
+  const [date, setDate] = useState(row?.payment_date ?? isoDate(new Date()));
+  const [method, setMethod] = useState(row?.method ?? "cash");
+  const [note, setNote] = useState(row?.note ?? "");
+
+  const create = useServerFn(createCollection);
+  const update = useServerFn(updateIncomeEntry);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      const amt = Number(amount);
+      if (!customerId) throw new Error("গ্রাহক নির্বাচন করুন");
+      if (!Number.isFinite(amt) || amt <= 0) throw new Error("টাকার পরিমাণ সঠিক নয়");
+      if (editing) {
+        return update({ data: { id: row!.id, customer_id: customerId, amount: amt, payment_date: date, method: method || null, note: note || null } });
+      }
+      return create({ data: { customer_id: customerId, contract_id: null, amount: amt, payment_date: date, method: method || null, note: note || null } });
+    },
+    onSuccess: () => {
+      toast.success(editing ? "আয় হালনাগাদ হয়েছে" : "আয় যোগ হয়েছে");
+      setOpen(false);
+      if (!editing) { setCustomerId(""); setAmount(""); setNote(""); }
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {editing ? (
+          <Button variant="ghost" size="icon" className="h-7 w-7"><Pencil className="h-3.5 w-3.5" /></Button>
+        ) : (
+          <Button size="sm" className="gap-1 bg-success text-success-foreground hover:bg-success/90"><Plus className="h-3.5 w-3.5" />আয় যোগ</Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{editing ? "আয় সম্পাদনা" : "নতুন নগদ আয় এন্ট্রি"}</DialogTitle>
+          <DialogDescription>চুক্তি বহির্ভূত নগদ আয়।</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
+          <div className="space-y-1">
+            <Label>গ্রাহক *</Label>
+            <Select value={customerId} onValueChange={setCustomerId}>
+              <SelectTrigger><SelectValue placeholder="গ্রাহক নির্বাচন করুন" /></SelectTrigger>
+              <SelectContent>
+                {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label>টাকা *</Label>
+              <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
+            </div>
+            <div className="space-y-1">
+              <Label>তারিখ *</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>মাধ্যম</Label>
+            <Select value={method} onValueChange={setMethod}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>নোট</Label>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={mut.isPending}>{editing ? "হালনাগাদ" : "সংরক্ষণ"}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteDialog({ kind, id, label, onDone }: {
+  kind: "income" | "expense"; id: string; label: string; onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const delExp = useServerFn(deleteExpenseWithPassword);
+  const delInc = useServerFn(deleteIncomeWithPassword);
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!password) throw new Error("এডমিন পাসওয়ার্ড দিন");
+      const fn = kind === "expense" ? delExp : delInc;
+      return fn({ data: { id, password } });
+    },
+    onSuccess: () => {
+      toast.success("এন্ট্রি মুছে ফেলা হয়েছে");
+      setOpen(false); setPassword("");
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message || "মুছে ফেলা যায়নি"),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setPassword(""); }}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Lock className="h-4 w-4 text-destructive" />এডমিন পাসওয়ার্ড দিন</DialogTitle>
+          <DialogDescription>{label} — এন্ট্রি স্থায়ীভাবে মুছে যাবে। মূল এডমিনের পাসওয়ার্ড ছাড়া মুছে ফেলা যাবে না।</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
+          <div className="space-y-1">
+            <Label>পাসওয়ার্ড *</Label>
+            <Input type="password" value={password} autoComplete="current-password"
+              onChange={(e) => setPassword(e.target.value)} placeholder="এডমিন পাসওয়ার্ড" />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>বাতিল</Button>
+            <Button type="submit" variant="destructive" disabled={mut.isPending}>মুছুন</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

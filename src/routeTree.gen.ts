@@ -33,6 +33,7 @@ import { Route as AuthenticatedInventoryRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedContractsRouteImport } from './routes/_authenticated/contracts'
 import { Route as AuthenticatedChallansRouteImport } from './routes/_authenticated/challans'
+import { Route as AuthenticatedCashBookRouteImport } from './routes/_authenticated/cash-book'
 import { Route as AuthenticatedBankRouteImport } from './routes/_authenticated/bank'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
@@ -177,6 +178,11 @@ const AuthenticatedChallansRoute = AuthenticatedChallansRouteImport.update({
   path: '/challans',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCashBookRoute = AuthenticatedCashBookRouteImport.update({
+  id: '/cash-book',
+  path: '/cash-book',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedBankRoute = AuthenticatedBankRouteImport.update({
   id: '/bank',
   path: '/bank',
@@ -300,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/bank': typeof AuthenticatedBankRoute
+  '/cash-book': typeof AuthenticatedCashBookRoute
   '/challans': typeof AuthenticatedChallansRouteWithChildren
   '/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
@@ -344,6 +351,7 @@ export interface FileRoutesByTo {
   '/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/bank': typeof AuthenticatedBankRoute
+  '/cash-book': typeof AuthenticatedCashBookRoute
   '/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/kacha-bricks': typeof AuthenticatedKachaBricksRoute
   '/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
@@ -388,6 +396,7 @@ export interface FileRoutesById {
   '/_authenticated/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRoute
   '/_authenticated/bank': typeof AuthenticatedBankRoute
+  '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/challans': typeof AuthenticatedChallansRouteWithChildren
   '/_authenticated/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
@@ -436,6 +445,7 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/approvals'
     | '/bank'
+    | '/cash-book'
     | '/challans'
     | '/contracts'
     | '/customers'
@@ -480,6 +490,7 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/approvals'
     | '/bank'
+    | '/cash-book'
     | '/inventory'
     | '/kacha-bricks'
     | '/ledger-heads'
@@ -523,6 +534,7 @@ export interface FileRouteTypes {
     | '/_authenticated/accounts'
     | '/_authenticated/approvals'
     | '/_authenticated/bank'
+    | '/_authenticated/cash-book'
     | '/_authenticated/challans'
     | '/_authenticated/contracts'
     | '/_authenticated/customers'
@@ -738,6 +750,13 @@ declare module '@tanstack/react-router' {
       path: '/challans'
       fullPath: '/challans'
       preLoaderRoute: typeof AuthenticatedChallansRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/cash-book': {
+      id: '/_authenticated/cash-book'
+      path: '/cash-book'
+      fullPath: '/cash-book'
+      preLoaderRoute: typeof AuthenticatedCashBookRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/bank': {
@@ -976,6 +995,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRouteWithChildren
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRoute
   AuthenticatedBankRoute: typeof AuthenticatedBankRoute
+  AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedChallansRoute: typeof AuthenticatedChallansRouteWithChildren
   AuthenticatedContractsRoute: typeof AuthenticatedContractsRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
@@ -1009,6 +1029,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountsRoute: AuthenticatedAccountsRouteWithChildren,
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRoute,
   AuthenticatedBankRoute: AuthenticatedBankRoute,
+  AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedChallansRoute: AuthenticatedChallansRouteWithChildren,
   AuthenticatedContractsRoute: AuthenticatedContractsRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
