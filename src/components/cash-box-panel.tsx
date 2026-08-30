@@ -508,6 +508,39 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
             )}
           </div>
 
+          {isSardar && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+              <div className="space-y-1">
+                <Label>সরদার *</Label>
+                <Select value={sardarId} onValueChange={setSardarId}>
+                  <SelectTrigger><SelectValue placeholder="সরদার নির্বাচন করুন" /></SelectTrigger>
+                  <SelectContent>
+                    {(sardarsQ.data ?? []).map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>ধরন</Label>
+                <Select value={sardarType} onValueChange={(v) => setSardarType(v as "payment" | "advance")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="payment">পরিশোধ (পাওনা থেকে বাদ)</SelectItem>
+                    <SelectItem value="advance">অগ্রিম</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {sardarId && sardarBalQ.data && (
+                <p className="text-[11px] text-muted-foreground">
+                  মোট কাজের পাওনা ৳ {bn(Number(sardarBalQ.data.total_work ?? 0))} • পরিশোধিত ৳ {bn(Number(sardarBalQ.data.total_paid ?? 0))} •{" "}
+                  <span className="font-semibold text-foreground">বাকি ৳ {bn(Number(sardarBalQ.data.balance ?? 0))}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+
           {category === "শ্রমিক বেতন" && (
             <div className="space-y-1">
               <Label>কোন শ্রমিক? (ঐচ্ছিক)</Label>
