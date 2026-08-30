@@ -6,8 +6,8 @@ export const bn = (n: number | string | null | undefined) => {
 };
 
 export const bnDate = (d: string | Date) => {
-  const date = typeof d === "string" ? new Date(d) : d;
-  return date.toLocaleDateString("bn-BD", { day: "2-digit", month: "short", year: "numeric" });
+  const date = typeof d === "string" ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T00:00:00+06:00` : d) : d;
+  return date.toLocaleDateString("bn-BD", { timeZone: "Asia/Dhaka", day: "2-digit", month: "short", year: "numeric" });
 };
 
 /** বাংলাদেশ সময় (Asia/Dhaka) অনুযায়ী YYYY-MM-DD */
