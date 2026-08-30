@@ -68,18 +68,21 @@ function wrap(builder: any, column: string): any {
 }
 
 function fromImpl(table: string) {
-    const real = (supabase as any).from(table);
-    const column = DATE_COLUMN[table];
+  const real = (supabase as any).from(table);
+  const column = DATE_COLUMN[table];
   if (!column) return real;
   return new Proxy(real, {
-      get(target, prop, receiver) {
-        const value = Reflect.get(target, prop, receiver);
-        if (prop === "select" && typeof value === "function") {
-          return (...args: any[]) => wrap(value.apply(target, args), column);
-        }
-        if (typeof value === "function") return value.bind(target);
-        return value;
-      },
-    });
-  },
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (prop === "select" && typeof value === "function") {
+        return (...args: any[]) => wrap(value.apply(target, args), column);
+      }
+      if (typeof value === "function") return value.bind(target);
+      return value;
+    },
+  });
+}
+
+export const sdb = {
+  from: fromImpl as unknown as (typeof supabase)["from"],
 };
