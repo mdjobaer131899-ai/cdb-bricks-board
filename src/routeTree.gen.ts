@@ -31,6 +31,7 @@ import { Route as AuthenticatedInventoryRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedContractsRouteImport } from './routes/_authenticated/contracts'
 import { Route as AuthenticatedChallansRouteImport } from './routes/_authenticated/challans'
+import { Route as AuthenticatedBankRouteImport } from './routes/_authenticated/bank'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers.index'
@@ -159,6 +160,11 @@ const AuthenticatedChallansRoute = AuthenticatedChallansRouteImport.update({
   path: '/challans',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBankRoute = AuthenticatedBankRouteImport.update({
+  id: '/bank',
+  path: '/bank',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedApprovalsRoute = AuthenticatedApprovalsRouteImport.update({
   id: '/approvals',
   path: '/approvals',
@@ -252,6 +258,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/approvals': typeof AuthenticatedApprovalsRoute
+  '/bank': typeof AuthenticatedBankRoute
   '/challans': typeof AuthenticatedChallansRouteWithChildren
   '/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
@@ -289,6 +296,7 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/approvals': typeof AuthenticatedApprovalsRoute
+  '/bank': typeof AuthenticatedBankRoute
   '/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/kacha-bricks': typeof AuthenticatedKachaBricksRoute
   '/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
@@ -326,6 +334,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRoute
+  '/_authenticated/bank': typeof AuthenticatedBankRoute
   '/_authenticated/challans': typeof AuthenticatedChallansRouteWithChildren
   '/_authenticated/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
@@ -367,6 +376,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/accounts'
     | '/approvals'
+    | '/bank'
     | '/challans'
     | '/contracts'
     | '/customers'
@@ -404,6 +414,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/accounts'
     | '/approvals'
+    | '/bank'
     | '/inventory'
     | '/kacha-bricks'
     | '/ledger-heads'
@@ -440,6 +451,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_authenticated/accounts'
     | '/_authenticated/approvals'
+    | '/_authenticated/bank'
     | '/_authenticated/challans'
     | '/_authenticated/contracts'
     | '/_authenticated/customers'
@@ -635,6 +647,13 @@ declare module '@tanstack/react-router' {
       path: '/challans'
       fullPath: '/challans'
       preLoaderRoute: typeof AuthenticatedChallansRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/bank': {
+      id: '/_authenticated/bank'
+      path: '/bank'
+      fullPath: '/bank'
+      preLoaderRoute: typeof AuthenticatedBankRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/approvals': {
@@ -837,6 +856,7 @@ const AuthenticatedReportsRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRouteWithChildren
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRoute
+  AuthenticatedBankRoute: typeof AuthenticatedBankRoute
   AuthenticatedChallansRoute: typeof AuthenticatedChallansRouteWithChildren
   AuthenticatedContractsRoute: typeof AuthenticatedContractsRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
@@ -863,6 +883,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountsRoute: AuthenticatedAccountsRouteWithChildren,
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRoute,
+  AuthenticatedBankRoute: AuthenticatedBankRoute,
   AuthenticatedChallansRoute: AuthenticatedChallansRouteWithChildren,
   AuthenticatedContractsRoute: AuthenticatedContractsRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
