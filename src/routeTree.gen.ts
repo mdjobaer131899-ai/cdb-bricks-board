@@ -18,6 +18,7 @@ import { Route as AuthenticatedWorkersRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedVehiclesRouteImport } from './routes/_authenticated/vehicles'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
+import { Route as AuthenticatedStaffSetupRouteImport } from './routes/_authenticated/staff-setup'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticated/seasons'
 import { Route as AuthenticatedSardarsRouteImport } from './routes/_authenticated/sardars'
@@ -90,6 +91,11 @@ const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
 const AuthenticatedSuppliersRoute = AuthenticatedSuppliersRouteImport.update({
   id: '/suppliers',
   path: '/suppliers',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedStaffSetupRoute = AuthenticatedStaffSetupRouteImport.update({
+  id: '/staff-setup',
+  path: '/staff-setup',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
@@ -272,6 +278,7 @@ export interface FileRoutesByFullPath {
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/staff-setup': typeof AuthenticatedStaffSetupRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
   '/vehicles': typeof AuthenticatedVehiclesRoute
@@ -307,6 +314,7 @@ export interface FileRoutesByTo {
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/staff-setup': typeof AuthenticatedStaffSetupRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
   '/vehicles': typeof AuthenticatedVehiclesRoute
@@ -348,6 +356,7 @@ export interface FileRoutesById {
   '/_authenticated/sardars': typeof AuthenticatedSardarsRoute
   '/_authenticated/seasons': typeof AuthenticatedSeasonsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/staff-setup': typeof AuthenticatedStaffSetupRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/vehicles': typeof AuthenticatedVehiclesRoute
@@ -390,6 +399,7 @@ export interface FileRouteTypes {
     | '/sardars'
     | '/seasons'
     | '/settings'
+    | '/staff-setup'
     | '/suppliers'
     | '/users'
     | '/vehicles'
@@ -425,6 +435,7 @@ export interface FileRouteTypes {
     | '/sardars'
     | '/seasons'
     | '/settings'
+    | '/staff-setup'
     | '/suppliers'
     | '/users'
     | '/vehicles'
@@ -465,6 +476,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sardars'
     | '/_authenticated/seasons'
     | '/_authenticated/settings'
+    | '/_authenticated/staff-setup'
     | '/_authenticated/suppliers'
     | '/_authenticated/users'
     | '/_authenticated/vehicles'
@@ -556,6 +568,13 @@ declare module '@tanstack/react-router' {
       path: '/suppliers'
       fullPath: '/suppliers'
       preLoaderRoute: typeof AuthenticatedSuppliersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/staff-setup': {
+      id: '/_authenticated/staff-setup'
+      path: '/staff-setup'
+      fullPath: '/staff-setup'
+      preLoaderRoute: typeof AuthenticatedStaffSetupRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
@@ -870,6 +889,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSardarsRoute: typeof AuthenticatedSardarsRoute
   AuthenticatedSeasonsRoute: typeof AuthenticatedSeasonsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedStaffSetupRoute: typeof AuthenticatedStaffSetupRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
   AuthenticatedVehiclesRoute: typeof AuthenticatedVehiclesRoute
@@ -897,6 +917,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSardarsRoute: AuthenticatedSardarsRoute,
   AuthenticatedSeasonsRoute: AuthenticatedSeasonsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedStaffSetupRoute: AuthenticatedStaffSetupRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
   AuthenticatedVehiclesRoute: AuthenticatedVehiclesRoute,

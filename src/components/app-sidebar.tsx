@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Boxes, BookOpen, Users2, Truck, Building2, CalendarRange, Package } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Boxes, BookOpen, Users2, Truck, Building2, CalendarRange, Package, ClipboardList, Landmark } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
