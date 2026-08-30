@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 
 function toCsv(rows: any[]): string {
   if (!rows.length) return "";
@@ -27,13 +28,13 @@ export async function exportAllData(monthYM?: string) {
     : null;
 
   const tables = [
-    { name: "customers", q: supabase.from("customers").select("*") },
-    { name: "sales_entries", q: supabase.from("sales_entries").select("*"), dateCol: "sale_date" },
-    { name: "collections", q: supabase.from("collections").select("*"), dateCol: "payment_date" },
-    { name: "expenses", q: supabase.from("expenses").select("*"), dateCol: "expense_date" },
-    { name: "raw_material_purchases", q: supabase.from("raw_material_purchases").select("*"), dateCol: "purchase_date" },
-    { name: "worker_payments", q: supabase.from("worker_payments").select("*"), dateCol: "payment_date" },
-    { name: "vehicle_expenses", q: supabase.from("vehicle_expenses").select("*"), dateCol: "expense_date" },
+    { name: "customers", q: sdb.from("customers").select("*") },
+    { name: "sales_entries", q: sdb.from("sales_entries").select("*"), dateCol: "sale_date" },
+    { name: "collections", q: sdb.from("collections").select("*"), dateCol: "payment_date" },
+    { name: "expenses", q: sdb.from("expenses").select("*"), dateCol: "expense_date" },
+    { name: "raw_material_purchases", q: sdb.from("raw_material_purchases").select("*"), dateCol: "purchase_date" },
+    { name: "worker_payments", q: sdb.from("worker_payments").select("*"), dateCol: "payment_date" },
+    { name: "vehicle_expenses", q: sdb.from("vehicle_expenses").select("*"), dateCol: "expense_date" },
   ];
 
   for (const t of tables) {
