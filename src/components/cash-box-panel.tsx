@@ -586,7 +586,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>বাতিল</Button>
-            <Button type="submit" variant="destructive" disabled={mut.isPending}>
+            <Button type="submit" variant="destructive" disabled={mut.isPending || sardarMut.isPending}>
               {mut.isPending ? "সংরক্ষণ..." : "সংরক্ষণ"}
             </Button>
           </DialogFooter>
