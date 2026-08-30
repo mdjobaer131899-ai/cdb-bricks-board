@@ -386,6 +386,52 @@ function SardarsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+          <DialogHeader><DialogTitle>{detail?.name} — বিস্তারিত হিসাব</DialogTitle></DialogHeader>
+          {detail && (() => {
+            const t = stats.get(detail.id) ?? { qty: 0, kacha: 0, work: 0, earned: 0, paid: 0, due: 0 };
+            return (
+              <div className="space-y-4">
+                <div className="text-xs text-muted-foreground">
+                  {detail.phone || "—"}{detail.address ? ` • ${detail.address}` : ""} • গ্রুপ: {groupName(detail.group_id)}
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-lg border p-2"><p className="text-[11px] text-muted-foreground">কাঁচা ইট</p><p className="font-bold tabular-nums">{bn(t.qty)}</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-[11px] text-muted-foreground">মোট মজুরি</p><p className="font-bold tabular-nums">৳ {bn(t.earned)}</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-[11px] text-muted-foreground">নিয়েছে</p><p className="font-bold tabular-nums text-destructive">৳ {bn(t.paid)}</p></div>
+                  <div className="rounded-lg border p-2"><p className="text-[11px] text-muted-foreground">বাকি</p><p className={`font-bold tabular-nums ${t.due > 0 ? "text-warning" : "text-success"}`}>৳ {bn(t.due)}</p></div>
+                </div>
+                {detail.note && <p className="rounded-lg bg-muted p-2 text-xs">{detail.note}</p>}
+                {detailRows.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">কোনো লেনদেন নেই</div>
+                ) : (
+                  <Table>
+                    <TableHeader><TableRow>
+                      <TableHead>তারিখ</TableHead>
+                      <TableHead>বিবরণ</TableHead>
+                      <TableHead className="text-right">পাওনা</TableHead>
+                      <TableHead className="text-right">প্রদান</TableHead>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {detailRows.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="whitespace-nowrap text-xs">{bnDate(r.date)}</TableCell>
+                          <TableCell className="text-xs">{r.label}</TableCell>
+                          <TableCell className="text-right tabular-nums">{r.credit ? `৳ ${bn(r.credit)}` : "—"}</TableCell>
+                          <TableCell className="text-right tabular-nums text-destructive">{r.debit ? `৳ ${bn(r.debit)}` : "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }
