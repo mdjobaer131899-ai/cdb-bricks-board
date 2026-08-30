@@ -896,44 +896,62 @@ export type Database = {
       production_entries: {
         Row: {
           brick_type_id: string
+          coal_cost: number
+          coal_material_id: string | null
           coal_used: number | null
+          cost_per_brick: number
           created_at: string
           created_by: string
           id: string
           labor_cost: number | null
+          mati_cost: number
+          mati_material_id: string | null
           mati_used: number | null
           notes: string | null
           other_cost: number | null
           production_date: string
           quantity: number
+          total_cost: number
           updated_at: string
         }
         Insert: {
           brick_type_id: string
+          coal_cost?: number
+          coal_material_id?: string | null
           coal_used?: number | null
+          cost_per_brick?: number
           created_at?: string
           created_by: string
           id?: string
           labor_cost?: number | null
+          mati_cost?: number
+          mati_material_id?: string | null
           mati_used?: number | null
           notes?: string | null
           other_cost?: number | null
           production_date?: string
           quantity: number
+          total_cost?: number
           updated_at?: string
         }
         Update: {
           brick_type_id?: string
+          coal_cost?: number
+          coal_material_id?: string | null
           coal_used?: number | null
+          cost_per_brick?: number
           created_at?: string
           created_by?: string
           id?: string
           labor_cost?: number | null
+          mati_cost?: number
+          mati_material_id?: string | null
           mati_used?: number | null
           notes?: string | null
           other_cost?: number | null
           production_date?: string
           quantity?: number
+          total_cost?: number
           updated_at?: string
         }
         Relationships: [
@@ -950,6 +968,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "current_stock"
             referencedColumns: ["brick_type_id"]
+          },
+          {
+            foreignKeyName: "production_entries_coal_material_id_fkey"
+            columns: ["coal_material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "production_entries_coal_material_id_fkey"
+            columns: ["coal_material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_entries_mati_material_id_fkey"
+            columns: ["mati_material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "production_entries_mati_material_id_fkey"
+            columns: ["mati_material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1028,6 +1074,13 @@ export type Database = {
             foreignKeyName: "raw_material_purchases_material_id_fkey"
             columns: ["material_id"]
             isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "raw_material_purchases_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
             referencedRelation: "raw_materials"
             referencedColumns: ["id"]
           },
@@ -1036,6 +1089,67 @@ export type Database = {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raw_material_usage: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          material_id: string
+          note: string | null
+          production_entry_id: string | null
+          quantity: number
+          unit_cost: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          material_id: string
+          note?: string | null
+          production_entry_id?: string | null
+          quantity: number
+          unit_cost?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          material_id?: string
+          note?: string | null
+          production_entry_id?: string | null
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raw_material_usage_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "raw_material_usage_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raw_material_usage_production_entry_id_fkey"
+            columns: ["production_entry_id"]
+            isOneToOne: false
+            referencedRelation: "production_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -2066,6 +2180,20 @@ export type Database = {
         }
         Relationships: []
       }
+      raw_material_stock: {
+        Row: {
+          avg_unit_cost: number | null
+          in_stock: number | null
+          low_stock_threshold: number | null
+          material_id: string | null
+          name: string | null
+          purchased_amount: number | null
+          purchased_qty: number | null
+          unit: string | null
+          used_qty: number | null
+        }
+        Relationships: []
+      }
       sardar_balances: {
         Row: {
           balance: number | null
@@ -2115,6 +2243,7 @@ export type Database = {
         }
         Returns: string
       }
+      material_avg_cost: { Args: { _material_id: string }; Returns: number }
       recompute_contract_advance: {
         Args: { _contract_id: string }
         Returns: undefined
