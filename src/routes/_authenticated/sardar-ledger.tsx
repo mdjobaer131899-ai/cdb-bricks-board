@@ -98,7 +98,7 @@ function SardarLedgerPage() {
   });
 
   function refresh() {
-    for (const k of ["sardar-balances", "sardar-works", "sardar-payments", "sardar-rates", "trial-balance", "profit-loss", "journal-entries", "cash-balance"]) {
+    for (const k of ["sardar-balances", "sardar-works", "sardar-payments", "sardar-rates", "trial-balance", "profit-loss", "journal-entries", "cash-balance-total", "cash-box"]) {
       qc.invalidateQueries({ queryKey: [k] });
     }
   }

@@ -22,10 +22,21 @@ import { sdb } from "@/lib/season-db";
 import { bn, isoDate } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
 import { createExpense, deleteExpense } from "@/lib/expenses.functions";
+import { createSardarPayment } from "@/lib/sardars.functions";
+import { fetchCashDay } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
 
+/** এই খাত নির্বাচন করলে ব্যয় সরদারের পাওনা থেকেও বাদ যায় */
+const SARDAR_CATEGORY = "সরদার পেমেন্ট (পাওনা থেকে বাদ)";
+
 const EXPENSE_CATEGORIES = [
+  SARDAR_CATEGORY,
+  "লোড খরচ",
+  "আনলোড খরচ",
+  "ইট বহন / ভাড়া",
+  "মাটি কাটা মজুরি",
+  "ইট সাজানো / বের করা",
   "শ্রমিক বেতন",
   "শ্রমিক মজুরি",
   "কাঁচামাল কেনা",
@@ -40,51 +51,8 @@ const EXPENSE_CATEGORIES = [
   "অন্যান্য",
 ];
 
-type TodayIncome = { id: string; source: "contract" | "cash"; label: string; amount: number; method: string | null };
-type TodayExpense = { id: string; category: string; amount: number; note: string | null };
-
-async function fetchTodayCashBox(todayIso: string) {
-  // Income in cash-box = ONLY non-contract (cash) collections.
-  // Contract-linked payments (yearly_fixed/short_term/cash contracts) are tracked
-  // on the contract ledger and must NOT appear in the daily cash box.
-  const [colRes, expRes] = await Promise.all([
-    supabase
-      .from("collections")
-      .select("id, amount, method, note, customer:customers(name)")
-      .is("contract_id", null)
-      .eq("payment_date", todayIso)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("expenses")
-      .select("id, category, amount, note")
-      .eq("expense_date", todayIso)
-      .order("created_at", { ascending: false }),
-  ]);
-  if (colRes.error) throw colRes.error;
-  if (expRes.error) throw expRes.error;
-
-  const colRows = (colRes.data ?? []) as unknown as Array<{
-    id: string; amount: number; method: string | null;
-    customer: { name: string } | null;
-  }>;
-
-  const incomes: TodayIncome[] = colRows.map((c) => ({
-    id: `col-${c.id}`,
-    source: "cash" as const,
-    label: c.customer?.name ?? "—",
-    amount: Number(c.amount),
-    method: c.method,
-  }));
-
-  const expenses: TodayExpense[] = (expRes.data ?? []).map((e) => ({
-    id: e.id,
-    category: e.category,
-    amount: Number(e.amount),
-    note: e.note,
-  }));
-
-  return { incomes, expenses };
-}
+// আজকের নগদ আয় ও সব ধরনের নগদ ব্যয় (সাধারণ ব্যয় + সরদার/শ্রমিক/সরবরাহকারী/গাড়ি)
+// একটিই হিসাব থেকে আসে — src/lib/cash-queries.ts
 
 async function fetchCustomers() {
   const { data, error } = await sdb.from("customers").select("id, name").order("name");
@@ -100,23 +68,23 @@ export function CashBoxPanel() {
   const todayIso = useMemo(() => isoDate(new Date()), []);
   const today = useQuery({
     queryKey: ["cash-box", todayIso],
-    queryFn: () => fetchTodayCashBox(todayIso),
+    queryFn: () => fetchCashDay(todayIso),
   });
 
   const totals = useMemo(() => {
     const income = (today.data?.incomes ?? []).reduce((a, b) => a + b.amount, 0);
-    const expense = (today.data?.expenses ?? []).reduce((a, b) => a + b.amount, 0);
+    const expense = (today.data?.outs ?? []).reduce((a, b) => a + b.amount, 0);
     return { income, expense, net: income - expense };
   }, [today.data]);
 
   const invalidateAll = () => {
-    qc.invalidateQueries({ queryKey: ["cash-box"] });
-    qc.invalidateQueries({ queryKey: ["dash", "today"] });
-    qc.invalidateQueries({ queryKey: ["dashboard-due"] });
-    qc.invalidateQueries({ queryKey: ["dashboard-month"] });
-    qc.invalidateQueries({ queryKey: ["dashboard-trend"] });
-    qc.invalidateQueries({ queryKey: ["collections-list"] });
-    qc.invalidateQueries({ queryKey: ["cash-ledger"] });
+    for (const key of [
+      ["cash-box"], ["cash-balance-total"], ["dash", "today"], ["dashboard-due"],
+      ["dashboard-month"], ["dashboard-trend"], ["collections-list"], ["cash-ledger"],
+      ["sardar-balances"], ["sardar-payments"], ["trial-balance"], ["profit-loss"], ["journal-entries"],
+    ]) {
+      qc.invalidateQueries({ queryKey: key });
+    }
   };
 
   const delExp = useServerFn(deleteExpense);
@@ -157,7 +125,7 @@ export function CashBoxPanel() {
             icon={ArrowDownCircle}
             label="মোট ব্যয় (আজ)"
             value={`৳ ${bn(totals.expense)}`}
-            sub={`${bn(today.data?.expenses.length ?? 0)} টি এন্ট্রি`}
+            sub={`${bn(today.data?.outs.length ?? 0)} টি এন্ট্রি (সরদার/শ্রমিক/গাড়িসহ)`}
             loading={today.isLoading}
           />
           <SummaryBox
@@ -193,7 +161,7 @@ export function CashBoxPanel() {
                     <div className="min-w-0">
                       <p className="truncate font-medium">{i.label}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        {i.source === "contract" ? "চুক্তি" : "সরাসরি ক্যাশ"}
+                        সরাসরি ক্যাশ
                         {i.method ? ` • ${i.method}` : ""}
                       </p>
                     </div>
@@ -211,25 +179,25 @@ export function CashBoxPanel() {
                 <Receipt className="h-3.5 w-3.5" />
                 <span className="text-xs font-semibold">আজকের ব্যয় তালিকা</span>
               </div>
-              <Badge variant="outline" className="text-[10px]">{bn(today.data?.expenses.length ?? 0)}</Badge>
+              <Badge variant="outline" className="text-[10px]">{bn(today.data?.outs.length ?? 0)}</Badge>
             </div>
             <ul className="max-h-64 divide-y overflow-y-auto text-sm">
               {today.isLoading ? (
                 Array.from({ length: 3 }).map((_, i) => (
                   <li key={i} className="px-3 py-2"><Skeleton className="h-4 w-full" /></li>
                 ))
-              ) : (today.data?.expenses ?? []).length === 0 ? (
+              ) : (today.data?.outs ?? []).length === 0 ? (
                 <li className="px-3 py-6 text-center text-xs text-muted-foreground">আজ কোনো ব্যয় নেই</li>
               ) : (
-                today.data!.expenses.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                today.data!.outs.map((e) => (
+                  <li key={`${e.kind}-${e.id}`} className="flex items-center justify-between gap-2 px-3 py-2">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{e.category}</p>
                       {e.note && <p className="truncate text-[10px] text-muted-foreground">{e.note}</p>}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-destructive whitespace-nowrap">৳ {bn(e.amount)}</span>
-                      {isAdmin && (
+                      {isAdmin && e.deletable && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive">
@@ -402,6 +370,10 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   const [note, setNote] = useState("");
   const [workerId, setWorkerId] = useState<string>("");
   const [materialId, setMaterialId] = useState<string>("");
+  const [sardarId, setSardarId] = useState<string>("");
+  const [sardarType, setSardarType] = useState<"payment" | "advance">("payment");
+
+  const isSardar = category === SARDAR_CATEGORY;
 
   const workersQ = useQuery({
     queryKey: ["workers-active-select"],
@@ -419,6 +391,27 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
   });
+  const sardarsQ = useQuery({
+    queryKey: ["sardars-active-select"],
+    enabled: open && isSardar,
+    queryFn: async () => {
+      const { data } = await supabase.from("sardars").select("id, name").eq("is_active", true).order("name");
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+  const sardarBalQ = useQuery({
+    queryKey: ["sardar-balance-one", sardarId],
+    enabled: open && isSardar && !!sardarId,
+    queryFn: async () => {
+      const { data } = await supabase.from("sardar_balances").select("*").eq("sardar_id", sardarId).maybeSingle();
+      return data as any;
+    },
+  });
+
+  function reset() {
+    setCategory(""); setCustomCategory(""); setAmount(""); setNote("");
+    setWorkerId(""); setMaterialId(""); setSardarId(""); setSardarType("payment");
+  }
 
   type ExpenseInput = { category: string; amount: number; expense_date: string; note: string | null };
   const createFn = useServerFn(createExpense);
@@ -427,7 +420,24 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     onSuccess: () => {
       toast.success("ব্যয় যোগ হয়েছে");
       setOpen(false);
-      setCategory(""); setCustomCategory(""); setAmount(""); setNote(""); setWorkerId(""); setMaterialId("");
+      reset();
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // সরদারকে দেওয়া টাকা sardar_payments-এ যায় — তাই তার কাজের পাওনা থেকে
+  // স্বয়ংক্রিয়ভাবে বাদ যায় এবং একই সাথে মূল ক্যাশ থেকেও কমে।
+  const createSardarPay = useServerFn(createSardarPayment);
+  const sardarMut = useMutation({
+    mutationFn: (input: {
+      sardar_id: string; amount: number; payment_date: string;
+      payment_type: "payment" | "advance"; method: string | null; note: string | null;
+    }) => createSardarPay({ data: input }),
+    onSuccess: () => {
+      toast.success("সরদার পেমেন্ট যোগ হয়েছে — পাওনা থেকে বাদ গেছে");
+      setOpen(false);
+      reset();
       onDone();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -435,10 +445,23 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalCat = category === "অন্যান্য" ? customCategory.trim() : category;
     const amt = Number(amount);
-    if (!finalCat) return toast.error("খাত নির্বাচন করুন");
     if (!Number.isFinite(amt) || amt <= 0) return toast.error("টাকার পরিমাণ সঠিক নয়");
+
+    if (isSardar) {
+      if (!sardarId) return toast.error("সরদার নির্বাচন করুন");
+      return sardarMut.mutate({
+        sardar_id: sardarId,
+        amount: amt,
+        payment_date: date,
+        payment_type: sardarType,
+        method: "cash",
+        note: note.trim() || null,
+      });
+    }
+
+    const finalCat = category === "অন্যান্য" ? customCategory.trim() : category;
+    if (!finalCat) return toast.error("খাত নির্বাচন করুন");
     let finalNote = note.trim();
     if (category === "শ্রমিক বেতন" && workerId) {
       const w = workersQ.data?.find((x) => x.id === workerId);
@@ -450,6 +473,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     }
     mut.mutate({ category: finalCat, amount: amt, expense_date: date, note: finalNote || null });
   };
+
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -483,6 +507,39 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
               />
             )}
           </div>
+
+          {isSardar && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+              <div className="space-y-1">
+                <Label>সরদার *</Label>
+                <Select value={sardarId} onValueChange={setSardarId}>
+                  <SelectTrigger><SelectValue placeholder="সরদার নির্বাচন করুন" /></SelectTrigger>
+                  <SelectContent>
+                    {(sardarsQ.data ?? []).map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>ধরন</Label>
+                <Select value={sardarType} onValueChange={(v) => setSardarType(v as "payment" | "advance")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="payment">পরিশোধ (পাওনা থেকে বাদ)</SelectItem>
+                    <SelectItem value="advance">অগ্রিম</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {sardarId && sardarBalQ.data && (
+                <p className="text-[11px] text-muted-foreground">
+                  মোট কাজের পাওনা ৳ {bn(Number(sardarBalQ.data.total_due ?? 0))} • পরিশোধিত ৳ {bn(Number(sardarBalQ.data.total_paid ?? 0))} •{" "}
+                  <span className="font-semibold text-foreground">বাকি ৳ {bn(Number(sardarBalQ.data.balance ?? 0))}</span>
+                </p>
+              )}
+            </div>
+          )}
+
 
           {category === "শ্রমিক বেতন" && (
             <div className="space-y-1">
@@ -529,7 +586,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>বাতিল</Button>
-            <Button type="submit" variant="destructive" disabled={mut.isPending}>
+            <Button type="submit" variant="destructive" disabled={mut.isPending || sardarMut.isPending}>
               {mut.isPending ? "সংরক্ষণ..." : "সংরক্ষণ"}
             </Button>
           </DialogFooter>

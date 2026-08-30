@@ -1,25 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { sdb } from "@/lib/season-db";
+import { fetchCashSummary } from "@/lib/cash-queries";
 import { bn } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 
-async function fetchCashBalance() {
-  const [colRes, expRes] = await Promise.all([
-    sdb.from("collections").select("amount").is("contract_id", null),
-    sdb.from("expenses").select("amount"),
-  ]);
-  if (colRes.error) throw colRes.error;
-  if (expRes.error) throw expRes.error;
-  const income = (colRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
-  const expense = (expRes.data ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
-  return income - expense;
-}
-
 export function CashBalanceChip() {
-  const q = useQuery({ queryKey: ["cash-balance-total"], queryFn: fetchCashBalance });
-  const net = q.data ?? 0;
+  const q = useQuery({ queryKey: ["cash-balance-total"], queryFn: () => fetchCashSummary() });
+  const net = q.data?.net ?? 0;
   const positive = net >= 0;
   return (
     <div
