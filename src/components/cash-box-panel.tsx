@@ -17,15 +17,25 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { bn, isoDate } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
 import { createExpense, deleteExpense } from "@/lib/expenses.functions";
+import { createSardarPayment } from "@/lib/sardars.functions";
+import { fetchCashDay } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
 
+/** এই খাত নির্বাচন করলে ব্যয় সরদারের পাওনা থেকেও বাদ যায় */
+const SARDAR_CATEGORY = "সরদার পেমেন্ট (পাওনা থেকে বাদ)";
+
 const EXPENSE_CATEGORIES = [
+  SARDAR_CATEGORY,
+  "লোড খরচ",
+  "আনলোড খরচ",
+  "ইট বহন / ভাড়া",
+  "মাটি কাটা মজুরি",
+  "ইট সাজানো / বের করা",
   "শ্রমিক বেতন",
   "শ্রমিক মজুরি",
   "কাঁচামাল কেনা",
@@ -39,9 +49,6 @@ const EXPENSE_CATEGORIES = [
   "ট্যাক্স / ফি",
   "অন্যান্য",
 ];
-
-type TodayIncome = { id: string; source: "contract" | "cash"; label: string; amount: number; method: string | null };
-type TodayExpense = { id: string; category: string; amount: number; note: string | null };
 
 async function fetchTodayCashBox(todayIso: string) {
   // Income in cash-box = ONLY non-contract (cash) collections.
