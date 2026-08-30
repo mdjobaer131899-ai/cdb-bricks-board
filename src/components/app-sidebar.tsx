@@ -83,7 +83,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {GROUPS.map((g) => {
+        {NAV_GROUPS.map((g) => {
           const items = g.items.filter((i) => (i.roles as readonly string[]).includes(role));
           if (items.length === 0) return null;
           return (
