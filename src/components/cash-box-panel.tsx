@@ -161,7 +161,7 @@ export function CashBoxPanel() {
                     <div className="min-w-0">
                       <p className="truncate font-medium">{i.label}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        {i.source === "contract" ? "চুক্তি" : "সরাসরি ক্যাশ"}
+                        সরাসরি ক্যাশ
                         {i.method ? ` • ${i.method}` : ""}
                       </p>
                     </div>
