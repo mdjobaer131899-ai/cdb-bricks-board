@@ -50,48 +50,8 @@ const EXPENSE_CATEGORIES = [
   "অন্যান্য",
 ];
 
-async function fetchTodayCashBox(todayIso: string) {
-  // Income in cash-box = ONLY non-contract (cash) collections.
-  // Contract-linked payments (yearly_fixed/short_term/cash contracts) are tracked
-  // on the contract ledger and must NOT appear in the daily cash box.
-  const [colRes, expRes] = await Promise.all([
-    supabase
-      .from("collections")
-      .select("id, amount, method, note, customer:customers(name)")
-      .is("contract_id", null)
-      .eq("payment_date", todayIso)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("expenses")
-      .select("id, category, amount, note")
-      .eq("expense_date", todayIso)
-      .order("created_at", { ascending: false }),
-  ]);
-  if (colRes.error) throw colRes.error;
-  if (expRes.error) throw expRes.error;
-
-  const colRows = (colRes.data ?? []) as unknown as Array<{
-    id: string; amount: number; method: string | null;
-    customer: { name: string } | null;
-  }>;
-
-  const incomes: TodayIncome[] = colRows.map((c) => ({
-    id: `col-${c.id}`,
-    source: "cash" as const,
-    label: c.customer?.name ?? "—",
-    amount: Number(c.amount),
-    method: c.method,
-  }));
-
-  const expenses: TodayExpense[] = (expRes.data ?? []).map((e) => ({
-    id: e.id,
-    category: e.category,
-    amount: Number(e.amount),
-    note: e.note,
-  }));
-
-  return { incomes, expenses };
-}
+// আজকের নগদ আয় ও সব ধরনের নগদ ব্যয় (সাধারণ ব্যয় + সরদার/শ্রমিক/সরবরাহকারী/গাড়ি)
+// একটিই হিসাব থেকে আসে — src/lib/cash-queries.ts
 
 async function fetchCustomers() {
   const { data, error } = await sdb.from("customers").select("id, name").order("name");
