@@ -11,7 +11,7 @@ import { fetchSales } from "@/lib/sales-queries";
 import { bn, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { BrandLogo } from "@/components/brand-logo";
-import { DashboardMenuBar } from "@/components/dashboard-menu-bar";
+
 
 const actions = [
   { to: "/entries/new" as const, label: "নতুন এন্ট্রি", icon: Plus, tone: "from-primary/15 to-primary/5 text-primary" },
@@ -56,8 +56,8 @@ export function ManagerDashboard() {
             </p>
           </div>
         </div>
-        <DashboardMenuBar />
       </div>
+
 
       <Card>
         <CardHeader className="pb-2">

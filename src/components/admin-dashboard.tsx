@@ -17,7 +17,7 @@ import { CashBoxPanel } from "@/components/cash-box-panel";
 import { SeasonProgressCard } from "@/components/season-progress-card";
 import { BrandLogo } from "@/components/brand-logo";
 import { CashBalanceChip } from "@/components/cash-balance-chip";
-import { DashboardMenuBar } from "@/components/dashboard-menu-bar";
+
 
 
 export function AdminDashboard() {
@@ -100,8 +100,8 @@ export function AdminDashboard() {
           </div>
           <CashBalanceChip />
         </div>
-        <DashboardMenuBar />
       </div>
+
 
       <QuickActions />
 
