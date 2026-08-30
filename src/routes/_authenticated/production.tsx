@@ -295,6 +295,48 @@ function NewProductionDialog({ bricks, userId, onClose, onSaved }: { bricks: Arr
           <Label>পরিমাণ</Label>
           <Input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} required />
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>মাটি (কাঁচামাল)</Label>
+            <Select value={matiId} onValueChange={setMatiId}>
+              <SelectTrigger><SelectValue placeholder="বেছে নিন" /></SelectTrigger>
+              <SelectContent>
+                {materials.map((m) => <SelectItem key={String(m.material_id)} value={String(m.material_id)}>{m.name} (স্টক {bn(Number(m.in_stock ?? 0))} {m.unit})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>মাটির ব্যবহার</Label>
+            <Input type="number" inputMode="decimal" value={matiUsed} onChange={(e) => setMatiUsed(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>কয়লা/জ্বালানি</Label>
+            <Select value={coalId} onValueChange={setCoalId}>
+              <SelectTrigger><SelectValue placeholder="বেছে নিন" /></SelectTrigger>
+              <SelectContent>
+                {materials.map((m) => <SelectItem key={String(m.material_id)} value={String(m.material_id)}>{m.name} (স্টক {bn(Number(m.in_stock ?? 0))} {m.unit})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>কয়লার ব্যবহার</Label>
+            <Input type="number" inputMode="decimal" value={coalUsed} onChange={(e) => setCoalUsed(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>শ্রমিক খরচ</Label>
+            <Input type="number" inputMode="decimal" value={laborCost} onChange={(e) => setLaborCost(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>অন্যান্য খরচ</Label>
+            <Input type="number" inputMode="decimal" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} />
+          </div>
+        </div>
+        <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1">
+          <div className="flex justify-between"><span>মাটি খরচ (গড় ক্রয়মূল্যে)</span><span className="tabular-nums">৳ {bn(Math.round(estMati))}</span></div>
+          <div className="flex justify-between"><span>কয়লা খরচ</span><span className="tabular-nums">৳ {bn(Math.round(estCoal))}</span></div>
+          <div className="flex justify-between font-semibold"><span>মোট উৎপাদন খরচ</span><span className="tabular-nums">৳ {bn(Math.round(estTotal))}</span></div>
+          <div className="flex justify-between text-primary font-semibold"><span>প্রতি ইটের খরচ</span><span className="tabular-nums">৳ {estPerBrick.toFixed(2)}</span></div>
+        </div>
         <div className="space-y-1.5">
           <Label>মন্তব্য (ঐচ্ছিক)</Label>
           <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
