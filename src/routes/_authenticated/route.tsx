@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppHeader } from "@/components/app-header";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
+import { SeasonProvider } from "@/lib/season-context";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -54,6 +55,7 @@ function AuthedLayout() {
   }, [navigate]);
   if (!ready) return null;
   return (
+    <SeasonProvider>
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background">
         <div className="hidden md:block">
@@ -68,5 +70,6 @@ function AuthedLayout() {
       </div>
       <MobileBottomNav />
     </SidebarProvider>
+    </SeasonProvider>
   );
 }
