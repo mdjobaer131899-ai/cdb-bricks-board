@@ -25,6 +25,7 @@ const GROUPS: Group[] = [
       { title: "ড্যাশবোর্ড", url: "/", icon: LayoutDashboard, roles: ["admin", "manager"] },
       { title: "নতুন এন্ট্রি", url: "/entries/new", icon: FilePlus2, roles: ["admin", "manager"] },
       { title: "চালান তালিকা", url: "/challans", icon: FileText, roles: ["admin", "manager"] },
+      { title: "অর্ডার ও ডেলিভারি", url: "/orders", icon: ClipboardList, roles: ["admin", "manager"] },
       { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck, roles: ["admin"] },
       { title: "চুক্তি", url: "/contracts", icon: ScrollText, roles: ["admin"] },
       { title: "কালেকশন", url: "/collections", icon: Wallet, roles: ["admin"] },
@@ -35,9 +36,12 @@ const GROUPS: Group[] = [
     label: "অপারেশন",
     items: [
       { title: "প্রোডাকশন", url: "/production", icon: Package, roles: ["admin"] },
+      { title: "কাঁচা ইট", url: "/kacha-bricks", icon: Boxes, roles: ["admin", "manager"] },
       { title: "স্টক", url: "/inventory", icon: Boxes, roles: ["admin"] },
       { title: "কাঁচামাল", url: "/raw-materials", icon: Boxes, roles: ["admin"] },
+      { title: "সরদার", url: "/sardars", icon: Users2, roles: ["admin"] },
       { title: "শ্রমিক", url: "/workers", icon: Users2, roles: ["admin"] },
+      { title: "স্টাফ সেটআপ", url: "/staff-setup", icon: UserCog, roles: ["admin"] },
       { title: "সরবরাহকারী", url: "/suppliers", icon: Building2, roles: ["admin"] },
       { title: "গাড়ি", url: "/vehicles", icon: Truck, roles: ["admin"] },
       { title: "মৌসুম", url: "/seasons", icon: CalendarRange, roles: ["admin"] },
@@ -47,6 +51,8 @@ const GROUPS: Group[] = [
     label: "হিসাব",
     items: [
       { title: "অ্যাকাউন্টস", url: "/accounts", icon: BookOpen, roles: ["admin"] },
+      { title: "খাতিয়ান", url: "/ledger-heads", icon: BookOpen, roles: ["admin", "manager"] },
+      { title: "ব্যাংক ও ট্রান্সফার", url: "/bank", icon: Landmark, roles: ["admin"] },
     ],
   },
   {
