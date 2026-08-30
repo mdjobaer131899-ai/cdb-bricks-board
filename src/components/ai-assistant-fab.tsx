@@ -37,12 +37,20 @@ function activeToolLabel(m: UIMessage): string | null {
   return null;
 }
 
+export const OPEN_AI_CHAT_EVENT = "cdb:open-ai-chat";
+
 export function AiAssistantFab() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener(OPEN_AI_CHAT_EVENT, handler);
+    return () => window.removeEventListener(OPEN_AI_CHAT_EVENT, handler);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setToken(data.session?.access_token ?? null));
@@ -95,7 +103,7 @@ export function AiAssistantFab() {
         <button
           aria-label="CDB Bricks AI Assistant"
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-gradient-to-br from-primary to-primary/80 px-4 py-3 text-primary-foreground shadow-lg ring-1 ring-primary/30 transition-transform hover:scale-105 active:scale-95"
+          className="fixed bottom-5 right-5 z-50 hidden items-center gap-2 rounded-full bg-gradient-to-br from-primary to-primary/80 px-4 py-3 text-primary-foreground shadow-lg ring-1 ring-primary/30 transition-transform hover:scale-105 active:scale-95 md:flex"
         >
           <Sparkles className="h-4 w-4" />
           <span className="text-sm font-medium">CDB AI সহকারী</span>

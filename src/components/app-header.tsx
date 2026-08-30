@@ -3,7 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useSidebar } from "@/components/ui/sidebar";
+import { BrandLogo } from "@/components/brand-logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useTheme } from "@/lib/theme";
@@ -25,6 +26,7 @@ export function AppHeader() {
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { toggleSidebar } = useSidebar();
 
   async function handleSignOut() {
     await qc.cancelQueries();
@@ -40,10 +42,14 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur md:px-6">
-      <SidebarTrigger className="md:hidden" />
-      <div className="hidden md:block">
-        <SidebarTrigger />
-      </div>
+      <button
+        type="button"
+        onClick={toggleSidebar}
+        aria-label="মেনু খুলুন"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-muted active:scale-95"
+      >
+        <BrandLogo className="h-7 w-7" />
+      </button>
       <div className="ml-1 hidden sm:block">
         {loading ? (
           <Skeleton className="h-4 w-32" />
