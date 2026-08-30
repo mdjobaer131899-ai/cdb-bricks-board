@@ -12,11 +12,12 @@ import { NAV_GROUPS } from "@/components/app-sidebar";
 import { useCurrentUser } from "@/lib/use-current-user";
 
 const PRODUCTION_SUB = [
-  { title: "কাঁচা ইটের হিসাব", url: "/kacha-bricks", icon: Boxes },
-  { title: "কাঁচা ইট ঢোকানো (লোড)", url: "/kacha-bricks", icon: ArrowDownToLine },
-  { title: "ইট পোড়ানোর হিসাব", url: "/kacha-bricks", icon: Flame },
-  { title: "বের করার হিসাব (পাকা ইট)", url: "/production", icon: ArrowUpFromLine },
+  { title: "কাঁচা ইটের হিসাব", url: "/production-steps/kacha", icon: Boxes },
+  { title: "কাঁচা ইট ঢোকানো (লোড)", url: "/production-steps/load", icon: ArrowDownToLine },
+  { title: "ইট পোড়ানোর হিসাব", url: "/production-steps/burn", icon: Flame },
+  { title: "বের করার হিসাব (পাকা ইট)", url: "/production-steps/unload", icon: ArrowUpFromLine },
 ] as const;
+
 
 export function DashboardMenuBar() {
   const { data } = useCurrentUser();
