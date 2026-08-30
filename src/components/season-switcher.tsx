@@ -9,15 +9,14 @@ export function SeasonSwitcher({ className }: { className?: string }) {
   return (
     <div className={className}>
       <Select value={seasonId ?? undefined} onValueChange={setSeasonId}>
-        <SelectTrigger className="h-8 w-[150px] gap-1 text-xs" aria-label="মৌসুম নির্বাচন">
-          <CalendarRange className="h-3.5 w-3.5 text-primary" />
+        <SelectTrigger className="h-7 w-[120px] gap-1 text-[11px]" aria-label="মৌসুম নির্বাচন">
+          <CalendarRange className="h-3 w-3 text-primary" />
           <SelectValue placeholder="মৌসুম" />
         </SelectTrigger>
         <SelectContent align="end">
           {seasons.map((s) => (
-            <SelectItem key={s.id} value={s.id} className="text-xs">
+            <SelectItem key={s.id} value={s.id} className="text-[11px]">
               {s.name}
-              {s.is_active ? " • চলমান" : ""}
             </SelectItem>
           ))}
         </SelectContent>
