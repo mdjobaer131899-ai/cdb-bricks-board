@@ -20,9 +20,13 @@ import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticated/seasons'
+import { Route as AuthenticatedSardarsRouteImport } from './routes/_authenticated/sardars'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedRawMaterialsRouteImport } from './routes/_authenticated/raw-materials'
 import { Route as AuthenticatedProductionRouteImport } from './routes/_authenticated/production'
+import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated/orders'
+import { Route as AuthenticatedLedgerHeadsRouteImport } from './routes/_authenticated/ledger-heads'
+import { Route as AuthenticatedKachaBricksRouteImport } from './routes/_authenticated/kacha-bricks'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedContractsRouteImport } from './routes/_authenticated/contracts'
@@ -97,6 +101,11 @@ const AuthenticatedSeasonsRoute = AuthenticatedSeasonsRouteImport.update({
   path: '/seasons',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSardarsRoute = AuthenticatedSardarsRouteImport.update({
+  id: '/sardars',
+  path: '/sardars',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -113,6 +122,23 @@ const AuthenticatedProductionRoute = AuthenticatedProductionRouteImport.update({
   path: '/production',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedOrdersRoute = AuthenticatedOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedLedgerHeadsRoute =
+  AuthenticatedLedgerHeadsRouteImport.update({
+    id: '/ledger-heads',
+    path: '/ledger-heads',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedKachaBricksRoute =
+  AuthenticatedKachaBricksRouteImport.update({
+    id: '/kacha-bricks',
+    path: '/kacha-bricks',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -230,9 +256,13 @@ export interface FileRoutesByFullPath {
   '/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/inventory': typeof AuthenticatedInventoryRouteWithChildren
+  '/kacha-bricks': typeof AuthenticatedKachaBricksRoute
+  '/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/orders': typeof AuthenticatedOrdersRoute
   '/production': typeof AuthenticatedProductionRoute
   '/raw-materials': typeof AuthenticatedRawMaterialsRoute
   '/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
@@ -260,9 +290,13 @@ export interface FileRoutesByTo {
   '/accounts': typeof AuthenticatedAccountsRouteWithChildren
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/inventory': typeof AuthenticatedInventoryRouteWithChildren
+  '/kacha-bricks': typeof AuthenticatedKachaBricksRoute
+  '/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/orders': typeof AuthenticatedOrdersRoute
   '/production': typeof AuthenticatedProductionRoute
   '/raw-materials': typeof AuthenticatedRawMaterialsRoute
   '/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
@@ -296,9 +330,13 @@ export interface FileRoutesById {
   '/_authenticated/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/_authenticated/inventory': typeof AuthenticatedInventoryRouteWithChildren
+  '/_authenticated/kacha-bricks': typeof AuthenticatedKachaBricksRoute
+  '/_authenticated/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/_authenticated/orders': typeof AuthenticatedOrdersRoute
   '/_authenticated/production': typeof AuthenticatedProductionRoute
   '/_authenticated/raw-materials': typeof AuthenticatedRawMaterialsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/_authenticated/sardars': typeof AuthenticatedSardarsRoute
   '/_authenticated/seasons': typeof AuthenticatedSeasonsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
@@ -333,9 +371,13 @@ export interface FileRouteTypes {
     | '/contracts'
     | '/customers'
     | '/inventory'
+    | '/kacha-bricks'
+    | '/ledger-heads'
+    | '/orders'
     | '/production'
     | '/raw-materials'
     | '/reports'
+    | '/sardars'
     | '/seasons'
     | '/settings'
     | '/suppliers'
@@ -363,9 +405,13 @@ export interface FileRouteTypes {
     | '/accounts'
     | '/approvals'
     | '/inventory'
+    | '/kacha-bricks'
+    | '/ledger-heads'
+    | '/orders'
     | '/production'
     | '/raw-materials'
     | '/reports'
+    | '/sardars'
     | '/seasons'
     | '/settings'
     | '/suppliers'
@@ -398,9 +444,13 @@ export interface FileRouteTypes {
     | '/_authenticated/contracts'
     | '/_authenticated/customers'
     | '/_authenticated/inventory'
+    | '/_authenticated/kacha-bricks'
+    | '/_authenticated/ledger-heads'
+    | '/_authenticated/orders'
     | '/_authenticated/production'
     | '/_authenticated/raw-materials'
     | '/_authenticated/reports'
+    | '/_authenticated/sardars'
     | '/_authenticated/seasons'
     | '/_authenticated/settings'
     | '/_authenticated/suppliers'
@@ -510,6 +560,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSeasonsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/sardars': {
+      id: '/_authenticated/sardars'
+      path: '/sardars'
+      fullPath: '/sardars'
+      preLoaderRoute: typeof AuthenticatedSardarsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/reports': {
       id: '/_authenticated/reports'
       path: '/reports'
@@ -529,6 +586,27 @@ declare module '@tanstack/react-router' {
       path: '/production'
       fullPath: '/production'
       preLoaderRoute: typeof AuthenticatedProductionRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/orders': {
+      id: '/_authenticated/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof AuthenticatedOrdersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ledger-heads': {
+      id: '/_authenticated/ledger-heads'
+      path: '/ledger-heads'
+      fullPath: '/ledger-heads'
+      preLoaderRoute: typeof AuthenticatedLedgerHeadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/kacha-bricks': {
+      id: '/_authenticated/kacha-bricks'
+      path: '/kacha-bricks'
+      fullPath: '/kacha-bricks'
+      preLoaderRoute: typeof AuthenticatedKachaBricksRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/inventory': {
@@ -763,9 +841,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedContractsRoute: typeof AuthenticatedContractsRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRouteWithChildren
+  AuthenticatedKachaBricksRoute: typeof AuthenticatedKachaBricksRoute
+  AuthenticatedLedgerHeadsRoute: typeof AuthenticatedLedgerHeadsRoute
+  AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRoute
   AuthenticatedProductionRoute: typeof AuthenticatedProductionRoute
   AuthenticatedRawMaterialsRoute: typeof AuthenticatedRawMaterialsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRouteWithChildren
+  AuthenticatedSardarsRoute: typeof AuthenticatedSardarsRoute
   AuthenticatedSeasonsRoute: typeof AuthenticatedSeasonsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
@@ -785,9 +867,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedContractsRoute: AuthenticatedContractsRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRouteWithChildren,
+  AuthenticatedKachaBricksRoute: AuthenticatedKachaBricksRoute,
+  AuthenticatedLedgerHeadsRoute: AuthenticatedLedgerHeadsRoute,
+  AuthenticatedOrdersRoute: AuthenticatedOrdersRoute,
   AuthenticatedProductionRoute: AuthenticatedProductionRoute,
   AuthenticatedRawMaterialsRoute: AuthenticatedRawMaterialsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRouteWithChildren,
+  AuthenticatedSardarsRoute: AuthenticatedSardarsRoute,
   AuthenticatedSeasonsRoute: AuthenticatedSeasonsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
