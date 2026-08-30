@@ -42,10 +42,14 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur md:px-6">
-      <SidebarTrigger className="md:hidden" />
-      <div className="hidden md:block">
-        <SidebarTrigger />
-      </div>
+      <button
+        type="button"
+        onClick={toggleSidebar}
+        aria-label="মেনু খুলুন"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors hover:bg-muted active:scale-95"
+      >
+        <BrandLogo className="h-7 w-7" />
+      </button>
       <div className="ml-1 hidden sm:block">
         {loading ? (
           <Skeleton className="h-4 w-32" />
