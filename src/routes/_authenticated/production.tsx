@@ -229,6 +229,27 @@ function NewProductionDialog({ bricks, userId, onClose, onSaved }: { bricks: Arr
   const [qty, setQty] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [matiId, setMatiId] = useState("");
+  const [matiUsed, setMatiUsed] = useState("");
+  const [coalId, setCoalId] = useState("");
+  const [coalUsed, setCoalUsed] = useState("");
+  const [laborCost, setLaborCost] = useState("");
+  const [otherCost, setOtherCost] = useState("");
+
+  const stockQ = useQuery({
+    queryKey: ["raw-material-stock"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("raw_material_stock").select("material_id, name, unit, in_stock, avg_unit_cost").order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const materials = stockQ.data ?? [];
+  const unitCost = (id: string) => Number(materials.find((m) => m.material_id === id)?.avg_unit_cost ?? 0);
+  const estMati = (Number(matiUsed) || 0) * unitCost(matiId);
+  const estCoal = (Number(coalUsed) || 0) * unitCost(coalId);
+  const estTotal = estMati + estCoal + (Number(laborCost) || 0) + (Number(otherCost) || 0);
+  const estPerBrick = Number(qty) > 0 ? estTotal / Number(qty) : 0;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -240,6 +261,12 @@ function NewProductionDialog({ bricks, userId, onClose, onSaved }: { bricks: Arr
       quantity: Number(qty),
       notes: notes || null,
       created_by: userId,
+      mati_material_id: matiId || null,
+      mati_used: matiUsed ? Number(matiUsed) : null,
+      coal_material_id: coalId || null,
+      coal_used: coalUsed ? Number(coalUsed) : null,
+      labor_cost: laborCost ? Number(laborCost) : 0,
+      other_cost: otherCost ? Number(otherCost) : 0,
     });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
