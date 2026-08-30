@@ -15,10 +15,10 @@ import {
 import { useCurrentUser } from "@/lib/use-current-user";
 import { BrandLogo } from "@/components/brand-logo";
 
-type Item = { title: string; url: string; icon: any; roles: readonly ("admin" | "manager")[] };
-type Group = { label: string; items: Item[] };
+export type NavItem = { title: string; url: string; icon: any; roles: readonly ("admin" | "manager")[] };
+export type NavGroup = { label: string; items: NavItem[] };
 
-const GROUPS: Group[] = [
+export const NAV_GROUPS: NavGroup[] = [
   {
     label: "বিক্রয়",
     items: [
@@ -83,7 +83,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {GROUPS.map((g) => {
+        {NAV_GROUPS.map((g) => {
           const items = g.items.filter((i) => (i.roles as readonly string[]).includes(role));
           if (items.length === 0) return null;
           return (

@@ -11,6 +11,7 @@ import { fetchSales } from "@/lib/sales-queries";
 import { bn, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { BrandLogo } from "@/components/brand-logo";
+import { DashboardMenuBar } from "@/components/dashboard-menu-bar";
 
 const actions = [
   { to: "/entries/new" as const, label: "নতুন এন্ট্রি", icon: Plus, tone: "from-primary/15 to-primary/5 text-primary" },
@@ -42,17 +43,20 @@ export function ManagerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-warning/10 p-4 shadow-elegant">
-        <BrandLogo className="h-14 w-14 shrink-0 drop-shadow-md" />
-        <div className="min-w-0 flex-1">
-          <h1 className="bg-gradient-to-r from-[#e85d3a] via-[#f7931e] to-[#c2410c] bg-clip-text text-2xl font-extrabold leading-tight tracking-tight text-transparent sm:text-3xl">
-            সি ডি বি ব্রিকস
-          </h1>
-          <p className="text-xs font-medium text-muted-foreground sm:text-sm">কাপাসিয়া, গাজীপুর</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {me?.fullName} — আজ {today.toLocaleDateString("bn-BD", { day: "2-digit", month: "long", year: "numeric" })}
-          </p>
+      <div className="space-y-2 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-warning/10 p-4 shadow-elegant">
+        <div className="flex items-center gap-3">
+          <BrandLogo className="h-14 w-14 shrink-0 drop-shadow-md" />
+          <div className="min-w-0 flex-1">
+            <h1 className="bg-gradient-to-r from-[#e85d3a] via-[#f7931e] to-[#c2410c] bg-clip-text text-2xl font-extrabold leading-tight tracking-tight text-transparent sm:text-3xl">
+              সি ডি বি ব্রিকস
+            </h1>
+            <p className="text-xs font-medium text-muted-foreground sm:text-sm">কাপাসিয়া, গাজীপুর</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {me?.fullName} — আজ {today.toLocaleDateString("bn-BD", { day: "2-digit", month: "long", year: "numeric" })}
+            </p>
+          </div>
         </div>
+        <DashboardMenuBar />
       </div>
 
       <Card>
