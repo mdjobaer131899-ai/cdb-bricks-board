@@ -67,12 +67,11 @@ function wrap(builder: any, column: string): any {
   return proxy;
 }
 
-export const sdb = {
-  from(table: string) {
+function fromImpl(table: string) {
     const real = (supabase as any).from(table);
     const column = DATE_COLUMN[table];
-    if (!column) return real;
-    return new Proxy(real, {
+  if (!column) return real;
+  return new Proxy(real, {
       get(target, prop, receiver) {
         const value = Reflect.get(target, prop, receiver);
         if (prop === "select" && typeof value === "function") {
