@@ -1,80 +1,62 @@
-# ERP Restructure Plan
+# CDB Bricks — একক সত্য-উৎস (Single Source of Truth) রূপান্তর
 
-বড় পরিবর্তন — কাজগুলো ৬টি গ্রুপে ভাগ করা হয়েছে।
+লক্ষ্য: একবার এন্ট্রি → গ্রাহক, সরদার, স্টক, ক্যাশ/ব্যাংক, খরচ, আয়, লেজার ও লাভ-ক্ষতি সব নিজে নিজে মিলবে। বর্তমান UI/ফিচার অপরিবর্তিত থাকবে; শুধু ভুল হিসাব ঠিক হবে ও অটোমেশন যোগ হবে।
 
-## 1. AI Assistant "Unauthorized" Fix (অগ্রাধিকার)
-- `src/routes/api/chat.ts` বর্তমানে authentication ছাড়া call হচ্ছে। Browser থেকে Supabase bearer token পাঠানো হচ্ছে না।
-- Fix: chat route handler-এ Authorization header forward করব এবং AI tools-এ `requireSupabaseAuth` middleware ব্যবহার করব, অথবা service-role admin client ব্যবহার করব (read-only tools-এর জন্য নিরাপদ)।
+## এখনকার যে ভুলগুলো ধরা পড়েছে
 
-## 2. Dashboard সরলীকরণ
-- "আজকের সারসংক্ষেপ" card বাদ
-- সব chart/graph component বাদ (sparkline, top-customers chart ইত্যাদি)
-- **নতুন: তারিখভিত্তিক Income/Expense Folder List**
-  - প্রতি তারিখ একটি collapsible folder
-  - ক্লিক করলে সেই দিনের আয় (collections + cash sales) ও ব্যয় (expenses) detail দেখাবে
-  - Admin-এর জন্য প্রতিটি row-তে Edit/Delete button
-- নগদ collection স্বয়ংক্রিয় income হিসেবে দেখাবে (DB trigger ইতিমধ্যে আছে — শুধু UI)
+- **Collection দুইবার গোনা:** একটি কালেকশন একই সাথে `collections` ও `contract_payments`-এ লেখা হয়, ফলে গ্রাহক লেজারে ক্রেডিট দুইবার আসে।
+- **চুক্তি + চালান দুইবার ডেবিট:** লেজারে চুক্তির পুরো বুকিং ভ্যালু এবং সেই চুক্তির চালানগুলোও ডেবিট হচ্ছে।
+- **অগ্রিম (Advance):** চুক্তির advance_paid ও গ্রাহকের advance_balance আলাদা পথে হিসাব হয়, জার্নালের সাথে মেলে না।
+- **সরদার হিসাব নেই:** কাঁচা ইট/পোড়ানো/লোডিং/মাটি/কয়লা/পরিবহন — কাজের পরিমাণ × রেট থেকে সরদারের পাওনা, পেমেন্ট ও ব্যালেন্স রাখার কোনো একক অ্যাকাউন্ট নেই; জার্নালেও যায় না।
+- **ব্যাংক/বিকাশ/নগদ:** `bank_transactions` ও `transfers` জার্নালে যায় না, তাই ক্যাশ ও ব্যাংক ব্যালেন্স আলাদা হয়ে যায়।
+- **Order:** advance, ডেলিভারি পরিমাণ, বাকি পরিমাণ ও স্টেটাস হাতে লিখতে হয়।
+- **Production cost:** মাটি/কয়লা/শ্রমিক/অন্যান্য খরচ প্রতি ইটের কস্টে ও জার্নালে যুক্ত হয় না।
+- **তারিখ:** কোথাও UTC তারিখ ব্যবহার হচ্ছে, তাই রাতের এন্ট্রি ভুল দিনে/ভুল মৌসুমে পড়তে পারে।
 
-## 3. Admin Auto-Approval
-- Admin role দিয়ে create করা সকল `sales_entries` সরাসরি `status='approved'` হবে
-- `entries.new.tsx` ও cash-sale function-এ user role check করে status set করব
-- Approval Queue থেকে admin-এর নিজের entry hide
+## ধাপ ১ — হিসাবের ভিত্তি ঠিক করা (ডেটাবেজ)
 
-## 4. Challan Page পরিবর্তন
-- উপরের "New Entry" button সরানো
-- Date filter যোগ (default: আজ)
-- Filtered list দেখাবে
+- **এক লেনদেন = এক রেকর্ড:** কালেকশন শুধু `collections`-এ থাকবে; `contract_payments` কেবল পুরোনো ডেটার জন্য পড়া হবে (নতুন ডাবল লেখা বন্ধ)। চুক্তির “প্রাপ্ত” টাকা কালেকশন থেকেই আসবে।
+- **লেজারের নিয়ম:** ডেবিট = কেবল অনুমোদিত চালান (ডেলিভারি) মূল্য; চুক্তির বুকিং ভ্যালু ডেবিট নয় — এটি শুধু প্রতিশ্রুতি হিসেবে দেখানো হবে। ক্রেডিট = সব কালেকশন। বকেয়া = ডেবিট − ক্রেডিট; ঋণাত্মক হলে সেটাই অগ্রিম।
+- **অগ্রিম একমুখী:** `customers.advance_balance` ও `contracts.advance_paid` একটি ট্রিগার-ফাংশন থেকেই পুনর্গণনা হবে।
+- **চার্ট অব অ্যাকাউন্টস সম্পূর্ণ করা:** ব্যাংক/মোবাইল ব্যাংকিং, সরদার পাওনা, সরবরাহকারী পাওনা, উৎপাদন-কস্ট, মাটি/কয়লা/লোডিং/পরিবহন খরচ ইত্যাদি কোড যোগ।
+- **সব লেনদেনে অটো জার্নাল:** বিক্রয়, কালেকশন, খরচ, কাঁচামাল ক্রয়, সরবরাহকারী পেমেন্ট, শ্রমিক/সরদার পেমেন্ট, গাড়ি খরচ, ব্যাংক জমা/উত্তোলন, ট্রান্সফার, উৎপাদন কস্ট — প্রতিটির জন্য INSERT/UPDATE/DELETE-এ পুরোনো এন্ট্রি মুছে নতুন করে লেখা হবে (ফলে edit/delete-এও হিসাব মেলে, ডাবল হয় না)।
 
-## 5. Contract — Customer Folder System
-- `/contracts` page redesign:
-  - Customer-wise group/folder (accordion)
-  - Customer expand করলে তার সব contracts নিচে
-- **New Contract Form সরলীকরণ:**
-  - শুধু: Customer Name, Contract Date, Total Brick Quantity, Per Brick Rate
-  - বাদ: Start/End/Expiry Date, Per Truck Rate
-  - Auto-calc: `truck_quantity = total_bricks / 2000` (read-only)
-  - Auto-calc: `total_value = quantity × rate` (read-only)
-- **Contract Detail Page-এ live stats:**
-  - মোট চুক্তি, মোট ট্রাক, সরবরাহকৃত (ট্রাক+ইট), অবশিষ্ট, মোট টাকা, আদায়, বকেয়া
-  - সব calculation DB view থেকে (real-time)
+## ধাপ ২ — সরদার/শ্রমিক একক অ্যাকাউন্ট সিস্টেম
 
-## 6. Challan ↔ Contract Linking
-- Challan approve করার সময় **Contract dropdown বাধ্যতামূলক** (যদি customer-এর active contract থাকে)
-- Approve trigger automatically update করবে:
-  - Contract delivered_quantity
-  - Contract balance
-  - Customer ledger
-  - Reports (already via journal triggers from Phase 3)
+- নতুন **কাজের খাত (work_categories)**: কাঁচা ইট, পোড়ানো, লোডিং, আনলোডিং, মাটি, কয়লা/জ্বালানি, পরিবহন — প্রয়োজনে আরো যোগ করা যাবে।
+- নতুন **sardar_rates**: প্রতি খাতে সরদার-ভিত্তিক রেট, তারিখ থেকে কার্যকর। পুরোনো কাজের রেট কখনো বদলাবে না — কাজের রেট এন্ট্রির সময়েই রেকর্ডে বসে যায়; নতুন রেট শুধু নতুন কাজে প্রযোজ্য।
+- নতুন **sardar_work_entries**: তারিখ, খাত, সরদার, পরিমাণ, রেট, টাকা (পরিমাণ × রেট, অটো) → সরদারের পাওনা অটো তৈরি ও জার্নালে খরচ পোস্ট।
+- নতুন **sardar_payments**: শুধু সরদার + টাকা লিখলেই বকেয়া কমবে (অগ্রিমও এখানেই)।
+- **সরদার লেজার পেজ**: মোট কাজ, রেট, মোট পাওনা, পরিশোধ, অগ্রিম, ব্যালেন্স ও পূর্ণ ইতিহাস — প্রিন্ট/এক্সপোর্ট সহ।
 
-## Technical Changes
+## ধাপ ৩ — চেইন অটোমেশন
 
-**Database migrations:**
-- `contracts` table: `truck_quantity` generated column বা trigger (2000 piece/truck), remove not-null on dates
-- Add `delivered_quantity`, `delivered_value`, `collected_amount`, `due_amount` as a view `contract_summary`
-- Trigger: sales_entry approved → update contract_summary cache (or use view, simpler)
-- Trigger/policy: admin-created sales_entry auto-approved
+- **গ্রাহক → চুক্তি → অর্ডার → চালান → ডেলিভারি → কালেকশন → লেজার:** চালান অনুমোদিত হলেই ডেলিভারি পরিমাণ, চুক্তির delivered_quantity, অর্ডারের delivered/remaining ও স্টেটাস (নতুন/আংশিক/সম্পন্ন) অটো আপডেট; অর্ডারের advance কালেকশন থেকেই আসবে।
+- **কাঁচামাল → উৎপাদন → স্টক → বিক্রয়:** উৎপাদনে ব্যবহৃত মাটি/কয়লা কাঁচামাল স্টক থেকে কমবে, শ্রমিক ও অন্যান্য খরচসহ মোট উৎপাদন কস্ট ও প্রতি ইটের কস্ট অটো; বিক্রয়ে ইটের স্টক কমবে (একবারই)।
+- **ক্যাশ/ব্যাংক:** পেমেন্ট মাধ্যম (ক্যাশ/ব্যাংক/বিকাশ/নগদ) অনুযায়ী টাকা সঠিক অ্যাকাউন্টে যাবে; ব্যাংক লেনদেন ও ট্রান্সফার একই জার্নাল থেকে ব্যালেন্স দেবে — দুইবার যোগ হবে না।
 
-**Frontend files:**
-- `src/components/admin-dashboard.tsx` — strip charts, add date-folder list
-- `src/components/manager-dashboard.tsx` — same simplification
-- New: `src/components/daily-income-expense-folders.tsx`
-- `src/routes/_authenticated/challans.index.tsx` — remove New Entry, add date filter
-- `src/routes/_authenticated/contracts.index.tsx` — customer folder accordion
-- `src/routes/_authenticated/contracts.new.tsx` — simplified form
-- `src/routes/_authenticated/contracts.$id.tsx` — live stats panel
-- `src/routes/_authenticated/entries.new.tsx` — require contract selection, auto-approve for admin
-- `src/lib/contracts.functions.ts` — update schema (remove dates, auto-calc)
-- `src/lib/cash-sale.functions.ts` — auto-approve always (already approved)
-- `src/routes/api/chat.ts` — fix auth forwarding
+## ধাপ ৪ — মৌসুম ও বাংলাদেশ সময়
 
-**সংরক্ষিত:** Phase 1-4 এর accounts/journal/stock infrastructure অপরিবর্তিত থাকবে।
+- সব ডিফল্ট তারিখ ও “আজ/এই মাস” হিসাব Asia/Dhaka সময় অনুযায়ী।
+- মৌসুম ফিল্টার সব ট্রানজেকশনাল টেবিল, রিপোর্ট, ড্যাশবোর্ড ও সরদার/গ্রাহক লেজারে ধারাবাহিকভাবে প্রয়োগ (আগের ব্যালেন্স আলাদা লাইনে)।
+
+## ধাপ ৫ — যাচাই (End-to-End)
+
+স্বয়ংক্রিয় যাচাই স্ক্রিপ্ট ও ব্রাউজার টেস্টে দেখা হবে:
+- ট্রায়াল ব্যালেন্সে ডেবিট = ক্রেডিট
+- গ্রাহক বকেয়ার যোগফল = অ্যাকাউন্টিং প্রাপ্য
+- সরদার ব্যালেন্স = কাজ − পরিশোধ
+- স্টক লেজার = উৎপাদন − বিক্রয়
+- ক্যাশ + ব্যাংক = আয় − ব্যয় (জার্নাল অনুযায়ী)
+- একটি এন্ট্রি এডিট/ডিলিট করার পরেও সব হিসাব মেলে
 
 ## কাজের ক্রম
-1. AI Unauthorized fix (দ্রুত)
-2. DB migration (contracts schema + auto-approve trigger + contract_summary view)
-3. Contract pages (form + folder list + detail stats)
-4. Challan page (filter + remove new entry + require contract)
-5. Dashboard restructure (folders + remove charts)
-6. Admin edit/delete UI on income-expense entries
 
-প্রায় ১২-১৫টি ফাইল edit/create হবে। শুরু করব?
+মাইগ্রেশনগুলো ধাপে ধাপে অনুমোদনের জন্য আসবে (ধাপ ১ → ২ → ৩), এরপর UI সংযোজন (সরদার লেজার পেজ, অর্ডার/উৎপাদন অটো-ফিল্ড, ব্যাংক), শেষে যাচাই রিপোর্ট। বর্তমান পেজ, ডিজাইন ও ফিচার অপরিবর্তিত থাকবে — শুধু হিসাব ঠিক হবে ও নতুন সরদার লেজার যোগ হবে।
+
+## প্রযুক্তিগত সংক্ষেপ
+
+- নতুন টেবিল: `work_categories`, `sardar_rates`, `sardar_work_entries`, `sardar_payments` (RLS + GRANT + created_at/updated_at + admin/manager নীতিসহ)।
+- নতুন/সংশোধিত ট্রিগার-ফাংশন: `post_*_journal` সবগুলো পুনর্লিখন, `recompute_customer_advance`, `recompute_contract_delivered`, `recompute_order_progress`, `recompute_sardar_balance`, `post_production_cost_journal`, `sync_raw_material_stock`।
+- `journal_source` enum-এ নতুন মান: `sardar`, `bank`, `transfer`, `supplier`, `production`।
+- ফ্রন্টএন্ড: `customer-ledger.tsx` ডাবল-কাউন্টিং ঠিক, `collections.functions.ts` ডাবল-রাইট বন্ধ, নতুন `sardar-ledger` পেজ ও `sardars.functions.ts`, `src/lib/format.ts`-এ Dhaka-টাইমজোন তারিখ হেল্পার।
