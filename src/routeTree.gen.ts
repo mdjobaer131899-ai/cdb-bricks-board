@@ -43,6 +43,7 @@ import { Route as AuthenticatedChallansIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedReportsProductionCostRouteImport } from './routes/_authenticated/reports.production-cost'
 import { Route as AuthenticatedProductionStepsLoadRouteImport } from './routes/_authenticated/production-steps.load'
 import { Route as AuthenticatedProductionStepsKachaRouteImport } from './routes/_authenticated/production-steps.kacha'
+import { Route as AuthenticatedProductionStepsBurnRouteImport } from './routes/_authenticated/production-steps.burn'
 import { Route as AuthenticatedInventoryRawMaterialsRouteImport } from './routes/_authenticated/inventory.raw-materials'
 import { Route as AuthenticatedEntriesNewRouteImport } from './routes/_authenticated/entries.new'
 import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
@@ -232,6 +233,12 @@ const AuthenticatedProductionStepsKachaRoute =
     path: '/production-steps/kacha',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedProductionStepsBurnRoute =
+  AuthenticatedProductionStepsBurnRouteImport.update({
+    id: '/production-steps/burn',
+    path: '/production-steps/burn',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedInventoryRawMaterialsRoute =
   AuthenticatedInventoryRawMaterialsRouteImport.update({
     id: '/raw-materials',
@@ -313,6 +320,7 @@ export interface FileRoutesByFullPath {
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
   '/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
+  '/production-steps/burn': typeof AuthenticatedProductionStepsBurnRoute
   '/production-steps/kacha': typeof AuthenticatedProductionStepsKachaRoute
   '/production-steps/load': typeof AuthenticatedProductionStepsLoadRoute
   '/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
@@ -353,6 +361,7 @@ export interface FileRoutesByTo {
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
   '/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
+  '/production-steps/burn': typeof AuthenticatedProductionStepsBurnRoute
   '/production-steps/kacha': typeof AuthenticatedProductionStepsKachaRoute
   '/production-steps/load': typeof AuthenticatedProductionStepsLoadRoute
   '/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
@@ -398,6 +407,7 @@ export interface FileRoutesById {
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/_authenticated/entries/new': typeof AuthenticatedEntriesNewRoute
   '/_authenticated/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
+  '/_authenticated/production-steps/burn': typeof AuthenticatedProductionStepsBurnRoute
   '/_authenticated/production-steps/kacha': typeof AuthenticatedProductionStepsKachaRoute
   '/_authenticated/production-steps/load': typeof AuthenticatedProductionStepsLoadRoute
   '/_authenticated/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
@@ -443,6 +453,7 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/entries/new'
     | '/inventory/raw-materials'
+    | '/production-steps/burn'
     | '/production-steps/kacha'
     | '/production-steps/load'
     | '/reports/production-cost'
@@ -483,6 +494,7 @@ export interface FileRouteTypes {
     | '/customers/$id'
     | '/entries/new'
     | '/inventory/raw-materials'
+    | '/production-steps/burn'
     | '/production-steps/kacha'
     | '/production-steps/load'
     | '/reports/production-cost'
@@ -527,6 +539,7 @@ export interface FileRouteTypes {
     | '/_authenticated/customers/$id'
     | '/_authenticated/entries/new'
     | '/_authenticated/inventory/raw-materials'
+    | '/_authenticated/production-steps/burn'
     | '/_authenticated/production-steps/kacha'
     | '/_authenticated/production-steps/load'
     | '/_authenticated/reports/production-cost'
@@ -784,6 +797,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProductionStepsKachaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/production-steps/burn': {
+      id: '/_authenticated/production-steps/burn'
+      path: '/production-steps/burn'
+      fullPath: '/production-steps/burn'
+      preLoaderRoute: typeof AuthenticatedProductionStepsBurnRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/inventory/raw-materials': {
       id: '/_authenticated/inventory/raw-materials'
       path: '/raw-materials'
@@ -957,6 +977,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWorkersRoute: typeof AuthenticatedWorkersRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedEntriesNewRoute: typeof AuthenticatedEntriesNewRoute
+  AuthenticatedProductionStepsBurnRoute: typeof AuthenticatedProductionStepsBurnRoute
   AuthenticatedProductionStepsKachaRoute: typeof AuthenticatedProductionStepsKachaRoute
   AuthenticatedProductionStepsLoadRoute: typeof AuthenticatedProductionStepsLoadRoute
   AuthenticatedCollectionsIndexRoute: typeof AuthenticatedCollectionsIndexRoute
@@ -988,6 +1009,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWorkersRoute: AuthenticatedWorkersRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedEntriesNewRoute: AuthenticatedEntriesNewRoute,
+  AuthenticatedProductionStepsBurnRoute: AuthenticatedProductionStepsBurnRoute,
   AuthenticatedProductionStepsKachaRoute:
     AuthenticatedProductionStepsKachaRoute,
   AuthenticatedProductionStepsLoadRoute: AuthenticatedProductionStepsLoadRoute,
