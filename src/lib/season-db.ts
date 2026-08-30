@@ -29,6 +29,9 @@ const DATE_COLUMN: Record<string, string> = {
   deliveries: "delivery_date",
   journal_entries: "entry_date",
   stock_ledger: "ref_date",
+  sardar_work_entries: "entry_date",
+  sardar_payments: "payment_date",
+  raw_material_usage: "usage_date",
 };
 
 let range: { from: string; to: string } | null = null;

@@ -257,6 +257,7 @@ export type Database = {
           id: string
           method: string | null
           note: string | null
+          order_id: string | null
           payment_date: string
           updated_at: string
         }
@@ -269,6 +270,7 @@ export type Database = {
           id?: string
           method?: string | null
           note?: string | null
+          order_id?: string | null
           payment_date?: string
           updated_at?: string
         }
@@ -281,6 +283,7 @@ export type Database = {
           id?: string
           method?: string | null
           note?: string | null
+          order_id?: string | null
           payment_date?: string
           updated_at?: string
         }
@@ -304,6 +307,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collections_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -709,6 +719,13 @@ export type Database = {
             foreignKeyName: "kacha_brick_entries_sardar_id_fkey"
             columns: ["sardar_id"]
             isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "kacha_brick_entries_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
             referencedRelation: "sardars"
             referencedColumns: ["id"]
           },
@@ -804,6 +821,7 @@ export type Database = {
           created_at: string
           created_by: string
           customer_id: string
+          delivered_quantity: number
           delivery_date: string | null
           id: string
           note: string | null
@@ -811,6 +829,7 @@ export type Database = {
           order_no: string
           quantity: number
           rate: number
+          remaining_quantity: number
           status: string
           updated_at: string
         }
@@ -820,6 +839,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           customer_id: string
+          delivered_quantity?: number
           delivery_date?: string | null
           id?: string
           note?: string | null
@@ -827,6 +847,7 @@ export type Database = {
           order_no: string
           quantity?: number
           rate?: number
+          remaining_quantity?: number
           status?: string
           updated_at?: string
         }
@@ -836,6 +857,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           customer_id?: string
+          delivered_quantity?: number
           delivery_date?: string | null
           id?: string
           note?: string | null
@@ -843,6 +865,7 @@ export type Database = {
           order_no?: string
           quantity?: number
           rate?: number
+          remaining_quantity?: number
           status?: string
           updated_at?: string
         }
@@ -873,44 +896,62 @@ export type Database = {
       production_entries: {
         Row: {
           brick_type_id: string
+          coal_cost: number
+          coal_material_id: string | null
           coal_used: number | null
+          cost_per_brick: number
           created_at: string
           created_by: string
           id: string
           labor_cost: number | null
+          mati_cost: number
+          mati_material_id: string | null
           mati_used: number | null
           notes: string | null
           other_cost: number | null
           production_date: string
           quantity: number
+          total_cost: number
           updated_at: string
         }
         Insert: {
           brick_type_id: string
+          coal_cost?: number
+          coal_material_id?: string | null
           coal_used?: number | null
+          cost_per_brick?: number
           created_at?: string
           created_by: string
           id?: string
           labor_cost?: number | null
+          mati_cost?: number
+          mati_material_id?: string | null
           mati_used?: number | null
           notes?: string | null
           other_cost?: number | null
           production_date?: string
           quantity: number
+          total_cost?: number
           updated_at?: string
         }
         Update: {
           brick_type_id?: string
+          coal_cost?: number
+          coal_material_id?: string | null
           coal_used?: number | null
+          cost_per_brick?: number
           created_at?: string
           created_by?: string
           id?: string
           labor_cost?: number | null
+          mati_cost?: number
+          mati_material_id?: string | null
           mati_used?: number | null
           notes?: string | null
           other_cost?: number | null
           production_date?: string
           quantity?: number
+          total_cost?: number
           updated_at?: string
         }
         Relationships: [
@@ -927,6 +968,34 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "current_stock"
             referencedColumns: ["brick_type_id"]
+          },
+          {
+            foreignKeyName: "production_entries_coal_material_id_fkey"
+            columns: ["coal_material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "production_entries_coal_material_id_fkey"
+            columns: ["coal_material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_entries_mati_material_id_fkey"
+            columns: ["mati_material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "production_entries_mati_material_id_fkey"
+            columns: ["mati_material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -1005,6 +1074,13 @@ export type Database = {
             foreignKeyName: "raw_material_purchases_material_id_fkey"
             columns: ["material_id"]
             isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "raw_material_purchases_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
             referencedRelation: "raw_materials"
             referencedColumns: ["id"]
           },
@@ -1013,6 +1089,67 @@ export type Database = {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      raw_material_usage: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          material_id: string
+          note: string | null
+          production_entry_id: string | null
+          quantity: number
+          unit_cost: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          material_id: string
+          note?: string | null
+          production_entry_id?: string | null
+          quantity: number
+          unit_cost?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          material_id?: string
+          note?: string | null
+          production_entry_id?: string | null
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raw_material_usage_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
+          {
+            foreignKeyName: "raw_material_usage_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raw_material_usage_production_entry_id_fkey"
+            columns: ["production_entry_id"]
+            isOneToOne: false
+            referencedRelation: "production_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -1178,6 +1315,182 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      sardar_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          method: string | null
+          note: string | null
+          payment_date: string
+          payment_type: string
+          sardar_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+          payment_type?: string
+          sardar_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+          payment_type?: string
+          sardar_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sardar_payments_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "sardar_payments_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sardar_rates: {
+        Row: {
+          category_id: string
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          note: string | null
+          rate: number
+          sardar_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          note?: string | null
+          rate: number
+          sardar_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          note?: string | null
+          rate?: number
+          sardar_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sardar_rates_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "work_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sardar_rates_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "sardar_rates_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sardar_work_entries: {
+        Row: {
+          amount: number
+          category_id: string
+          created_at: string
+          created_by: string
+          entry_date: string
+          id: string
+          note: string | null
+          quantity: number
+          rate: number
+          sardar_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          category_id: string
+          created_at?: string
+          created_by: string
+          entry_date?: string
+          id?: string
+          note?: string | null
+          quantity: number
+          rate: number
+          sardar_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string
+          created_at?: string
+          created_by?: string
+          entry_date?: string
+          id?: string
+          note?: string | null
+          quantity?: number
+          rate?: number
+          sardar_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sardar_work_entries_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "work_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sardar_work_entries_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "sardar_work_entries_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sardars: {
         Row: {
@@ -1584,6 +1897,42 @@ export type Database = {
         }
         Relationships: []
       }
+      work_categories: {
+        Row: {
+          account_code: string
+          code: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          account_code?: string
+          code: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          account_code?: string
+          code?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       worker_attendance: {
         Row: {
           advance_paid: number
@@ -1831,6 +2180,32 @@ export type Database = {
         }
         Relationships: []
       }
+      raw_material_stock: {
+        Row: {
+          avg_unit_cost: number | null
+          in_stock: number | null
+          low_stock_threshold: number | null
+          material_id: string | null
+          name: string | null
+          purchased_amount: number | null
+          purchased_qty: number | null
+          unit: string | null
+          used_qty: number | null
+        }
+        Relationships: []
+      }
+      sardar_balances: {
+        Row: {
+          balance: number | null
+          name: string | null
+          sardar_id: string | null
+          total_advance: number | null
+          total_due: number | null
+          total_paid: number | null
+          total_quantity: number | null
+        }
+        Relationships: []
+      }
       trial_balance: {
         Row: {
           account_type: Database["public"]["Enums"]["account_type"] | null
@@ -1846,6 +2221,12 @@ export type Database = {
     }
     Functions: {
       acc: { Args: { _code: string }; Returns: string }
+      acc_for_method: { Args: { _method: string }; Returns: string }
+      current_sardar_rate: {
+        Args: { _category_id: string; _on_date?: string; _sardar_id: string }
+        Returns: number
+      }
+      expense_account_for: { Args: { _category: string }; Returns: string }
       expire_old_contracts: { Args: never; Returns: undefined }
       generate_contract_no: {
         Args: { _type: Database["public"]["Enums"]["contract_type"] }
@@ -1862,12 +2243,21 @@ export type Database = {
         }
         Returns: string
       }
+      material_avg_cost: { Args: { _material_id: string }; Returns: number }
+      recompute_contract_advance: {
+        Args: { _contract_id: string }
+        Returns: undefined
+      }
       recompute_contract_delivered: {
         Args: { _contract_id: string }
         Returns: undefined
       }
       recompute_customer_advance: {
         Args: { _customer_id: string }
+        Returns: undefined
+      }
+      recompute_order_progress: {
+        Args: { _order_id: string }
         Returns: undefined
       }
     }
@@ -1883,6 +2273,14 @@ export type Database = {
         | "manual"
         | "opening"
         | "adjustment"
+        | "raw_material"
+        | "labor"
+        | "vehicle"
+        | "sardar"
+        | "bank"
+        | "transfer"
+        | "supplier"
+        | "production"
       sale_status: "pending" | "approved" | "rejected"
       sale_type: "advance" | "regular"
     }
@@ -2023,6 +2421,14 @@ export const Constants = {
         "manual",
         "opening",
         "adjustment",
+        "raw_material",
+        "labor",
+        "vehicle",
+        "sardar",
+        "bank",
+        "transfer",
+        "supplier",
+        "production",
       ],
       sale_status: ["pending", "approved", "rejected"],
       sale_type: ["advance", "regular"],

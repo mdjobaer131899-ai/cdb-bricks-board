@@ -37,7 +37,7 @@ function ProductionPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("production_entries")
-        .select("id, production_date, brick_type_id, quantity, notes, created_at, brick_type:brick_types(name)")
+        .select("id, production_date, brick_type_id, quantity, notes, created_at, total_cost, cost_per_brick, brick_type:brick_types(name)")
         .order("production_date", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(300);
@@ -151,6 +151,8 @@ function ProductionPage() {
                     <TableHead>তারিখ</TableHead>
                     <TableHead>ইটের ধরন</TableHead>
                     <TableHead className="text-right">পরিমাণ</TableHead>
+                    <TableHead className="text-right">মোট খরচ</TableHead>
+                    <TableHead className="text-right">প্রতি ইট</TableHead>
                     <TableHead>মন্তব্য</TableHead>
                     <TableHead className="text-right">অ্যাকশন</TableHead>
                   </TableRow>
@@ -161,6 +163,8 @@ function ProductionPage() {
                       <TableCell className="text-xs">{bnDate(r.production_date)}</TableCell>
                       <TableCell>{r.brick_type?.name ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums font-semibold">{bn(r.quantity)}</TableCell>
+                      <TableCell className="text-right tabular-nums">৳ {bn(Math.round(Number(r.total_cost ?? 0)))}</TableCell>
+                      <TableCell className="text-right tabular-nums text-primary">৳ {Number(r.cost_per_brick ?? 0).toFixed(2)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{r.notes ?? "—"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -229,6 +233,27 @@ function NewProductionDialog({ bricks, userId, onClose, onSaved }: { bricks: Arr
   const [qty, setQty] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  const [matiId, setMatiId] = useState("");
+  const [matiUsed, setMatiUsed] = useState("");
+  const [coalId, setCoalId] = useState("");
+  const [coalUsed, setCoalUsed] = useState("");
+  const [laborCost, setLaborCost] = useState("");
+  const [otherCost, setOtherCost] = useState("");
+
+  const stockQ = useQuery({
+    queryKey: ["raw-material-stock"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("raw_material_stock").select("material_id, name, unit, in_stock, avg_unit_cost").order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const materials = stockQ.data ?? [];
+  const unitCost = (id: string) => Number(materials.find((m) => m.material_id === id)?.avg_unit_cost ?? 0);
+  const estMati = (Number(matiUsed) || 0) * unitCost(matiId);
+  const estCoal = (Number(coalUsed) || 0) * unitCost(coalId);
+  const estTotal = estMati + estCoal + (Number(laborCost) || 0) + (Number(otherCost) || 0);
+  const estPerBrick = Number(qty) > 0 ? estTotal / Number(qty) : 0;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -240,6 +265,12 @@ function NewProductionDialog({ bricks, userId, onClose, onSaved }: { bricks: Arr
       quantity: Number(qty),
       notes: notes || null,
       created_by: userId,
+      mati_material_id: matiId || null,
+      mati_used: matiUsed ? Number(matiUsed) : null,
+      coal_material_id: coalId || null,
+      coal_used: coalUsed ? Number(coalUsed) : null,
+      labor_cost: laborCost ? Number(laborCost) : 0,
+      other_cost: otherCost ? Number(otherCost) : 0,
     });
     setBusy(false);
     if (error) { toast.error(error.message); return; }
@@ -267,6 +298,48 @@ function NewProductionDialog({ bricks, userId, onClose, onSaved }: { bricks: Arr
         <div className="space-y-1.5">
           <Label>পরিমাণ</Label>
           <Input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} required />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>মাটি (কাঁচামাল)</Label>
+            <Select value={matiId} onValueChange={setMatiId}>
+              <SelectTrigger><SelectValue placeholder="বেছে নিন" /></SelectTrigger>
+              <SelectContent>
+                {materials.map((m) => <SelectItem key={String(m.material_id)} value={String(m.material_id)}>{m.name} (স্টক {bn(Number(m.in_stock ?? 0))} {m.unit})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>মাটির ব্যবহার</Label>
+            <Input type="number" inputMode="decimal" value={matiUsed} onChange={(e) => setMatiUsed(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>কয়লা/জ্বালানি</Label>
+            <Select value={coalId} onValueChange={setCoalId}>
+              <SelectTrigger><SelectValue placeholder="বেছে নিন" /></SelectTrigger>
+              <SelectContent>
+                {materials.map((m) => <SelectItem key={String(m.material_id)} value={String(m.material_id)}>{m.name} (স্টক {bn(Number(m.in_stock ?? 0))} {m.unit})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>কয়লার ব্যবহার</Label>
+            <Input type="number" inputMode="decimal" value={coalUsed} onChange={(e) => setCoalUsed(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>শ্রমিক খরচ</Label>
+            <Input type="number" inputMode="decimal" value={laborCost} onChange={(e) => setLaborCost(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>অন্যান্য খরচ</Label>
+            <Input type="number" inputMode="decimal" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} />
+          </div>
+        </div>
+        <div className="rounded-md bg-muted/50 p-3 text-sm space-y-1">
+          <div className="flex justify-between"><span>মাটি খরচ (গড় ক্রয়মূল্যে)</span><span className="tabular-nums">৳ {bn(Math.round(estMati))}</span></div>
+          <div className="flex justify-between"><span>কয়লা খরচ</span><span className="tabular-nums">৳ {bn(Math.round(estCoal))}</span></div>
+          <div className="flex justify-between font-semibold"><span>মোট উৎপাদন খরচ</span><span className="tabular-nums">৳ {bn(Math.round(estTotal))}</span></div>
+          <div className="flex justify-between text-primary font-semibold"><span>প্রতি ইটের খরচ</span><span className="tabular-nums">৳ {estPerBrick.toFixed(2)}</span></div>
         </div>
         <div className="space-y-1.5">
           <Label>মন্তব্য (ঐচ্ছিক)</Label>

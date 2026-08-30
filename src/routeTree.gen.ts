@@ -22,6 +22,7 @@ import { Route as AuthenticatedStaffSetupRouteImport } from './routes/_authentic
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticated/seasons'
 import { Route as AuthenticatedSardarsRouteImport } from './routes/_authenticated/sardars'
+import { Route as AuthenticatedSardarLedgerRouteImport } from './routes/_authenticated/sardar-ledger'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedRawMaterialsRouteImport } from './routes/_authenticated/raw-materials'
 import { Route as AuthenticatedProductionRouteImport } from './routes/_authenticated/production'
@@ -113,6 +114,12 @@ const AuthenticatedSardarsRoute = AuthenticatedSardarsRouteImport.update({
   path: '/sardars',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSardarLedgerRoute =
+  AuthenticatedSardarLedgerRouteImport.update({
+    id: '/sardar-ledger',
+    path: '/sardar-ledger',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -275,6 +282,7 @@ export interface FileRoutesByFullPath {
   '/production': typeof AuthenticatedProductionRoute
   '/raw-materials': typeof AuthenticatedRawMaterialsRoute
   '/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -311,6 +319,7 @@ export interface FileRoutesByTo {
   '/production': typeof AuthenticatedProductionRoute
   '/raw-materials': typeof AuthenticatedRawMaterialsRoute
   '/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -353,6 +362,7 @@ export interface FileRoutesById {
   '/_authenticated/production': typeof AuthenticatedProductionRoute
   '/_authenticated/raw-materials': typeof AuthenticatedRawMaterialsRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/_authenticated/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/_authenticated/sardars': typeof AuthenticatedSardarsRoute
   '/_authenticated/seasons': typeof AuthenticatedSeasonsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -396,6 +406,7 @@ export interface FileRouteTypes {
     | '/production'
     | '/raw-materials'
     | '/reports'
+    | '/sardar-ledger'
     | '/sardars'
     | '/seasons'
     | '/settings'
@@ -432,6 +443,7 @@ export interface FileRouteTypes {
     | '/production'
     | '/raw-materials'
     | '/reports'
+    | '/sardar-ledger'
     | '/sardars'
     | '/seasons'
     | '/settings'
@@ -473,6 +485,7 @@ export interface FileRouteTypes {
     | '/_authenticated/production'
     | '/_authenticated/raw-materials'
     | '/_authenticated/reports'
+    | '/_authenticated/sardar-ledger'
     | '/_authenticated/sardars'
     | '/_authenticated/seasons'
     | '/_authenticated/settings'
@@ -596,6 +609,13 @@ declare module '@tanstack/react-router' {
       path: '/sardars'
       fullPath: '/sardars'
       preLoaderRoute: typeof AuthenticatedSardarsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sardar-ledger': {
+      id: '/_authenticated/sardar-ledger'
+      path: '/sardar-ledger'
+      fullPath: '/sardar-ledger'
+      preLoaderRoute: typeof AuthenticatedSardarLedgerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/reports': {
@@ -886,6 +906,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProductionRoute: typeof AuthenticatedProductionRoute
   AuthenticatedRawMaterialsRoute: typeof AuthenticatedRawMaterialsRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRouteWithChildren
+  AuthenticatedSardarLedgerRoute: typeof AuthenticatedSardarLedgerRoute
   AuthenticatedSardarsRoute: typeof AuthenticatedSardarsRoute
   AuthenticatedSeasonsRoute: typeof AuthenticatedSeasonsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -914,6 +935,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProductionRoute: AuthenticatedProductionRoute,
   AuthenticatedRawMaterialsRoute: AuthenticatedRawMaterialsRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRouteWithChildren,
+  AuthenticatedSardarLedgerRoute: AuthenticatedSardarLedgerRoute,
   AuthenticatedSardarsRoute: AuthenticatedSardarsRoute,
   AuthenticatedSeasonsRoute: AuthenticatedSeasonsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,

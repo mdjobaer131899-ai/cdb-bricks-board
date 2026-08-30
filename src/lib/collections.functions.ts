@@ -17,19 +17,8 @@ export const createCollection = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
-    // If contract_id provided, also write to contract_payments so contract ledger stays consistent.
-    if (data.contract_id) {
-      const { error: cpErr } = await supabase.from("contract_payments").insert({
-        contract_id: data.contract_id,
-        amount: data.amount,
-        payment_date: data.payment_date,
-        method: data.method ?? null,
-        note: data.note ?? null,
-        created_by: userId,
-      });
-      if (cpErr) throw new Error(cpErr.message);
-    }
-
+    // একটিই সত্যের উৎস: collections। চুক্তির অগ্রিম/আদায় collections.contract_id
+    // দিয়েই হিসাব হয় — contract_payments-এ আলাদা করে লেখা হয় না, নইলে টাকা দুইবার গোনা হতো।
     const { data: row, error } = await supabase
       .from("collections")
       .insert({

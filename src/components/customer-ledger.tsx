@@ -25,17 +25,13 @@ export function CustomerLedger({ customerId, customerName }: Props) {
   const q = useQuery({
     queryKey: ["ledger", customerId],
     queryFn: async () => {
-      const [salesRes, colRes, payRes, contractsRes] = await Promise.all([
-        sdb.from("sales_entries").select("id, challan_no, sale_date, total_amount, status, sale_type, quantity, brick_type:brick_types(name)").eq("customer_id", customerId).eq("status", "approved").order("sale_date"),
-        sdb.from("collections").select("id, amount, payment_date, method, note, contract_id").eq("customer_id", customerId).order("payment_date"),
-        sdb.from("contract_payments").select("id, amount, payment_date, method, contract:contracts!inner(contract_no, customer_id)").eq("contract.customer_id", customerId).order("payment_date"),
-        sdb.from("contracts").select("id, contract_no, booked_value, advance_paid, created_at, contract_type").eq("customer_id", customerId),
+      const [salesRes, colRes] = await Promise.all([
+        sdb.from("sales_entries").select("id, challan_no, sale_date, total_amount, status, sale_type, quantity, contract_id, brick_type:brick_types(name)").eq("customer_id", customerId).eq("status", "approved").order("sale_date"),
+        sdb.from("collections").select("id, amount, payment_date, method, note, contract_id, contract:contracts(contract_no)").eq("customer_id", customerId).order("payment_date"),
       ]);
       return {
         sales: salesRes.data ?? [],
         collections: colRes.data ?? [],
-        payments: payRes.data ?? [],
-        contracts: contractsRes.data ?? [],
       };
     },
   });
@@ -44,8 +40,10 @@ export function CustomerLedger({ customerId, customerName }: Props) {
     if (!q.data) return [];
     const events: Omit<LedgerRow, "balance">[] = [];
 
+    // ডেবিট = ডেলিভারি হওয়া চালান (অনুমোদিত)। চুক্তির বুকিং মূল্য ডেবিট হয় না,
+    // কারণ ইট সরবরাহের সময়েই পাওনা তৈরি হয় — নইলে টাকা দুইবার গোনা হতো।
     for (const s of q.data.sales as Array<{ challan_no: string; sale_date: string; total_amount: number; sale_type: string; quantity: number; brick_type: { name?: string } | null }>) {
-      if (s.sale_type === "advance") continue; // advance contract sales accounted via booked_value
+      if (s.sale_type === "advance") continue; // অগ্রিম চালান কালেকশনেই হিসাব হয়
       events.push({
         date: s.sale_date,
         description: `চালান ${s.challan_no} — ${s.brick_type?.name ?? "ইট"} (${bn(s.quantity)})`,
@@ -54,28 +52,12 @@ export function CustomerLedger({ customerId, customerName }: Props) {
         ref: s.challan_no,
       });
     }
-    for (const c of q.data.contracts as Array<{ contract_no: string; booked_value: number; created_at: string; contract_type: string }>) {
-      events.push({
-        date: c.created_at.slice(0, 10),
-        description: `চুক্তি ${c.contract_no} (${c.contract_type === "yearly_fixed" ? "বার্ষিক" : c.contract_type === "short_term" ? "স্বল্পমেয়াদী" : "নগদ"}) — বুকিং`,
-        debit: Number(c.booked_value || 0),
-        credit: 0,
-        ref: c.contract_no,
-      });
-    }
-    for (const p of q.data.collections as Array<{ amount: number; payment_date: string; method: string | null; note: string | null }>) {
+    // ক্রেডিট = কালেকশন (চুক্তির অগ্রিমসহ) — একটিই উৎস, তাই দ্বিগুণ হয় না।
+    for (const p of q.data.collections as Array<{ amount: number; payment_date: string; method: string | null; note: string | null; contract: { contract_no?: string } | null }>) {
+      const forContract = p.contract?.contract_no ? ` — চুক্তি ${p.contract.contract_no}` : "";
       events.push({
         date: p.payment_date,
-        description: `কালেকশন${p.method ? ` (${p.method})` : ""}${p.note ? ` — ${p.note}` : ""}`,
-        debit: 0,
-        credit: Number(p.amount || 0),
-        ref: "—",
-      });
-    }
-    for (const p of q.data.payments as Array<{ amount: number; payment_date: string; method: string | null; contract: { contract_no?: string } | null }>) {
-      events.push({
-        date: p.payment_date,
-        description: `চুক্তি পেমেন্ট ${p.contract?.contract_no ?? ""}${p.method ? ` (${p.method})` : ""}`,
+        description: `কালেকশন${p.method ? ` (${p.method})` : ""}${forContract}${p.note ? ` — ${p.note}` : ""}`,
         debit: 0,
         credit: Number(p.amount || 0),
         ref: p.contract?.contract_no ?? "—",

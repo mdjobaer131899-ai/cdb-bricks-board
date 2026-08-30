@@ -25,14 +25,14 @@ function ProductionCostPage() {
       const ym = (p.production_date as string).slice(0, 7);
       const cur = map.get(ym) ?? { qty: 0, cost: 0 };
       cur.qty += Number(p.quantity || 0);
-      cur.cost += Number(p.labor_cost || 0) + Number(p.other_cost || 0);
+      cur.cost += Number(p.total_cost || 0) || (Number(p.labor_cost || 0) + Number(p.other_cost || 0));
       map.set(ym, cur);
     });
     return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [prodQ.data]);
 
   const totalQty = (prodQ.data ?? []).reduce((s: number, p: any) => s + Number(p.quantity || 0), 0);
-  const totalCost = (prodQ.data ?? []).reduce((s: number, p: any) => s + Number(p.labor_cost || 0) + Number(p.other_cost || 0), 0);
+  const totalCost = (prodQ.data ?? []).reduce((s: number, p: any) => s + (Number(p.total_cost || 0) || Number(p.labor_cost || 0) + Number(p.other_cost || 0)), 0);
   const avgPer1000 = totalQty > 0 ? (totalCost / totalQty) * 1000 : 0;
 
   return (
