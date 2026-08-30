@@ -67,23 +67,23 @@ export function CashBoxPanel() {
   const todayIso = useMemo(() => isoDate(new Date()), []);
   const today = useQuery({
     queryKey: ["cash-box", todayIso],
-    queryFn: () => fetchTodayCashBox(todayIso),
+    queryFn: () => fetchCashDay(todayIso),
   });
 
   const totals = useMemo(() => {
     const income = (today.data?.incomes ?? []).reduce((a, b) => a + b.amount, 0);
-    const expense = (today.data?.expenses ?? []).reduce((a, b) => a + b.amount, 0);
+    const expense = (today.data?.outs ?? []).reduce((a, b) => a + b.amount, 0);
     return { income, expense, net: income - expense };
   }, [today.data]);
 
   const invalidateAll = () => {
-    qc.invalidateQueries({ queryKey: ["cash-box"] });
-    qc.invalidateQueries({ queryKey: ["dash", "today"] });
-    qc.invalidateQueries({ queryKey: ["dashboard-due"] });
-    qc.invalidateQueries({ queryKey: ["dashboard-month"] });
-    qc.invalidateQueries({ queryKey: ["dashboard-trend"] });
-    qc.invalidateQueries({ queryKey: ["collections-list"] });
-    qc.invalidateQueries({ queryKey: ["cash-ledger"] });
+    for (const key of [
+      ["cash-box"], ["cash-balance-total"], ["dash", "today"], ["dashboard-due"],
+      ["dashboard-month"], ["dashboard-trend"], ["collections-list"], ["cash-ledger"],
+      ["sardar-balances"], ["sardar-payments"], ["trial-balance"], ["profit-loss"], ["journal-entries"],
+    ]) {
+      qc.invalidateQueries({ queryKey: key });
+    }
   };
 
   const delExp = useServerFn(deleteExpense);
