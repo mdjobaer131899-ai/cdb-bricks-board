@@ -533,7 +533,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
               </div>
               {sardarId && sardarBalQ.data && (
                 <p className="text-[11px] text-muted-foreground">
-                  মোট কাজের পাওনা ৳ {bn(Number(sardarBalQ.data.total_work ?? 0))} • পরিশোধিত ৳ {bn(Number(sardarBalQ.data.total_paid ?? 0))} •{" "}
+                  মোট কাজের পাওনা ৳ {bn(Number(sardarBalQ.data.total_due ?? 0))} • পরিশোধিত ৳ {bn(Number(sardarBalQ.data.total_paid ?? 0))} •{" "}
                   <span className="font-semibold text-foreground">বাকি ৳ {bn(Number(sardarBalQ.data.balance ?? 0))}</span>
                 </p>
               )}
