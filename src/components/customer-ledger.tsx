@@ -25,17 +25,13 @@ export function CustomerLedger({ customerId, customerName }: Props) {
   const q = useQuery({
     queryKey: ["ledger", customerId],
     queryFn: async () => {
-      const [salesRes, colRes, payRes, contractsRes] = await Promise.all([
-        sdb.from("sales_entries").select("id, challan_no, sale_date, total_amount, status, sale_type, quantity, brick_type:brick_types(name)").eq("customer_id", customerId).eq("status", "approved").order("sale_date"),
-        sdb.from("collections").select("id, amount, payment_date, method, note, contract_id").eq("customer_id", customerId).order("payment_date"),
-        sdb.from("contract_payments").select("id, amount, payment_date, method, contract:contracts!inner(contract_no, customer_id)").eq("contract.customer_id", customerId).order("payment_date"),
-        sdb.from("contracts").select("id, contract_no, booked_value, advance_paid, created_at, contract_type").eq("customer_id", customerId),
+      const [salesRes, colRes] = await Promise.all([
+        sdb.from("sales_entries").select("id, challan_no, sale_date, total_amount, status, sale_type, quantity, contract_id, brick_type:brick_types(name)").eq("customer_id", customerId).eq("status", "approved").order("sale_date"),
+        sdb.from("collections").select("id, amount, payment_date, method, note, contract_id, contract:contracts(contract_no)").eq("customer_id", customerId).order("payment_date"),
       ]);
       return {
         sales: salesRes.data ?? [],
         collections: colRes.data ?? [],
-        payments: payRes.data ?? [],
-        contracts: contractsRes.data ?? [],
       };
     },
   });
