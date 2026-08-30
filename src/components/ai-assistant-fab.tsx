@@ -103,7 +103,7 @@ export function AiAssistantFab() {
         <button
           aria-label="CDB Bricks AI Assistant"
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-gradient-to-br from-primary to-primary/80 px-4 py-3 text-primary-foreground shadow-lg ring-1 ring-primary/30 transition-transform hover:scale-105 active:scale-95"
+          className="fixed bottom-5 right-5 z-50 hidden items-center gap-2 rounded-full bg-gradient-to-br from-primary to-primary/80 px-4 py-3 text-primary-foreground shadow-lg ring-1 ring-primary/30 transition-transform hover:scale-105 active:scale-95 md:flex"
         >
           <Sparkles className="h-4 w-4" />
           <span className="text-sm font-medium">CDB AI সহকারী</span>
