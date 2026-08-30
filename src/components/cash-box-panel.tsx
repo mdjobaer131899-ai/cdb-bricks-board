@@ -369,6 +369,10 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   const [note, setNote] = useState("");
   const [workerId, setWorkerId] = useState<string>("");
   const [materialId, setMaterialId] = useState<string>("");
+  const [sardarId, setSardarId] = useState<string>("");
+  const [sardarType, setSardarType] = useState<"payment" | "advance">("payment");
+
+  const isSardar = category === SARDAR_CATEGORY;
 
   const workersQ = useQuery({
     queryKey: ["workers-active-select"],
@@ -386,6 +390,27 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
   });
+  const sardarsQ = useQuery({
+    queryKey: ["sardars-active-select"],
+    enabled: open && isSardar,
+    queryFn: async () => {
+      const { data } = await supabase.from("sardars").select("id, name").eq("is_active", true).order("name");
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+  const sardarBalQ = useQuery({
+    queryKey: ["sardar-balance-one", sardarId],
+    enabled: open && isSardar && !!sardarId,
+    queryFn: async () => {
+      const { data } = await supabase.from("sardar_balances").select("*").eq("sardar_id", sardarId).maybeSingle();
+      return data as any;
+    },
+  });
+
+  function reset() {
+    setCategory(""); setCustomCategory(""); setAmount(""); setNote("");
+    setWorkerId(""); setMaterialId(""); setSardarId(""); setSardarType("payment");
+  }
 
   type ExpenseInput = { category: string; amount: number; expense_date: string; note: string | null };
   const createFn = useServerFn(createExpense);
@@ -394,7 +419,24 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     onSuccess: () => {
       toast.success("ব্যয় যোগ হয়েছে");
       setOpen(false);
-      setCategory(""); setCustomCategory(""); setAmount(""); setNote(""); setWorkerId(""); setMaterialId("");
+      reset();
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // সরদারকে দেওয়া টাকা sardar_payments-এ যায় — তাই তার কাজের পাওনা থেকে
+  // স্বয়ংক্রিয়ভাবে বাদ যায় এবং একই সাথে মূল ক্যাশ থেকেও কমে।
+  const createSardarPay = useServerFn(createSardarPayment);
+  const sardarMut = useMutation({
+    mutationFn: (input: {
+      sardar_id: string; amount: number; payment_date: string;
+      payment_type: "payment" | "advance"; method: string | null; note: string | null;
+    }) => createSardarPay({ data: input }),
+    onSuccess: () => {
+      toast.success("সরদার পেমেন্ট যোগ হয়েছে — পাওনা থেকে বাদ গেছে");
+      setOpen(false);
+      reset();
       onDone();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -402,10 +444,23 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalCat = category === "অন্যান্য" ? customCategory.trim() : category;
     const amt = Number(amount);
-    if (!finalCat) return toast.error("খাত নির্বাচন করুন");
     if (!Number.isFinite(amt) || amt <= 0) return toast.error("টাকার পরিমাণ সঠিক নয়");
+
+    if (isSardar) {
+      if (!sardarId) return toast.error("সরদার নির্বাচন করুন");
+      return sardarMut.mutate({
+        sardar_id: sardarId,
+        amount: amt,
+        payment_date: date,
+        payment_type: sardarType,
+        method: "cash",
+        note: note.trim() || null,
+      });
+    }
+
+    const finalCat = category === "অন্যান্য" ? customCategory.trim() : category;
+    if (!finalCat) return toast.error("খাত নির্বাচন করুন");
     let finalNote = note.trim();
     if (category === "শ্রমিক বেতন" && workerId) {
       const w = workersQ.data?.find((x) => x.id === workerId);
@@ -417,6 +472,7 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     }
     mut.mutate({ category: finalCat, amount: amt, expense_date: date, note: finalNote || null });
   };
+
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
