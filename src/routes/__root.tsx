@@ -4,13 +4,14 @@ import type { ReactNode } from "react";
 import { useEffect } from "react";
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { KeyboardAware } from "@/components/keyboard-aware";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover, interactive-widget=resizes-content" },
       { title: "CDB Bricks — Sales Management" },
       { name: "description", content: "CDB Bricks Sales Management System — চালান, বিক্রয় ও গ্রাহক ব্যবস্থাপনা।" },
       { property: "og:title", content: "CDB Bricks — Sales Management" },
@@ -69,6 +70,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthSync />
+      <KeyboardAware />
       <Outlet />
       <Toaster />
     </QueryClientProvider>
