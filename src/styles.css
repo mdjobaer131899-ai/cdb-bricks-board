@@ -135,3 +135,57 @@
     font-feature-settings: "ss01";
   }
 }
+
+/* ---------- On-screen keyboard handling (iPad / tablet / phone) ---------- */
+:root {
+  --kb-inset: 0px;
+}
+
+/* Keep the last fields reachable when the keyboard is open */
+.keyboard-open main {
+  padding-bottom: calc(var(--kb-inset) + 5rem) !important;
+  scroll-padding-bottom: calc(var(--kb-inset) + 5rem);
+}
+
+/* Bottom nav must not sit on top of the keyboard */
+.keyboard-open nav.fixed.bottom-0 {
+  transform: translateY(120%);
+  transition: transform 0.18s ease-out;
+}
+
+/* Dialogs and sheets shrink instead of hiding fields behind the keyboard */
+.keyboard-open [role="dialog"] {
+  max-height: calc(100dvh - var(--kb-inset) - 2rem);
+  overflow-y: auto;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-bottom: calc(var(--kb-inset) + 4rem);
+}
+
+/* iOS: never zoom on focus — needs >= 16px font size on fields */
+@media (max-width: 1180px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* ---------- Tablet / iPad layout ---------- */
+@media (min-width: 768px) and (max-width: 1180px) {
+  main {
+    padding: 1.25rem !important;
+  }
+  /* Comfortable touch targets on tablets */
+  button,
+  [role="button"],
+  a[data-slot],
+  [role="tab"] {
+    min-height: 40px;
+  }
+  table {
+    font-size: 0.9rem;
+  }
+}
