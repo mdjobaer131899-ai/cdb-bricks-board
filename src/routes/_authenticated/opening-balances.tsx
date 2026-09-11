@@ -166,6 +166,22 @@ function OpeningBalancesPage() {
     },
   });
 
+  // এই ওপেনিং ব্যালেন্সের বিপরীতে দেওয়া চালান (ইট সমন্বয়)
+  const linkedSalesQ = useQuery({
+    queryKey: ["opening-linked-sales", detail?.id],
+    enabled: !!detail?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sales_entries")
+        .select("id, challan_no, sale_date, quantity, total_amount, status")
+        .eq("opening_balance_id", detail!.id)
+        .neq("status", "rejected")
+        .order("sale_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const rows = rowsQ.data ?? [];
 
   const totals = useMemo(() => {
@@ -661,6 +677,42 @@ function OpeningBalancesPage() {
                   )}
                 </TableBody>
               </Table>
+
+              {detail.kind === "customer_brick_due" && (
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold">সংযুক্ত চালান (ইট সমন্বয়)</div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>তারিখ</TableHead>
+                        <TableHead>চালান</TableHead>
+                        <TableHead className="text-right">পরিমাণ</TableHead>
+                        <TableHead className="text-right">টাকা</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(linkedSalesQ.data ?? []).map((s: any) => (
+                        <TableRow key={s.id}>
+                          <TableCell>{bnDate(s.sale_date)}</TableCell>
+                          <TableCell>
+                            {s.challan_no}
+                            {s.status === "pending" && <span className="ml-1 text-[11px] text-warning">(অনুমোদন বাকি)</span>}
+                          </TableCell>
+                          <TableCell className="text-right">{bn(Number(s.quantity))}</TableCell>
+                          <TableCell className="text-right">৳ {bn(Number(s.total_amount))}</TableCell>
+                        </TableRow>
+                      ))}
+                      {!linkedSalesQ.isLoading && (linkedSalesQ.data ?? []).length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-muted-foreground">
+                            কোনো চালান সংযুক্ত নেই
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
