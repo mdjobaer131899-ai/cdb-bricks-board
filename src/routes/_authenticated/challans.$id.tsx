@@ -153,6 +153,12 @@ function ChallanDetailPage() {
         </div>
       </div>
 
+      {(entry as any).opening_balance_id && (
+        <div className="rounded-lg border border-info/40 bg-info/5 p-3 text-sm">
+          এই চালানটি <span className="font-semibold">গত বছরের বকেয়া (গ্রাহক অগ্রিম)</span> থেকে সমন্বয় হয়েছে — এ বছরের নতুন পাওনা হিসেবে গণনা হবে না।
+        </div>
+      )}
+
       <InvoiceDocument ref={invoiceRef} data={invoiceData} />
     </div>
   );
