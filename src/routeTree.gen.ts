@@ -27,6 +27,7 @@ import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedRawMaterialsRouteImport } from './routes/_authenticated/raw-materials'
 import { Route as AuthenticatedProductionRouteImport } from './routes/_authenticated/production'
 import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated/orders'
+import { Route as AuthenticatedOpeningBalancesRouteImport } from './routes/_authenticated/opening-balances'
 import { Route as AuthenticatedLedgerHeadsRouteImport } from './routes/_authenticated/ledger-heads'
 import { Route as AuthenticatedKachaBricksRouteImport } from './routes/_authenticated/kacha-bricks'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
@@ -146,6 +147,12 @@ const AuthenticatedOrdersRoute = AuthenticatedOrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedOpeningBalancesRoute =
+  AuthenticatedOpeningBalancesRouteImport.update({
+    id: '/opening-balances',
+    path: '/opening-balances',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedLedgerHeadsRoute =
   AuthenticatedLedgerHeadsRouteImport.update({
     id: '/ledger-heads',
@@ -313,6 +320,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/kacha-bricks': typeof AuthenticatedKachaBricksRoute
   '/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/orders': typeof AuthenticatedOrdersRoute
   '/production': typeof AuthenticatedProductionRoute
   '/raw-materials': typeof AuthenticatedRawMaterialsRoute
@@ -355,6 +363,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/kacha-bricks': typeof AuthenticatedKachaBricksRoute
   '/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/orders': typeof AuthenticatedOrdersRoute
   '/production': typeof AuthenticatedProductionRoute
   '/raw-materials': typeof AuthenticatedRawMaterialsRoute
@@ -403,6 +412,7 @@ export interface FileRoutesById {
   '/_authenticated/inventory': typeof AuthenticatedInventoryRouteWithChildren
   '/_authenticated/kacha-bricks': typeof AuthenticatedKachaBricksRoute
   '/_authenticated/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/_authenticated/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/_authenticated/orders': typeof AuthenticatedOrdersRoute
   '/_authenticated/production': typeof AuthenticatedProductionRoute
   '/_authenticated/raw-materials': typeof AuthenticatedRawMaterialsRoute
@@ -452,6 +462,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/kacha-bricks'
     | '/ledger-heads'
+    | '/opening-balances'
     | '/orders'
     | '/production'
     | '/raw-materials'
@@ -494,6 +505,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/kacha-bricks'
     | '/ledger-heads'
+    | '/opening-balances'
     | '/orders'
     | '/production'
     | '/raw-materials'
@@ -541,6 +553,7 @@ export interface FileRouteTypes {
     | '/_authenticated/inventory'
     | '/_authenticated/kacha-bricks'
     | '/_authenticated/ledger-heads'
+    | '/_authenticated/opening-balances'
     | '/_authenticated/orders'
     | '/_authenticated/production'
     | '/_authenticated/raw-materials'
@@ -708,6 +721,13 @@ declare module '@tanstack/react-router' {
       path: '/orders'
       fullPath: '/orders'
       preLoaderRoute: typeof AuthenticatedOrdersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/opening-balances': {
+      id: '/_authenticated/opening-balances'
+      path: '/opening-balances'
+      fullPath: '/opening-balances'
+      preLoaderRoute: typeof AuthenticatedOpeningBalancesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/ledger-heads': {
@@ -1002,6 +1022,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRouteWithChildren
   AuthenticatedKachaBricksRoute: typeof AuthenticatedKachaBricksRoute
   AuthenticatedLedgerHeadsRoute: typeof AuthenticatedLedgerHeadsRoute
+  AuthenticatedOpeningBalancesRoute: typeof AuthenticatedOpeningBalancesRoute
   AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRoute
   AuthenticatedProductionRoute: typeof AuthenticatedProductionRoute
   AuthenticatedRawMaterialsRoute: typeof AuthenticatedRawMaterialsRoute
@@ -1036,6 +1057,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedInventoryRoute: AuthenticatedInventoryRouteWithChildren,
   AuthenticatedKachaBricksRoute: AuthenticatedKachaBricksRoute,
   AuthenticatedLedgerHeadsRoute: AuthenticatedLedgerHeadsRoute,
+  AuthenticatedOpeningBalancesRoute: AuthenticatedOpeningBalancesRoute,
   AuthenticatedOrdersRoute: AuthenticatedOrdersRoute,
   AuthenticatedProductionRoute: AuthenticatedProductionRoute,
   AuthenticatedRawMaterialsRoute: AuthenticatedRawMaterialsRoute,

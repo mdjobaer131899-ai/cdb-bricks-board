@@ -54,6 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "অ্যাকাউন্টস", url: "/accounts", icon: BookOpen, roles: ["admin"] },
       { title: "খাতিয়ান", url: "/ledger-heads", icon: BookOpen, roles: ["admin", "manager"] },
       { title: "ব্যাংক ও ট্রান্সফার", url: "/bank", icon: Landmark, roles: ["admin"] },
+      { title: "গত বছরের বকেয়া", url: "/opening-balances", icon: History, roles: ["admin"] },
     ],
   },
   {
