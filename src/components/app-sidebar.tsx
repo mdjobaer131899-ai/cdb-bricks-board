@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Boxes, BookOpen, Users2, Truck, Building2, CalendarRange, Package, ClipboardList, Landmark, HandCoins } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Boxes, BookOpen, Users2, Truck, Building2, CalendarRange, Package, ClipboardList, Landmark, HandCoins, History } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -54,6 +54,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "অ্যাকাউন্টস", url: "/accounts", icon: BookOpen, roles: ["admin"] },
       { title: "খাতিয়ান", url: "/ledger-heads", icon: BookOpen, roles: ["admin", "manager"] },
       { title: "ব্যাংক ও ট্রান্সফার", url: "/bank", icon: Landmark, roles: ["admin"] },
+      { title: "গত বছরের বকেয়া", url: "/opening-balances", icon: History, roles: ["admin"] },
     ],
   },
   {

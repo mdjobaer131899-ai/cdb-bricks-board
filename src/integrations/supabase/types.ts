@@ -814,6 +814,137 @@ export type Database = {
         }
         Relationships: []
       }
+      opening_balances: {
+        Row: {
+          amount: number
+          as_of_date: string
+          category: string | null
+          created_at: string
+          created_by: string
+          customer_id: string | null
+          fiscal_year: number
+          id: string
+          kind: Database["public"]["Enums"]["opening_kind"]
+          note: string | null
+          party_name: string | null
+          sardar_id: string | null
+          updated_at: string
+          worker_id: string | null
+        }
+        Insert: {
+          amount: number
+          as_of_date?: string
+          category?: string | null
+          created_at?: string
+          created_by?: string
+          customer_id?: string | null
+          fiscal_year?: number
+          id?: string
+          kind: Database["public"]["Enums"]["opening_kind"]
+          note?: string | null
+          party_name?: string | null
+          sardar_id?: string | null
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Update: {
+          amount?: number
+          as_of_date?: string
+          category?: string | null
+          created_at?: string
+          created_by?: string
+          customer_id?: string | null
+          fiscal_year?: number
+          id?: string
+          kind?: Database["public"]["Enums"]["opening_kind"]
+          note?: string | null
+          party_name?: string | null
+          sardar_id?: string | null
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opening_balances_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opening_balances_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "opening_balances_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opening_balances_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opening_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          method: string | null
+          note: string | null
+          opening_balance_id: string
+          payment_date: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          opening_balance_id: string
+          payment_date?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          method?: string | null
+          note?: string | null
+          opening_balance_id?: string
+          payment_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opening_payments_opening_balance_id_fkey"
+            columns: ["opening_balance_id"]
+            isOneToOne: false
+            referencedRelation: "opening_balance_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opening_payments_opening_balance_id_fkey"
+            columns: ["opening_balance_id"]
+            isOneToOne: false
+            referencedRelation: "opening_balances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           advance: number
@@ -2172,6 +2303,55 @@ export type Database = {
         }
         Relationships: []
       }
+      opening_balance_summary: {
+        Row: {
+          amount: number | null
+          as_of_date: string | null
+          category: string | null
+          created_at: string | null
+          customer_id: string | null
+          display_name: string | null
+          fiscal_year: number | null
+          id: string | null
+          kind: Database["public"]["Enums"]["opening_kind"] | null
+          note: string | null
+          paid_amount: number | null
+          party_name: string | null
+          remaining_amount: number | null
+          sardar_id: string | null
+          worker_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opening_balances_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opening_balances_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "opening_balances_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opening_balances_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profit_loss_summary: {
         Row: {
           net_profit: number | null
@@ -2281,6 +2461,7 @@ export type Database = {
         | "transfer"
         | "supplier"
         | "production"
+      opening_kind: "customer_brick_due" | "sardar_payable" | "other_payable"
       sale_status: "pending" | "approved" | "rejected"
       sale_type: "advance" | "regular"
     }
@@ -2430,6 +2611,7 @@ export const Constants = {
         "supplier",
         "production",
       ],
+      opening_kind: ["customer_brick_due", "sardar_payable", "other_payable"],
       sale_status: ["pending", "approved", "rejected"],
       sale_type: ["advance", "regular"],
     },
