@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchAllCustomers, fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { fetchCustomerOpeningDues, OPENING_NONE } from "@/lib/opening-adjust";
 import { bn, isoDate } from "@/lib/format";
 import { toast } from "sonner";
 
