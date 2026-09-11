@@ -32,6 +32,7 @@ function ChallanDetailPage() {
           id, challan_no, sale_date, quantity, unit_price, total_amount,
           status, sale_type, driver_name, vehicle_number, notes,
           custom_brick_name, approved_at, created_at, created_by, approved_by,
+          opening_balance_id,
           customer:customers(id, name, phone, address),
           brick_type:brick_types(id, name)
         `)
@@ -151,6 +152,12 @@ function ChallanDetailPage() {
           )}
         </div>
       </div>
+
+      {(entry as any).opening_balance_id && (
+        <div className="rounded-lg border border-info/40 bg-info/5 p-3 text-sm">
+          এই চালানটি <span className="font-semibold">গত বছরের বকেয়া (গ্রাহক অগ্রিম)</span> থেকে সমন্বয় হয়েছে — এ বছরের নতুন পাওনা হিসেবে গণনা হবে না।
+        </div>
+      )}
 
       <InvoiceDocument ref={invoiceRef} data={invoiceData} />
     </div>

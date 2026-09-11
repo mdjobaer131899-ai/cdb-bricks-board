@@ -1329,6 +1329,7 @@ export type Database = {
           driver_name: string | null
           id: string
           notes: string | null
+          opening_balance_id: string | null
           quantity: number
           sale_date: string
           sale_type: Database["public"]["Enums"]["sale_type"]
@@ -1351,6 +1352,7 @@ export type Database = {
           driver_name?: string | null
           id?: string
           notes?: string | null
+          opening_balance_id?: string | null
           quantity: number
           sale_date?: string
           sale_type?: Database["public"]["Enums"]["sale_type"]
@@ -1373,6 +1375,7 @@ export type Database = {
           driver_name?: string | null
           id?: string
           notes?: string | null
+          opening_balance_id?: string | null
           quantity?: number
           sale_date?: string
           sale_type?: Database["public"]["Enums"]["sale_type"]
@@ -1416,6 +1419,20 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_entries_opening_balance_id_fkey"
+            columns: ["opening_balance_id"]
+            isOneToOne: false
+            referencedRelation: "opening_balance_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_entries_opening_balance_id_fkey"
+            columns: ["opening_balance_id"]
+            isOneToOne: false
+            referencedRelation: "opening_balances"
             referencedColumns: ["id"]
           },
         ]
@@ -2317,7 +2334,10 @@ export type Database = {
           note: string | null
           paid_amount: number | null
           party_name: string | null
+          payments_amount: number | null
           remaining_amount: number | null
+          sales_adjusted: number | null
+          sales_adjusted_qty: number | null
           sardar_id: string | null
           worker_id: string | null
         }

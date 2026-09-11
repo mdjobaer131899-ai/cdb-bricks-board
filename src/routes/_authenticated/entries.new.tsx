@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchAllCustomers, fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { fetchCustomerOpeningDues, OPENING_NONE } from "@/lib/opening-adjust";
 import { bn, isoDate } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -88,6 +89,7 @@ function NewEntryPage() {
   const [customerId, setCustomerId] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [contractId, setContractId] = useState<string>("");
+  const [openingId, setOpeningId] = useState<string>("");
   const [driverName, setDriverName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [brickTypeId, setBrickTypeId] = useState("");
@@ -116,7 +118,16 @@ function NewEntryPage() {
   });
 
   // Reset contract when customer changes
-  useEffect(() => { setContractId(""); }, [customerId]);
+  useEffect(() => { setContractId(""); setOpeningId(""); }, [customerId]);
+
+  // গত বছরের বকেয়া (গ্রাহক অগ্রিম) — এই চালান দিয়ে সমন্বয় করা যাবে
+  const openingQ = useQuery({
+    queryKey: ["customer-opening-dues", customerId],
+    enabled: !!customerId,
+    queryFn: () => fetchCustomerOpeningDues(customerId),
+  });
+  const openDues = (openingQ.data ?? []).filter((d) => d.remaining_amount > 0.009);
+  const selectedOpening = openDues.find((d) => d.id === openingId);
 
   // Auto-apply contract's fixed rate to unit price
   useEffect(() => {
@@ -183,6 +194,7 @@ function NewEntryPage() {
       challan_no: challanNo.trim(),
       customer_id: customerId,
       contract_id: isAdmin ? (contractId || null) : null,
+      opening_balance_id: openingId || null,
       brick_type_id: brickTypeId,
       custom_brick_name: isOthers ? customBrickName.trim() : null,
       quantity: finalQuantity,
@@ -204,6 +216,9 @@ function NewEntryPage() {
     toast.success(`এন্ট্রি সংরক্ষিত হয়েছে — চালান নং ${challanNo}`);
     qc.invalidateQueries({ queryKey: ["sales"] });
     qc.invalidateQueries({ queryKey: ["customers-all"] });
+    qc.invalidateQueries({ queryKey: ["opening-balances"] });
+    qc.invalidateQueries({ queryKey: ["customer-opening-dues"] });
+    qc.invalidateQueries({ queryKey: ["ledger"] });
     navigate({ to: "/challans" });
   }
 
@@ -322,6 +337,31 @@ function NewEntryPage() {
                 </Select>
                 {(contractsQ.data?.length ?? 0) === 0 && !contractsQ.isLoading && (
                   <p className="text-xs text-muted-foreground">এই গ্রাহকের কোনো সক্রিয় চুক্তি নেই।</p>
+                )}
+              </div>
+            )}
+
+            {customerId && openDues.length > 0 && (
+              <div className="mt-3 space-y-1.5 rounded-lg border border-info/30 bg-info/5 p-3">
+                <Label>গত বছরের বকেয়া থেকে সমন্বয় (ঐচ্ছিক)</Label>
+                <Select value={openingId || OPENING_NONE} onValueChange={(v) => setOpeningId(v === OPENING_NONE ? "" : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="সমন্বয় করতে চাইলে নির্বাচন করুন" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={OPENING_NONE}>— সমন্বয় নয় (এই বছরের নতুন বিক্রয়) —</SelectItem>
+                    {openDues.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {bn(d.fiscal_year)} সালের অগ্রিম • বাকি ৳{bn(d.remaining_amount)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedOpening && (
+                  <p className="text-xs text-muted-foreground">
+                    এই চালানের ৳{bn(totalAmount)} টাকা {bn(selectedOpening.fiscal_year)} সালের বকেয়া (৳{bn(selectedOpening.remaining_amount)}) থেকে বাদ যাবে —
+                    নতুন বছরের পাওনা বাড়বে না।
+                  </p>
                 )}
               </div>
             )}

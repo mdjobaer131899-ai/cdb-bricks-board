@@ -19,6 +19,7 @@ import { sdb } from "@/lib/season-db";
 import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { isoDate, bn } from "@/lib/format";
+import { fetchCustomerOpeningDues, OPENING_NONE } from "@/lib/opening-adjust";
 import { toast } from "sonner";
 
 const CASH_VALUE = "__cash__";
@@ -93,6 +94,7 @@ function EditEntryPage() {
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [contractId, setContractId] = useState<string>("");
+  const [openingId, setOpeningId] = useState<string>("");
 
   // Active contracts for this entry's customer (admins use this to assign delivery to a contract)
   const customerId = entryQ.data?.customer_id;
@@ -114,6 +116,18 @@ function EditEntryPage() {
   const contracts = contractsQ.data ?? [];
   const selectedContract = contracts.find((c) => c.id === contractId);
 
+  // গত বছরের গ্রাহক বকেয়া — এই চালান দিয়ে সমন্বয় করা যাবে
+  const openingQ = useQuery({
+    queryKey: ["customer-opening-dues", customerId],
+    enabled: !!customerId && isAdmin,
+    queryFn: () => fetchCustomerOpeningDues(customerId!),
+  });
+  const openDues = (openingQ.data ?? []).filter(
+    (d) => d.remaining_amount > 0.009 || d.id === openingId,
+  );
+  const selectedOpening = openDues.find((d) => d.id === openingId);
+  const hasOpening = !!openingId && openingId !== OPENING_NONE;
+
   useEffect(() => {
     const e = entryQ.data;
     if (!e || loaded) return;
@@ -128,6 +142,7 @@ function EditEntryPage() {
     setUnitPrice(String(e.unit_price ?? 0));
     setNotes(e.notes ?? "");
     setContractId(e.contract_id ?? CASH_VALUE);
+    setOpeningId((e as any).opening_balance_id ?? "");
     setLoaded(true);
   }, [entryQ.data, loaded]);
 
@@ -206,6 +221,7 @@ function EditEntryPage() {
         vehicle_number: vehicleNumber || null,
         notes: notes || null,
         ...(isAdmin ? { contract_id: contractId && contractId !== CASH_VALUE ? contractId : null } : {}),
+        ...(isAdmin ? { opening_balance_id: hasOpening ? openingId : null } : {}),
       })
       .eq("id", entry.id);
     setBusy(false);
@@ -231,7 +247,7 @@ function EditEntryPage() {
       setConfirmApprove(false);
       return;
     }
-    if (contracts.length > 0 && (!contractId || contractId === CASH_VALUE)) {
+    if (!hasOpening && contracts.length > 0 && (!contractId || contractId === CASH_VALUE)) {
       toast.error("এই গ্রাহকের active contract আছে — অনুমোদনের আগে contract নির্বাচন করুন");
       setConfirmApprove(false);
       return;
@@ -246,6 +262,7 @@ function EditEntryPage() {
         unit_price: unit,
         total_amount: amt,
         contract_id: contractId && contractId !== CASH_VALUE ? contractId : null,
+        opening_balance_id: hasOpening ? openingId : null,
       })
       .eq("id", entry.id);
     setBusy(false);
@@ -255,6 +272,9 @@ function EditEntryPage() {
     qc.invalidateQueries({ queryKey: ["sales"] });
     qc.invalidateQueries({ queryKey: ["sales-entry", id] });
     qc.invalidateQueries({ queryKey: ["customers-all"] });
+    qc.invalidateQueries({ queryKey: ["opening-balances"] });
+    qc.invalidateQueries({ queryKey: ["customer-opening-dues"] });
+    qc.invalidateQueries({ queryKey: ["ledger"] });
     navigate({ to: "/approvals" });
   }
 
@@ -445,6 +465,39 @@ function EditEntryPage() {
                   বুকড পরিমাণ: <span className="font-semibold text-foreground">{bn(selectedContract.booked_quantity)}</span>
                   {selectedContract.expiry_date && <> · মেয়াদ: <span className="font-semibold text-foreground">{selectedContract.expiry_date}</span></>}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {isAdmin && openDues.length > 0 && (
+          <Card className="border-info/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">গত বছরের বকেয়া থেকে সমন্বয়</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Label>এই চালান কি গত বছরের অগ্রিমের বিপরীতে?</Label>
+              <Select value={openingId || OPENING_NONE} onValueChange={(v) => setOpeningId(v === OPENING_NONE ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="নির্বাচন করুন" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={OPENING_NONE}>— না, এ বছরের নতুন বিক্রয় —</SelectItem>
+                  {openDues.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {bn(d.fiscal_year)} সালের অগ্রিম · বাকি ৳{bn(d.remaining_amount)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedOpening ? (
+                <p className="text-xs text-muted-foreground">
+                  অনুমোদনের পর এই চালানের টাকা {bn(selectedOpening.fiscal_year)} সালের বকেয়া থেকে বাদ যাবে — এ বছরের পাওনা বাড়বে না।
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  গত বছরের অগ্রিমের বিপরীতে ইট দিলে এখানে নির্বাচন করুন।
+                </p>
               )}
             </CardContent>
           </Card>

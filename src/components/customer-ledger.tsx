@@ -26,7 +26,7 @@ export function CustomerLedger({ customerId, customerName }: Props) {
     queryKey: ["ledger", customerId],
     queryFn: async () => {
       const [salesRes, colRes] = await Promise.all([
-        sdb.from("sales_entries").select("id, challan_no, sale_date, total_amount, status, sale_type, quantity, contract_id, brick_type:brick_types(name)").eq("customer_id", customerId).eq("status", "approved").order("sale_date"),
+        sdb.from("sales_entries").select("id, challan_no, sale_date, total_amount, status, sale_type, quantity, contract_id, opening_balance_id, brick_type:brick_types(name)").eq("customer_id", customerId).eq("status", "approved").order("sale_date"),
         sdb.from("collections").select("id, amount, payment_date, method, note, contract_id, contract:contracts(contract_no)").eq("customer_id", customerId).order("payment_date"),
       ]);
       return {
@@ -42,7 +42,7 @@ export function CustomerLedger({ customerId, customerName }: Props) {
 
     // ডেবিট = ডেলিভারি হওয়া চালান (অনুমোদিত)। চুক্তির বুকিং মূল্য ডেবিট হয় না,
     // কারণ ইট সরবরাহের সময়েই পাওনা তৈরি হয় — নইলে টাকা দুইবার গোনা হতো।
-    for (const s of q.data.sales as Array<{ challan_no: string; sale_date: string; total_amount: number; sale_type: string; quantity: number; brick_type: { name?: string } | null }>) {
+    for (const s of q.data.sales as Array<{ challan_no: string; sale_date: string; total_amount: number; sale_type: string; quantity: number; opening_balance_id: string | null; brick_type: { name?: string } | null }>) {
       if (s.sale_type === "advance") continue; // অগ্রিম চালান কালেকশনেই হিসাব হয়
       events.push({
         date: s.sale_date,
@@ -51,6 +51,16 @@ export function CustomerLedger({ customerId, customerName }: Props) {
         credit: 0,
         ref: s.challan_no,
       });
+      // গত বছরের অগ্রিম থেকে সমন্বয় হলে সমপরিমাণ ক্রেডিট — এ বছরের পাওনা বাড়বে না
+      if (s.opening_balance_id) {
+        events.push({
+          date: s.sale_date,
+          description: `গত বছরের অগ্রিম থেকে সমন্বয় — চালান ${s.challan_no}`,
+          debit: 0,
+          credit: Number(s.total_amount || 0),
+          ref: s.challan_no,
+        });
+      }
     }
     // ক্রেডিট = কালেকশন (চুক্তির অগ্রিমসহ) — একটিই উৎস, তাই দ্বিগুণ হয় না।
     for (const p of q.data.collections as Array<{ amount: number; payment_date: string; method: string | null; note: string | null; contract: { contract_no?: string } | null }>) {
