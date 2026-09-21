@@ -59,7 +59,7 @@ function LedgerHeadsPage() {
   const entriesQ = useQuery({
     queryKey: ["ledger-head-entries"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("ledger_head_entries")
         .select("*")
         .order("entry_date", { ascending: false })

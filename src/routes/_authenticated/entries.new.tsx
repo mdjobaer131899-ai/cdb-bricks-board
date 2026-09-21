@@ -39,28 +39,18 @@ const BRICK_ORDER = [
 const ADLA_NAMES = new Set(["১ নং আদলা", "২ নং আদলা", "মিক্সার আদলা"]);
 const OTHERS_NAME = "অন্যান্য";
 
-async function generateNextChallanNo(): Promise<string> {
+async function generateNextChallanNo(date?: string): Promise<string> {
+  try {
+    const { data, error } = await (supabase.rpc as any)("next_challan_number", {
+      _date: date || isoDate(new Date()),
+    });
+    if (!error && data) return data;
+  } catch {
+    /* fallback to date pattern */
+  }
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const defaultPrefix = `CDB-${ymd}-`;
-  // Get the most recently created entry and increment its trailing number,
-  // preserving whatever prefix the user used manually.
-  const { data } = await supabase
-    .from("sales_entries")
-    .select("challan_no, created_at")
-    .order("created_at", { ascending: false })
-    .limit(1);
-  const last = data?.[0]?.challan_no?.trim();
-  if (last) {
-    const match = last.match(/^(.*?)(\d+)(\D*)$/);
-    if (match) {
-      const [, head, numStr, tail] = match;
-      const next = (parseInt(numStr, 10) || 0) + 1;
-      return `${head}${String(next).padStart(numStr.length, "0")}${tail}`;
-    }
-    return `${last}-1`;
-  }
-  return `${defaultPrefix}001`;
+  return `CDB-${ymd}-001`;
 }
 
 function NewEntryPage() {
@@ -101,12 +91,12 @@ function NewEntryPage() {
   const [busy, setBusy] = useState(false);
   const [addCustOpen, setAddCustOpen] = useState(false);
 
-  // Active contracts for selected customer
+  // Active contracts for selected customer (season scoped)
   const contractsQ = useQuery({
     queryKey: ["customer-active-contracts", customerId],
     enabled: !!customerId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("contracts")
         .select("id, contract_no, contract_type, fixed_rate, booked_quantity, delivered_quantity")
         .eq("customer_id", customerId)
@@ -139,8 +129,8 @@ function NewEntryPage() {
   }, [contractId, contractsQ.data, isAdmin, isAdvance]);
 
   useEffect(() => {
-    generateNextChallanNo().then(setChallanNo);
-  }, []);
+    generateNextChallanNo(saleDate).then(setChallanNo);
+  }, [saleDate]);
 
   const selectedBrick = orderedBricks.find((b) => b.id === brickTypeId);
   const isAdla = selectedBrick ? ADLA_NAMES.has(selectedBrick.name) : false;
@@ -190,8 +180,10 @@ function NewEntryPage() {
     const finalQuantity = isOthers ? 0 : Number(quantity);
     const finalTotal = isAdmin && !advanceFlag ? finalQuantity * finalUnitPrice : 0;
 
+    const targetChallanNo = challanNo.trim() || (await generateNextChallanNo(saleDate));
+
     const { error } = await sdb.from("sales_entries").insert({
-      challan_no: challanNo.trim(),
+      challan_no: targetChallanNo,
       customer_id: customerId,
       contract_id: isAdmin ? (contractId || null) : null,
       opening_balance_id: openingId || null,
@@ -213,7 +205,7 @@ function NewEntryPage() {
       toast.error(error.message);
       return;
     }
-    toast.success(`এন্ট্রি সংরক্ষিত হয়েছে — চালান নং ${challanNo}`);
+    toast.success(`এন্ট্রি সংরক্ষিত হয়েছে — চালান নং ${targetChallanNo}`);
     qc.invalidateQueries({ queryKey: ["sales"] });
     qc.invalidateQueries({ queryKey: ["customers-all"] });
     qc.invalidateQueries({ queryKey: ["opening-balances"] });

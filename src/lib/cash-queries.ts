@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 
 /**
  * মূল ক্যাশের একটিই হিসাব।
@@ -46,12 +47,12 @@ function applyRange<T>(q: T, column: string, f: DateFilter): T {
 /** নির্দিষ্ট পরিসরের (বা সব সময়ের) মোট নগদ আয়, ব্যয় ও নিট ব্যালেন্স */
 export async function fetchCashSummary(filter: DateFilter = {}) {
   const [col, exp, sar, wrk, sup, veh] = await Promise.all([
-    applyRange(supabase.from("collections").select("amount").is("contract_id", null), "payment_date", filter),
-    applyRange(supabase.from("expenses").select("amount"), "expense_date", filter),
-    applyRange(supabase.from("sardar_payments").select("amount"), "payment_date", filter),
-    applyRange(supabase.from("worker_payments").select("amount"), "payment_date", filter),
-    applyRange(supabase.from("supplier_payments").select("amount"), "payment_date", filter),
-    applyRange(supabase.from("vehicle_expenses").select("amount"), "expense_date", filter),
+    applyRange(sdb.from("collections").select("amount").is("contract_id", null), "payment_date", filter),
+    applyRange(sdb.from("expenses").select("amount"), "expense_date", filter),
+    applyRange(sdb.from("sardar_payments").select("amount"), "payment_date", filter),
+    applyRange(sdb.from("worker_payments").select("amount"), "payment_date", filter),
+    applyRange(sdb.from("supplier_payments").select("amount"), "payment_date", filter),
+    applyRange(sdb.from("vehicle_expenses").select("amount"), "expense_date", filter),
   ]);
 
   for (const r of [col, exp, sar, wrk, sup, veh]) {
@@ -73,29 +74,29 @@ export async function fetchCashSummary(filter: DateFilter = {}) {
 /** নির্দিষ্ট এক দিনের সব নগদ আয় ও নগদ ব্যয়ের বিস্তারিত তালিকা */
 export async function fetchCashDay(dayIso: string) {
   const [col, exp, sar, wrk, sup, veh] = await Promise.all([
-    supabase
+    sdb
       .from("collections")
       .select("id, amount, method, payment_date, customer:customers(name)")
       .is("contract_id", null)
       .eq("payment_date", dayIso)
       .order("created_at", { ascending: false }),
-    supabase.from("expenses").select("id, category, amount, note, expense_date").eq("expense_date", dayIso).order("created_at", { ascending: false }),
-    supabase
+    sdb.from("expenses").select("id, category, amount, note, expense_date").eq("expense_date", dayIso).order("created_at", { ascending: false }),
+    sdb
       .from("sardar_payments")
       .select("id, amount, note, payment_date, payment_type, sardar:sardars(name)")
       .eq("payment_date", dayIso)
       .order("created_at", { ascending: false }),
-    supabase
+    sdb
       .from("worker_payments")
       .select("id, amount, note, payment_date, payment_type, worker:workers(name)")
       .eq("payment_date", dayIso)
       .order("created_at", { ascending: false }),
-    supabase
+    sdb
       .from("supplier_payments")
       .select("id, amount, note, payment_date, supplier:suppliers(name)")
       .eq("payment_date", dayIso)
       .order("created_at", { ascending: false }),
-    supabase
+    sdb
       .from("vehicle_expenses")
       .select("id, amount, note, category, expense_date, vehicle:vehicles(vehicle_no)")
       .eq("expense_date", dayIso)

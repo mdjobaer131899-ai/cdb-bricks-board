@@ -79,9 +79,9 @@ export const deleteExpenseWithPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => DeleteSchema.parse(input))
   .handler(async ({ data, context }) => {
-    const { verifyAdminPassword } = await import("./cash-book.server");
-    const ok = await verifyAdminPassword(data.password);
-    if (!ok) throw new Error("এডমিন পাসওয়ার্ড সঠিক নয়");
+    const { verifyCurrentAdminPassword } = await import("./cash-book.server");
+    const ok = await verifyCurrentAdminPassword(context.userId, data.password);
+    if (!ok) throw new Error("অননুমোদিত অথবা এডমিন পাসওয়ার্ড সঠিক নয়");
     const { supabase } = context;
     const { error } = await supabase.from("expenses").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
@@ -99,9 +99,9 @@ export const deleteIncomeWithPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => DeleteSchema.parse(input))
   .handler(async ({ data, context }) => {
-    const { verifyAdminPassword } = await import("./cash-book.server");
-    const ok = await verifyAdminPassword(data.password);
-    if (!ok) throw new Error("এডমিন পাসওয়ার্ড সঠিক নয়");
+    const { verifyCurrentAdminPassword } = await import("./cash-book.server");
+    const ok = await verifyCurrentAdminPassword(context.userId, data.password);
+    if (!ok) throw new Error("অননুমোদিত অথবা এডমিন পাসওয়ার্ড সঠিক নয়");
     const { supabase } = context;
     const { error } = await supabase.from("collections").delete().eq("id", data.id);
     if (error) throw new Error(error.message);

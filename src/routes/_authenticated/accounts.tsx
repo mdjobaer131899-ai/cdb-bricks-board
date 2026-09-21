@@ -36,7 +36,7 @@ function AccountsPage() {
   const journalQ = useQuery({
     queryKey: ["journal-entries"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("journal_entries")
         .select("id, entry_no, entry_date, source, narration, journal_lines(debit, credit, account:accounts(code, name_bn, name))")
         .order("entry_date", { ascending: false })

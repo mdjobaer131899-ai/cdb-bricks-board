@@ -102,7 +102,7 @@ function EditEntryPage() {
     queryKey: ["contracts-for-customer", customerId],
     enabled: !!customerId && isAdmin,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("contracts")
         .select("id, contract_no, contract_type, fixed_rate, booked_quantity, status, priority, expiry_date")
         .eq("customer_id", customerId!)

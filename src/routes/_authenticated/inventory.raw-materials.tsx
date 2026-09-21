@@ -39,7 +39,7 @@ function RawMaterialsPage() {
   const purchasesQ = useQuery({
     queryKey: ["raw-material-purchases"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("raw_material_purchases")
         .select("*, material:raw_materials(name, unit)")
         .order("purchase_date", { ascending: false })

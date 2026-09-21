@@ -94,7 +94,7 @@ function OrdersPage() {
   const deliveriesQ = useQuery({
     queryKey: ["deliveries"],
     queryFn: async () => {
-      const { data, error } = await sdb.from("deliveries").select("*").order("delivery_date", { ascending: false }).limit(300);
+      const { data, error } = await sdb.from("deliveries").select("*, sales_entry:sales_entries(id, challan_no)").order("delivery_date", { ascending: false }).limit(300);
       if (error) throw error;
       return data ?? [];
     },
@@ -194,6 +194,11 @@ function OrdersPage() {
       toast.success("ডেলিভারি সংরক্ষিত");
       setDDlg({ open: false, mode: "new", form: emptyDel() });
       qc.invalidateQueries({ queryKey: ["deliveries"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["current-stock"] });
+      qc.invalidateQueries({ queryKey: ["stock-movements"] });
+      qc.invalidateQueries({ queryKey: ["journal-entries"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -203,7 +208,15 @@ function OrdersPage() {
       const { error } = await sdb.from("deliveries").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); qc.invalidateQueries({ queryKey: ["deliveries"] }); },
+    onSuccess: () => {
+      toast.success("মুছে ফেলা হয়েছে");
+      qc.invalidateQueries({ queryKey: ["deliveries"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["sales"] });
+      qc.invalidateQueries({ queryKey: ["current-stock"] });
+      qc.invalidateQueries({ queryKey: ["stock-movements"] });
+      qc.invalidateQueries({ queryKey: ["journal-entries"] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -312,6 +325,7 @@ function OrdersPage() {
                 <Table>
                   <TableHeader><TableRow>
                     <TableHead>তারিখ</TableHead>
+                    <TableHead>চালান নং</TableHead>
                     <TableHead>অর্ডার</TableHead>
                     <TableHead>গ্রাহক</TableHead>
                     <TableHead>গাড়ি</TableHead>
@@ -323,6 +337,7 @@ function OrdersPage() {
                     {(deliveriesQ.data ?? []).map((d: any) => (
                       <TableRow key={d.id}>
                         <TableCell className="whitespace-nowrap">{bnDate(d.delivery_date)}</TableCell>
+                        <TableCell className="font-mono text-xs">{d.sales_entry?.challan_no || "—"}</TableCell>
                         <TableCell>{oNo(d.order_id)}</TableCell>
                         <TableCell>{cName(d.customer_id)}</TableCell>
                         <TableCell>{vName(d.vehicle_id)}</TableCell>

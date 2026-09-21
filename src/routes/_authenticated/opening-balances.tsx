@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -156,7 +157,7 @@ function OpeningBalancesPage() {
     queryKey: ["opening-payments", detail?.id],
     enabled: !!detail?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("opening_payments")
         .select("*")
         .eq("opening_balance_id", detail!.id)
@@ -171,7 +172,7 @@ function OpeningBalancesPage() {
     queryKey: ["opening-linked-sales", detail?.id],
     enabled: !!detail?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("sales_entries")
         .select("id, challan_no, sale_date, quantity, total_amount, status")
         .eq("opening_balance_id", detail!.id)

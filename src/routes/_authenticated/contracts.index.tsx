@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { bn, bnDate } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/contracts/")({
@@ -33,7 +34,7 @@ interface Row {
 }
 
 async function fetchContracts(): Promise<Row[]> {
-  const { data, error } = await supabase
+  const { data, error } = await sdb
     .from("contracts")
     .select("id, contract_no, contract_type, status, start_date, booked_quantity, delivered_quantity, booked_value, customer:customers(id, name)")
     .order("created_at", { ascending: false });

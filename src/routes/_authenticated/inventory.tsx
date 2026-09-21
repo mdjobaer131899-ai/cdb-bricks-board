@@ -45,7 +45,7 @@ function InventoryPage() {
   const movementsQ = useQuery({
     queryKey: ["stock-movements"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("stock_ledger")
         .select("id, ref_date, change, ref_type, note, brick_type:brick_types(name)")
         .order("ref_date", { ascending: false })

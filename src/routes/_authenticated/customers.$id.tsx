@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { sdb } from "@/lib/season-db";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate } from "@/lib/format";
 import { CustomerLedger } from "@/components/customer-ledger";
@@ -43,7 +44,7 @@ function CustomerDetailPage() {
   const contractsQ = useQuery({
     queryKey: ["customer-contracts", id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("contracts")
         .select("id, contract_no, status, contract_type, booked_quantity, delivered_quantity, booked_value, fixed_rate")
         .eq("customer_id", id)
@@ -56,7 +57,7 @@ function CustomerDetailPage() {
   const collectionsTotalQ = useQuery({
     queryKey: ["customer-collections-total", id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("collections")
         .select("amount")
         .eq("customer_id", id);
@@ -69,7 +70,7 @@ function CustomerDetailPage() {
   const txQ = useQuery({
     queryKey: ["customer-transactions", id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await sdb
         .from("sales_entries")
         .select("id, challan_no, sale_date, quantity, total_amount, status, brick_type:brick_types(name), custom_brick_name")
         .eq("customer_id", id)

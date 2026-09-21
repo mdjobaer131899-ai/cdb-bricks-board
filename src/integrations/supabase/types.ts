@@ -247,6 +247,21 @@ export type Database = {
         }
         Relationships: []
       }
+      challan_counters: {
+        Row: {
+          last_value: number
+          prefix: string
+        }
+        Insert: {
+          last_value?: number
+          prefix: string
+        }
+        Update: {
+          last_value?: number
+          prefix?: string
+        }
+        Relationships: []
+      }
       collections: {
         Row: {
           amount: number
@@ -487,6 +502,7 @@ export type Database = {
           note: string | null
           order_id: string | null
           quantity: number
+          sales_entry_id: string | null
           updated_at: string
           vehicle_id: string | null
         }
@@ -500,6 +516,7 @@ export type Database = {
           note?: string | null
           order_id?: string | null
           quantity?: number
+          sales_entry_id?: string | null
           updated_at?: string
           vehicle_id?: string | null
         }
@@ -513,6 +530,7 @@ export type Database = {
           note?: string | null
           order_id?: string | null
           quantity?: number
+          sales_entry_id?: string | null
           updated_at?: string
           vehicle_id?: string | null
         }
@@ -1330,6 +1348,7 @@ export type Database = {
           id: string
           notes: string | null
           opening_balance_id: string | null
+          order_id: string | null
           quantity: number
           sale_date: string
           sale_type: Database["public"]["Enums"]["sale_type"]
@@ -1337,6 +1356,7 @@ export type Database = {
           total_amount: number
           unit_price: number
           updated_at: string
+          vehicle_id: string | null
           vehicle_number: string | null
         }
         Insert: {
@@ -1353,6 +1373,7 @@ export type Database = {
           id?: string
           notes?: string | null
           opening_balance_id?: string | null
+          order_id?: string | null
           quantity: number
           sale_date?: string
           sale_type?: Database["public"]["Enums"]["sale_type"]
@@ -1360,6 +1381,7 @@ export type Database = {
           total_amount: number
           unit_price: number
           updated_at?: string
+          vehicle_id?: string | null
           vehicle_number?: string | null
         }
         Update: {
@@ -1376,6 +1398,7 @@ export type Database = {
           id?: string
           notes?: string | null
           opening_balance_id?: string | null
+          order_id?: string | null
           quantity?: number
           sale_date?: string
           sale_type?: Database["public"]["Enums"]["sale_type"]
@@ -1383,6 +1406,7 @@ export type Database = {
           total_amount?: number
           unit_price?: number
           updated_at?: string
+          vehicle_id?: string | null
           vehicle_number?: string | null
         }
         Relationships: [

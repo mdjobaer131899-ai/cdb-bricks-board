@@ -114,7 +114,7 @@ async function fetchCustomers() {
 }
 
 async function fetchCustomerContracts(customerId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await sdb
     .from("contracts")
     .select("id, contract_no, contract_type, status")
     .eq("customer_id", customerId)
