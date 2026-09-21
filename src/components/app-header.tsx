@@ -1,4 +1,4 @@
-import { Moon, Sun, LogOut, ShieldCheck, UserCog, Loader2 } from "lucide-react";
+import { Moon, Sun, LogOut, ShieldCheck, UserCog, Loader2, Clock } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -67,13 +67,29 @@ export function AppHeader() {
         <GlobalSearch />
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : data?.role === "admin" ? (
+          <Badge
+            variant="outline"
+            className="border-primary/40 bg-primary/10 text-primary"
+          >
+            <ShieldCheck className="mr-1 h-3 w-3" />
+            অ্যাডমিন
+          </Badge>
+        ) : data?.role === "manager" ? (
+          <Badge
+            variant="outline"
+            className="border-info/40 bg-info/10 text-info"
+          >
+            <UserCog className="mr-1 h-3 w-3" />
+            ম্যানেজার
+          </Badge>
         ) : (
           <Badge
             variant="outline"
-            className={isAdmin ? "border-primary/40 bg-primary/10 text-primary" : "border-info/40 bg-info/10 text-info"}
+            className="border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
           >
-            {isAdmin ? <ShieldCheck className="mr-1 h-3 w-3" /> : <UserCog className="mr-1 h-3 w-3" />}
-            {isAdmin ? "অ্যাডমিন" : "ম্যানেজার"}
+            <Clock className="mr-1 h-3 w-3" />
+            ভূমিকা অপেক্ষমাণ
           </Badge>
         )}
         <Button variant="ghost" size="icon" onClick={toggle} aria-label="theme toggle">

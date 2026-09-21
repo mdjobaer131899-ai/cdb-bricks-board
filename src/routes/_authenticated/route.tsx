@@ -6,6 +6,10 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { AppHeader } from "@/components/app-header";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { SeasonProvider } from "@/lib/season-context";
+import { useCurrentUser } from "@/lib/use-current-user";
+import { PendingRoleState } from "@/components/pending-role-state";
+import { BrandLogo } from "@/components/brand-logo";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -46,6 +50,8 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthedLayout() {
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
+  const { data: me, loading, refetch } = useCurrentUser();
+
   useEffect(() => setReady(true), []);
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -53,23 +59,65 @@ function AuthedLayout() {
     });
     return () => subscription.unsubscribe();
   }, [navigate]);
-  if (!ready) return null;
+
+  if (!ready || loading) {
+    return (
+      <div className="flex min-h-screen w-full flex-col bg-background">
+        <header className="flex h-14 items-center border-b px-4 md:px-6">
+          <div className="flex items-center gap-2">
+            <BrandLogo className="h-7 w-7" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Skeleton className="h-8 w-8 rounded-full" />
+          </div>
+        </header>
+        <main className="flex-1 p-4 md:p-6">
+          <div className="space-y-4 max-w-5xl mx-auto">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-32 w-full rounded-xl" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // If user is authenticated but has no valid role assigned in database
+  if (me && !me.role) {
+    return (
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full flex-col bg-background">
+          <AppHeader />
+          <main className="flex-1 p-3 pb-6 md:p-6">
+            <PendingRoleState onRetry={refetch} />
+          </main>
+        </div>
+      </SidebarProvider>
+    );
+  }
+
   return (
     <SeasonProvider>
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-background">
-        <div className="hidden md:block">
-          <AppSidebar />
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full bg-background">
+          <div className="hidden md:block">
+            <AppSidebar />
+          </div>
+          <SidebarInset className="flex min-w-0 flex-1 flex-col">
+            <AppHeader />
+            <main className="flex-1 p-3 pb-20 md:p-6 md:pb-6">
+              <Outlet />
+            </main>
+          </SidebarInset>
         </div>
-        <SidebarInset className="flex min-w-0 flex-1 flex-col">
-          <AppHeader />
-          <main className="flex-1 p-3 pb-20 md:p-6 md:pb-6">
-            <Outlet />
-          </main>
-        </SidebarInset>
-      </div>
-      <MobileBottomNav />
-    </SidebarProvider>
+        <MobileBottomNav />
+      </SidebarProvider>
     </SeasonProvider>
   );
 }
+

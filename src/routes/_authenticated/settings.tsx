@@ -40,7 +40,7 @@ function SettingsPage() {
         <CardContent className="space-y-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">নাম</span><span className="font-medium">{data?.fullName}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">ইমেইল</span><span className="font-medium">{data?.user.email}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">ভূমিকা</span><span className="font-medium">{data?.role === "admin" ? "অ্যাডমিন" : "ম্যানেজার"}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">ভূমিকা</span><span className="font-medium">{data?.role === "admin" ? "অ্যাডমিন" : data?.role === "manager" ? "ম্যানেজার" : "অনির্ধারিত (অনুমোদনের অপেক্ষায়)"}</span></div>
         </CardContent>
       </Card>
 

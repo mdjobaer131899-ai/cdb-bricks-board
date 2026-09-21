@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { ManagerDashboard } from "@/components/manager-dashboard";
+import { PendingRoleState } from "@/components/pending-role-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/")({
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/")({
 });
 
 function Index() {
-  const { data, loading } = useCurrentUser();
+  const { data, loading, refetch } = useCurrentUser();
   if (loading || !data) {
     return (
       <div className="space-y-3">
@@ -31,5 +32,8 @@ function Index() {
       </div>
     );
   }
-  return data.role === "admin" ? <AdminDashboard /> : <ManagerDashboard />;
+  if (data.role === "admin") return <AdminDashboard />;
+  if (data.role === "manager") return <ManagerDashboard />;
+  return <PendingRoleState onRetry={refetch} />;
 }
+

@@ -15,7 +15,8 @@ const ALL = [
 export function MobileBottomNav() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { data } = useCurrentUser();
-  const role = data?.role ?? "manager";
+  const role = data?.role;
+  if (!role) return null;
   const items = ALL.filter((i) => (i.roles as readonly string[]).includes(role));
   const isAdmin = role === "admin";
   const count = items.length + (isAdmin ? 1 : 0);

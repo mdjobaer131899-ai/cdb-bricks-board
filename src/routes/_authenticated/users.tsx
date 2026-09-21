@@ -36,7 +36,7 @@ type AppUser = {
   created_at: string;
   full_name: string;
   phone: string;
-  role: "admin" | "manager";
+  role: "admin" | "manager" | null;
 };
 
 function UsersPage() {
@@ -109,12 +109,21 @@ function UsersPage() {
                       <TableCell className="text-muted-foreground text-xs">{u.phone || "—"}</TableCell>
                       <TableCell>
                         <Select
-                          value={u.role}
-                          onValueChange={(v) => roleMut.mutate({ user_id: u.id, role: v as "admin" | "manager" })}
+                          value={u.role ?? "unassigned"}
+                          onValueChange={(v) => {
+                            if (v === "admin" || v === "manager") {
+                              roleMut.mutate({ user_id: u.id, role: v });
+                            }
+                          }}
                           disabled={u.id === me.user.id}
                         >
-                          <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-8 w-32">
+                            <SelectValue placeholder="ভূমিকা নেই" />
+                          </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="unassigned" disabled>
+                              অনির্ধারিত
+                            </SelectItem>
                             <SelectItem value="admin">অ্যাডমিন</SelectItem>
                             <SelectItem value="manager">ম্যানেজার</SelectItem>
                           </SelectContent>

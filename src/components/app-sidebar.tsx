@@ -70,7 +70,7 @@ export const NAV_GROUPS: NavGroup[] = [
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { data } = useCurrentUser();
-  const role = data?.role ?? "manager";
+  const role = data?.role;
 
   return (
     <Sidebar collapsible="icon">
@@ -84,32 +84,38 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {NAV_GROUPS.map((g) => {
-          const items = g.items.filter((i) => (i.roles as readonly string[]).includes(role));
-          if (items.length === 0) return null;
-          return (
-            <SidebarGroup key={g.label}>
-              <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {items.map((it) => {
-                    const active = path === it.url;
-                    return (
-                      <SidebarMenuItem key={it.url}>
-                        <SidebarMenuButton asChild isActive={active} tooltip={it.title}>
-                          <Link to={it.url}>
-                            <it.icon className="h-4 w-4" />
-                            <span>{it.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          );
-        })}
+        {!role ? (
+          <div className="p-3 text-xs text-sidebar-foreground/60 text-center group-data-[collapsible=icon]:hidden">
+            ভূমিকা অপেক্ষমাণ
+          </div>
+        ) : (
+          NAV_GROUPS.map((g) => {
+            const items = g.items.filter((i) => (i.roles as readonly string[]).includes(role));
+            if (items.length === 0) return null;
+            return (
+              <SidebarGroup key={g.label}>
+                <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {items.map((it) => {
+                      const active = path === it.url;
+                      return (
+                        <SidebarMenuItem key={it.url}>
+                          <SidebarMenuButton asChild isActive={active} tooltip={it.title}>
+                            <Link to={it.url}>
+                              <it.icon className="h-4 w-4" />
+                              <span>{it.title}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            );
+          })
+        )}
       </SidebarContent>
       <SidebarFooter>
         <div className="px-2 py-2 text-[10px] text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">

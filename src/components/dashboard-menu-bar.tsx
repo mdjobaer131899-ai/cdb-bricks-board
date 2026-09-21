@@ -21,7 +21,8 @@ const PRODUCTION_SUB = [
 
 export function DashboardMenuBar() {
   const { data } = useCurrentUser();
-  const role = data?.role ?? "manager";
+  const role = data?.role;
+  if (!role) return null;
 
   return (
     <div className="rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 via-card to-warning/5 p-1.5 shadow-sm">

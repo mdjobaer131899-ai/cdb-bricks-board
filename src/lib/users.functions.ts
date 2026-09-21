@@ -37,7 +37,7 @@ export const listAppUsers = createServerFn({ method: "GET" })
       created_at: u.created_at,
       full_name: pmap.get(u.id)?.full_name ?? "",
       phone: pmap.get(u.id)?.phone ?? "",
-      role: (rmap.get(u.id) as "admin" | "manager" | undefined) ?? "manager",
+      role: (rmap.get(u.id) as "admin" | "manager" | undefined) ?? null,
     }));
   });
 
