@@ -3,13 +3,19 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { brokeredPreviewStorage } from './previewAuthStorage';
 
+const FALLBACK_SUPABASE_URL = 'https://imoqxgrmorsaboneqzob.supabase.co';
+const FALLBACK_SUPABASE_PUBLISHABLE_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imltb3F4Z3Jtb3JzYWJvbmVxem9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MzQ3NzMsImV4cCI6MjA5NjIxMDc3M30.nJW0M72laVcM847cfy72ajyUqG4svrmiaso49a0Zmss';
+
 function createSupabaseClient() {
   const SUPABASE_URL =
     import.meta.env.VITE_SUPABASE_URL ||
-    (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : undefined);
+    (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : undefined) ||
+    FALLBACK_SUPABASE_URL;
   const SUPABASE_PUBLISHABLE_KEY =
     import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_PUBLISHABLE_KEY : undefined);
+    (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_PUBLISHABLE_KEY : undefined) ||
+    FALLBACK_SUPABASE_PUBLISHABLE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const missing = [
