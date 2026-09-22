@@ -220,6 +220,21 @@ export type Database = {
         }
         Relationships: []
       }
+      challan_counters: {
+        Row: {
+          last_value: number
+          prefix: string
+        }
+        Insert: {
+          last_value?: number
+          prefix: string
+        }
+        Update: {
+          last_value?: number
+          prefix?: string
+        }
+        Relationships: []
+      }
       closed_months: {
         Row: {
           closed_at: string
@@ -244,21 +259,6 @@ export type Database = {
           month?: number
           snapshot?: Json | null
           year?: number
-        }
-        Relationships: []
-      }
-      challan_counters: {
-        Row: {
-          last_value: number
-          prefix: string
-        }
-        Insert: {
-          last_value?: number
-          prefix: string
-        }
-        Update: {
-          last_value?: number
-          prefix?: string
         }
         Relationships: []
       }
@@ -547,6 +547,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_sales_entry_id_fkey"
+            columns: ["sales_entry_id"]
+            isOneToOne: false
+            referencedRelation: "sales_entries"
             referencedColumns: ["id"]
           },
           {
@@ -1457,6 +1464,20 @@ export type Database = {
             columns: ["opening_balance_id"]
             isOneToOne: false
             referencedRelation: "opening_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_entries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_entries_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
         ]
@@ -2468,6 +2489,10 @@ export type Database = {
         Returns: string
       }
       material_avg_cost: { Args: { _material_id: string }; Returns: number }
+      next_challan_number: {
+        Args: { _date?: string; _prefix?: string }
+        Returns: string
+      }
       recompute_contract_advance: {
         Args: { _contract_id: string }
         Returns: undefined
