@@ -17,7 +17,7 @@ import { Plus, Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/seasons")({
   component: SeasonsPage,
-  errorComponent: ({ error }) => <div className="p-4 text-destructive">{error.message}</div>,
+  errorComponent: ({ error }) => <div className="p-4 text-destructive">{(error as Error).message}</div>,
   notFoundComponent: () => <div className="p-4">পাওয়া যায়নি</div>,
 });
 

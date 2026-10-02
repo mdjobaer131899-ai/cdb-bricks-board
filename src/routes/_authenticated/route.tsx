@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated")({
   },
   component: AuthedLayout,
   errorComponent: ({ error }) => {
-    const msg = error?.message ?? "";
+    const msg = (error as Error)?.message ?? "";
     // Stale build: old HTML references a chunk hash that no longer exists after a redeploy.
     // Auto-reload once to pick up the new bundle.
     if (typeof window !== "undefined" && /dynamically imported module|Importing a module script failed|ChunkLoadError/i.test(msg)) {
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_authenticated")({
     }
     return (
       <div className="p-6 text-sm">
-        <p className="text-destructive">ত্রুটি: {error.message}</p>
+        <p className="text-destructive">ত্রুটি: {(error as Error).message}</p>
         <button
           className="mt-3 rounded border px-3 py-1 text-foreground"
           onClick={() => window.location.reload()}
