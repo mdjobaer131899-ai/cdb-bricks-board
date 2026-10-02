@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Printer, ShoppingCart, Trash2, Wallet } from "lucide-react";
@@ -122,7 +122,8 @@ function PurchasesPage() {
           <h1 className="flex items-center gap-2 text-xl font-bold md:text-2xl"><ShoppingCart className="h-6 w-6 text-primary" /> মালামাল ক্রয় ও বাকি</h1>
           <p className="text-sm text-muted-foreground">কারেন্ট বিল, ফুয়েল, কয়লা, মাটি — যা কিছু আনা হয়; পরিমাণ, দাম, পরিশোধ ও বাকি</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="secondary"><Link to="/suppliers">সাপ্লায়ার তালিকা</Link></Button>
           <Button variant="outline" onClick={print}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button>
           <Button onClick={() => setPDlg({ ...emptyP })}><Plus className="mr-1 h-4 w-4" /> নতুন ক্রয়</Button>
         </div>

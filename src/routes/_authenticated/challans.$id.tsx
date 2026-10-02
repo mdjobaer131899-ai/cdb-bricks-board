@@ -143,6 +143,9 @@ function ChallanDetailPage() {
           <Button size="sm" onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" /> প্রিন্ট
           </Button>
+          <Button size="sm" variant="outline" onClick={() => invoiceRef.current && printNode(invoiceRef.current, `চালান ${entry!.challan_no}`, { a5: true })}>
+            <Printer className="mr-2 h-4 w-4" /> মেমো + গেট পাস (A5)
+          </Button>
           {isAdmin && (
             <Button asChild size="sm" variant="secondary">
               <Link to="/entries/$id/edit" params={{ id: entry.id }}>

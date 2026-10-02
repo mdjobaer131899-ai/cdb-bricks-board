@@ -15,9 +15,9 @@ import { printTable } from "@/lib/print-table";
 export const Route = createFileRoute("/_authenticated/income-expense")({
   head: () => ({
     meta: [
-      { title: "মোট আয়-ব্যয় — CDB Bricks" },
+      { title: "লাভ-ক্ষতি ও ক্যাশ সামারি — CDB Bricks" },
       { name: "description", content: "বিক্রয়, বিনিয়োগ, ঋণ, মজুরি, বেতন, ক্রয় ও খরচ — সব আয় ও ব্যয় এক জায়গায়।" },
-      { property: "og:title", content: "মোট আয়-ব্যয় — CDB Bricks" },
+      { property: "og:title", content: "লাভ-ক্ষতি ও ক্যাশ সামারি — CDB Bricks" },
       { property: "og:description", content: "সব আয় ও ব্যয়ের সারসংক্ষেপ।" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -53,7 +53,7 @@ function IncomeExpensePage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold md:text-2xl"><Scale className="h-6 w-6 text-primary" /> মোট আয়-ব্যয়</h1>
+          <h1 className="flex items-center gap-2 text-xl font-bold md:text-2xl"><Scale className="h-6 w-6 text-primary" /> লাভ-ক্ষতি ও ক্যাশ সামারি</h1>
           <p className="text-sm text-muted-foreground">সব পাতার টাকা লেনদেন এক হিসাবে</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
