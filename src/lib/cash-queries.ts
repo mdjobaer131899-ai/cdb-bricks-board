@@ -78,6 +78,7 @@ export async function fetchCashSummary(filter: DateFilter = {}) {
     ownerInvest: s(ownRows.filter((r) => r.txn_type === "invest")),
     loanTaken: s(loanRows.filter((r) => r.direction === "taken")),
     loanReturned: s(lpayRows.filter((r) => r.loan?.direction === "given")),
+    openingCollected: s(opayIn),
   };
   const income = Object.values(incomeBreakdown).reduce((a, b) => a + b, 0);
   const breakdown = {

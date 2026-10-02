@@ -30,7 +30,7 @@ const IN_LABELS: Record<string, string> = { sales: "ইট বিক্রয়
 const OUT_LABELS: Record<string, string> = {
   expenses: "দৈনিক খরচ (ইঞ্জিন, বিল ইত্যাদি)", sardar: "সরদার পেমেন্ট", worker: "ডেলি শ্রমিক, মেস্তুরি ও ম্যানেজার",
   supplier: "মালামাল ক্রয় পরিশোধ", vehicle: "অন্যান্য", ownerWithdraw: "মালিকের উত্তোলন", loanGiven: "ঋণ দেওয়া",
-  loanRepaid: "নেওয়া ঋণ পরিশোধ", openingPaid: "পূর্বের বকেয়া পরিশোধ",
+  loanRepaid: "নেওয়া ঋণ পরিশোধ", openingPaid: "পূর্বের দায় পরিশোধ (লাভ-ক্ষতির বাইরে)",
 };
 
 function IncomeExpensePage() {
