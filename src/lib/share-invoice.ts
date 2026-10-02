@@ -64,7 +64,7 @@ export async function downloadNodeAsImage(node: HTMLElement, filename = "invoice
   toast.success("ডাউনলোড সম্পন্ন");
 }
 
-export function printNode(node: HTMLElement, title = "ইনভয়েস") {
+export function printNode(node: HTMLElement, title = "ইনভয়েস", opts: { a5?: boolean } = {}) {
   const w = window.open("", "_blank", "width=900,height=700");
   if (!w) {
     toast.error("পপ-আপ ব্লক করা হয়েছে");
@@ -106,8 +106,16 @@ export function printNode(node: HTMLElement, title = "ইনভয়েস") {
     body{padding:0}
     .inv-doc{border:none;padding:18px;max-width:100%}
   }
+  ${opts.a5 ? `@page{size:A5;margin:8mm}
+  body{padding:0}
+  .inv-doc{padding:10px;font-size:11px;max-width:100%;border:none}
+  .inv-title{font-size:22px}
+  th,td{padding:4px 6px;font-size:11px}
+  .copy-lbl{text-align:center;font-weight:700;font-size:12px;border:1px dashed #111;padding:3px;margin-bottom:6px}
+  .copy{page-break-after:always}
+  .copy:last-child{page-break-after:auto}` : ""}
 </style></head>
-<body>${html}
+<body>${opts.a5 ? ["গ্রাহক কপি", "গেট পাস কপি"].map((l) => `<div class="copy"><div class="copy-lbl">${l}</div>${html}</div>`).join("") : html}
 <script>setTimeout(()=>{window.focus();window.print();},250);</script>
 </body></html>`);
   w.document.close();
