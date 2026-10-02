@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Crown, Pencil, Plus, Printer, Trash2 } from "lucide-react";
@@ -91,7 +91,8 @@ function OwnersPage() {
           <h1 className="flex items-center gap-2 text-xl font-bold md:text-2xl"><Crown className="h-6 w-6 text-primary" /> মালিকের বিনিয়োগ</h1>
           <p className="text-sm text-muted-foreground">কোন মালিক কত টাকা দিয়েছেন ও তুলেছেন</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="secondary"><Link to="/loans">ঋণ দেওয়া-নেওয়া</Link></Button>
           <Button variant="outline" onClick={print}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button>
           {isAdmin && <Button variant="secondary" onClick={() => setODlg({ name: "", phone: "" })}><Plus className="mr-1 h-4 w-4" /> মালিক</Button>}
         </div>
