@@ -18,7 +18,8 @@ import { printTable } from "@/lib/print-table";
 import { toast } from "sonner";
 
 type Mode = "daily" | "salary";
-const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "পুড়াই মেস্তুরি", manager: "ম্যানেজার" };
+const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "মেস্তুরি", manager: "ম্যানেজার" };
+const ROLE_SUGGEST = ["ইঞ্জিন মেস্তুরি", "ম্যানেজার", "সহকারী ম্যানেজার", "হিসাবরক্ষক", "ক্যাশিয়ার", "পাহারাদার", "ড্রাইভার", "মেকানিক", "ইলেকট্রিশিয়ান", "বাবুর্চি"];
 
 function monthsSince(join: string | null) {
   if (!join) return 1;
@@ -37,7 +38,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const workersQ = useQuery({
     queryKey: ["staff", mode],
     queryFn: async () => {
-      const { data, error } = await supabase.from("workers").select("*").in("role", roles).order("name");
+      const base = supabase.from("workers").select("*"); const { data, error } = await (mode === "daily" ? base.eq("role", "daily") : base.neq("role", "daily")).order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -77,7 +78,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const invalidate = () => qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("staff") || q.queryKey[0] === "cash" });
 
   // ---- worker form
-  const emptyW = { id: "", name: "", phone: "", role: roles[0], wage: "", join_date: today };
+  const emptyW = { id: "", name: "", phone: "", role: mode === "daily" ? "daily" : "", wage: "", join_date: today };
   const [wDlg, setWDlg] = useState<null | typeof emptyW>(null);
   const saveW = useMutation({
     mutationFn: async () => {

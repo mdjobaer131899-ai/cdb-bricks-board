@@ -32,10 +32,11 @@ export const Route = createFileRoute("/_authenticated/sardars")({
   component: SardarsPage,
 });
 
-type SardarForm = { id?: string; name: string; phone: string; address: string; group_id: string; note: string; is_active: boolean; kind: string; mill_name: string };
+type SardarForm = { id?: string; name: string; phone: string; address: string; group_id: string; note: string; is_active: boolean; kind: string; mill_name: string; monthly_salary: string; join_date: string };
 const NO_GROUP = "__none__";
-const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "" };
-const KINDS: Record<string, string> = { mill: "মিল (কাঁচা ইট)", load: "লোড (ঢোকানো)", unload: "আনলোড (বের করা)" };
+const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "", monthly_salary: "", join_date: new Date().toISOString().slice(0, 10) };
+const KINDS: Record<string, string> = { mill: "মিল (কাঁচা ইট)", load: "লোড (ঢোকানো)", unload: "আনলোড (বের করা)", burn: "পুড়াই মেস্তুরি (মাসিক বেতন)" };
+const monthsSince = (d?: string | null) => { if (!d) return 0; const a = new Date(d), b = new Date(); const m = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + (b.getDate() >= a.getDate() ? 1 : 0); return Math.max(0, m); };
 type GroupForm = { id?: string; name: string; note: string };
 const emptyGroup: GroupForm = { name: "", note: "" };
 
@@ -121,12 +122,15 @@ function SardarsPage() {
       if (!p.sardar_id) return;
       get(p.sardar_id).paid += Number(p.amount || 0);
     });
+    for (const sd of (sardarsQ.data ?? []) as any[]) {
+      if (sd.kind === "burn") { const c = get(sd.id); c.kacha = 0; c.qty = 0; c.work = monthsSince(sd.join_date) * Number(sd.monthly_salary || 0); }
+    }
     for (const v of m.values()) {
       v.earned = v.kacha + v.work;
       v.due = v.earned - v.paid;
     }
     return m;
-  }, [kachaQ.data, workQ.data, payQ.data]);
+  }, [kachaQ.data, workQ.data, payQ.data, sardarsQ.data]);
 
   const [detail, setDetail] = useState<any | null>(null);
   const detailRows = useMemo(() => {
@@ -170,6 +174,8 @@ function SardarsPage() {
         is_active: f.is_active,
         kind: f.kind,
         mill_name: f.kind === "mill" ? f.mill_name || null : null,
+        monthly_salary: f.kind === "burn" ? Number(f.monthly_salary || 0) : 0,
+        join_date: f.kind === "burn" ? f.join_date || null : null,
       };
       if (dlg.mode === "edit" && f.id) {
         const { error } = await sdb.from("sardars").update(payload).eq("id", f.id);
@@ -279,7 +285,7 @@ function SardarsPage() {
                             <div className="text-xs text-muted-foreground">{s.phone || "—"}{s.address ? ` • ${s.address}` : ""}</div>
                           </TableCell>
                           <TableCell><Badge variant="outline">{KINDS[s.kind] ?? s.kind}{s.mill_name ? ` — ${s.mill_name}` : ""}</Badge></TableCell>
-                          <TableCell className="text-right tabular-nums">{bn(t.qty)}</TableCell>
+                          <TableCell className="text-right tabular-nums">{s.kind === "burn" ? `মাসিক ৳ ${bn(s.monthly_salary)}` : bn(t.qty)}</TableCell>
                           <TableCell className="text-right tabular-nums">৳ {bn(t.earned)}</TableCell>
                           <TableCell className="text-right tabular-nums text-destructive">৳ {bn(t.paid)}</TableCell>
                           <TableCell className={`text-right font-semibold tabular-nums ${t.due > 0 ? "text-warning" : "text-success"}`}>৳ {bn(t.due)}</TableCell>
@@ -288,7 +294,7 @@ function SardarsPage() {
                               <div className="flex justify-end gap-1">
                                 <Button size="sm" variant="ghost" onClick={() => setDlg({
                                   open: true, mode: "edit",
-                                  form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "" },
+                                  form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "", monthly_salary: String(s.monthly_salary ?? ""), join_date: s.join_date ?? new Date().toISOString().slice(0, 10) },
                                 })}><Pencil className="h-3.5 w-3.5" /></Button>
                                 <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${s.name}" মুছে ফেলবেন?`)) delSardar.mutate(s.id); }}>
                                   <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -378,6 +384,13 @@ function SardarsPage() {
                 <div><Label>মিলের নাম</Label><Input placeholder="যেমন: মিল ১" value={dlg.form.mill_name} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, mill_name: e.target.value } }))} /></div>
               )}
             </div>
+            {dlg.form.kind === "burn" && (
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label>মাসিক বেতন (৳)</Label><Input type="number" inputMode="decimal" value={dlg.form.monthly_salary} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, monthly_salary: e.target.value } }))} /></div>
+                <div><Label>যোগদানের তারিখ</Label><Input type="date" value={dlg.form.join_date} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, join_date: e.target.value } }))} /></div>
+                <p className="col-span-2 text-xs text-muted-foreground">পুড়াই মেস্তুরির ইটের সংখ্যা গণনা হবে না — মাস × মাসিক বেতন হিসেবে পাওনা হবে।</p>
+              </div>
+            )}
             <div><Label>ঠিকানা</Label><Input value={dlg.form.address} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, address: e.target.value } }))} /></div>
             <div><Label>নোট</Label><Textarea rows={2} value={dlg.form.note} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, note: e.target.value } }))} /></div>
           </div>
