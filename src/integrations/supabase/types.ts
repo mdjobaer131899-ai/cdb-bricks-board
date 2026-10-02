@@ -1914,8 +1914,10 @@ export type Database = {
           group_id: string | null
           id: string
           is_active: boolean
+          join_date: string | null
           kind: string
           mill_name: string | null
+          monthly_salary: number
           name: string
           note: string | null
           phone: string | null
@@ -1927,8 +1929,10 @@ export type Database = {
           group_id?: string | null
           id?: string
           is_active?: boolean
+          join_date?: string | null
           kind?: string
           mill_name?: string | null
+          monthly_salary?: number
           name: string
           note?: string | null
           phone?: string | null
@@ -1940,8 +1944,10 @@ export type Database = {
           group_id?: string | null
           id?: string
           is_active?: boolean
+          join_date?: string | null
           kind?: string
           mill_name?: string | null
+          monthly_salary?: number
           name?: string
           note?: string | null
           phone?: string | null

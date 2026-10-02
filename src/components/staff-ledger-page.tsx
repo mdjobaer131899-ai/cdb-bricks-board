@@ -8,7 +8,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatCard } from "@/components/stat-card";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
@@ -18,7 +17,8 @@ import { printTable } from "@/lib/print-table";
 import { toast } from "sonner";
 
 type Mode = "daily" | "salary";
-const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "পুড়াই মেস্তুরি", manager: "ম্যানেজার" };
+const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "মেস্তুরি", manager: "ম্যানেজার" };
+const ROLE_SUGGEST = ["ইঞ্জিন মেস্তুরি", "ম্যানেজার", "সহকারী ম্যানেজার", "হিসাবরক্ষক", "ক্যাশিয়ার", "পাহারাদার", "ড্রাইভার", "মেকানিক", "ইলেকট্রিশিয়ান", "বাবুর্চি"];
 
 function monthsSince(join: string | null) {
   if (!join) return 1;
@@ -31,13 +31,12 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
-  const roles = mode === "daily" ? ["daily"] : ["mestri", "manager"];
   const today = isoDate(new Date());
 
   const workersQ = useQuery({
     queryKey: ["staff", mode],
     queryFn: async () => {
-      const { data, error } = await supabase.from("workers").select("*").in("role", roles).order("name");
+      const base = supabase.from("workers").select("*"); const { data, error } = await (mode === "daily" ? base.eq("role", "daily") : base.neq("role", "daily")).order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -77,14 +76,14 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const invalidate = () => qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("staff") || q.queryKey[0] === "cash" });
 
   // ---- worker form
-  const emptyW = { id: "", name: "", phone: "", role: roles[0], wage: "", join_date: today };
+  const emptyW = { id: "", name: "", phone: "", role: mode === "daily" ? "daily" : "", wage: "", join_date: today };
   const [wDlg, setWDlg] = useState<null | typeof emptyW>(null);
   const saveW = useMutation({
     mutationFn: async () => {
       const f = wDlg!;
       if (!f.name.trim()) throw new Error("নাম দিন");
       const payload: any = {
-        name: f.name.trim(), phone: f.phone || null, role: f.role,
+        name: f.name.trim(), phone: f.phone || null, role: (f.role || "").trim() || (mode === "daily" ? "daily" : "ম্যানেজার"),
         daily_wage: mode === "daily" ? Number(f.wage || 0) : 0,
         monthly_salary: mode === "salary" ? Number(f.wage || 0) : 0,
         join_date: f.join_date || null,
@@ -264,10 +263,8 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
             <div><Label>ফোন</Label><Input value={wDlg.phone} onChange={(e) => setWDlg({ ...wDlg, phone: e.target.value })} /></div>
             {mode === "salary" && (
               <div><Label>পদ</Label>
-                <Select value={wDlg.role} onValueChange={(v) => setWDlg({ ...wDlg, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="mestri">পুড়াই মেস্তুরি</SelectItem><SelectItem value="manager">ম্যানেজার</SelectItem></SelectContent>
-                </Select>
+                <Input list="staff-role-suggest" placeholder="যেমন: ইঞ্জিন মেস্তুরি" value={ROLE_LABEL[wDlg.role] && wDlg.role !== "daily" ? ROLE_LABEL[wDlg.role] : wDlg.role} onChange={(e) => setWDlg({ ...wDlg, role: e.target.value })} />
+                <datalist id="staff-role-suggest">{ROLE_SUGGEST.map((r) => <option key={r} value={r} />)}</datalist>
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">

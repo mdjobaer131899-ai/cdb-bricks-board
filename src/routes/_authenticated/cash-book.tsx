@@ -23,6 +23,7 @@ import {
   deleteExpenseWithPassword, deleteIncomeWithPassword, updateExpenseEntry, updateIncomeEntry,
 } from "@/lib/cash-book.functions";
 import { toast } from "sonner";
+import { fetchCashHistory } from "@/lib/cash-queries";
 
 export const Route = createFileRoute("/_authenticated/cash-book")({
   head: () => ({
@@ -40,6 +41,9 @@ export const Route = createFileRoute("/_authenticated/cash-book")({
 });
 
 const EXPENSE_CATEGORIES = [
+  "ইঞ্জিন খরচ", "কারেন্ট বিল", "ফুয়েল / ডিজেল", "কয়লা / লাকড়ি",
+  "সরদার পেমেন্ট", "পুড়াই মেস্তুরি বেতন", "ইঞ্জিন মেস্তুরি বেতন", "ম্যানেজার বেতন", "ডেলি শ্রমিক মজুরি",
+  "মালামাল ক্রয়", "মালিকের উত্তোলন", "ঋণ পরিশোধ", "পূর্বের বকেয়া পরিশোধ",
   "লোড খরচ", "আনলোড খরচ", "ইট বহন / ভাড়া", "মাটি কাটা মজুরি", "ইট সাজানো / বের করা",
   "শ্রমিক বেতন", "শ্রমিক মজুরি", "কাঁচামাল কেনা", "জ্বালানি / কয়লা", "মাটি ক্রয়",
   "যন্ত্রপাতি / মেরামত", "গাড়ি ভাড়া / জ্বালানি", "অফিস খরচ", "বিদ্যুৎ / পানি",
@@ -96,11 +100,21 @@ function CashBookPage() {
     ]) qc.invalidateQueries({ queryKey: key });
   };
 
+  const [hFrom, setHFrom] = useState("");
+  const [hTo, setHTo] = useState("");
+  const [hHead, setHHead] = useState("__all__");
+  const history = useQuery({ queryKey: ["cash-book", "history", hFrom, hTo], queryFn: () => fetchCashHistory({ from: hFrom || undefined, to: hTo || undefined }) });
+  const heads = useMemo(() => {
+    const m = new Map<string, { dir: "in" | "out"; total: number }>();
+    for (const r of history.data ?? []) { const c = m.get(r.head) ?? { dir: r.dir, total: 0 }; c.total += r.amount; m.set(r.head, c); }
+    return [...m.entries()];
+  }, [history.data]);
+  const hRows = useMemo(() => (history.data ?? []).filter((r) => hHead === "__all__" || r.head === hHead), [history.data, hHead]);
   const totals = useMemo(() => {
-    const inc = (incomes.data ?? []).reduce((a, b) => a + Number(b.amount), 0);
-    const exp = (expenses.data ?? []).reduce((a, b) => a + Number(b.amount), 0);
+    const inc = hRows.filter((r) => r.dir === "in").reduce((a, b) => a + b.amount, 0);
+    const exp = hRows.filter((r) => r.dir === "out").reduce((a, b) => a + b.amount, 0);
     return { inc, exp, net: inc - exp };
-  }, [incomes.data, expenses.data]);
+  }, [hRows]);
 
   return (
     <div className="space-y-4">
@@ -123,11 +137,64 @@ function CashBookPage() {
         <Stat tone={totals.net >= 0 ? "primary" : "destructive"} icon={Wallet} label="নিট" value={totals.net} />
       </div>
 
-      <Tabs defaultValue="expense">
+      <Tabs defaultValue="history">
         <TabsList>
+          <TabsTrigger value="history">সব আয়-ব্যয় হিস্টোরি</TabsTrigger>
           <TabsTrigger value="expense">ব্যয় তালিকা</TabsTrigger>
           <TabsTrigger value="income">আয় তালিকা</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="history">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">মূল ক্যাশের সব লেনদেন</CardTitle>
+              <CardDescription>সব পাতার আয় ও ব্যয় — খাত ও তারিখ বেছে হিসাব করুন</CardDescription>
+              <div className="flex flex-wrap items-end gap-2 pt-2">
+                <div><Label className="text-xs">থেকে</Label><Input type="date" value={hFrom} onChange={(e) => setHFrom(e.target.value)} /></div>
+                <div><Label className="text-xs">পর্যন্ত</Label><Input type="date" value={hTo} onChange={(e) => setHTo(e.target.value)} /></div>
+                <div className="min-w-48"><Label className="text-xs">খাত</Label>
+                  <Select value={hHead} onValueChange={setHHead}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">সব খাত</SelectItem>
+                      {heads.map(([h, v]) => <SelectItem key={h} value={h}>{v.dir === "in" ? "আয়" : "ব্যয়"} — {h}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {heads.length > 0 && (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {heads.map(([h, v]) => (
+                    <button key={h} type="button" onClick={() => setHHead(h)} className="flex justify-between rounded-md border p-2 text-left text-sm hover:bg-muted">
+                      <span>{h}</span><b className={v.dir === "in" ? "text-success" : "text-destructive"}>৳ {bn(v.total)}</b>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {history.isLoading ? <Skeleton className="h-32" /> : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>তারিখ</TableHead><TableHead>খাত</TableHead><TableHead>বিবরণ</TableHead><TableHead className="text-right">আয়</TableHead><TableHead className="text-right">ব্যয়</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {hRows.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">কোনো লেনদেন নেই</TableCell></TableRow>}
+                      {hRows.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell>{bnDate(r.date)}</TableCell>
+                          <TableCell className="font-medium">{r.head}</TableCell>
+                          <TableCell className="text-muted-foreground">{r.detail}</TableCell>
+                          <TableCell className="text-right text-success tabular-nums">{r.dir === "in" ? `৳ ${bn(r.amount)}` : ""}</TableCell>
+                          <TableCell className="text-right text-destructive tabular-nums">{r.dir === "out" ? `৳ ${bn(r.amount)}` : ""}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="expense">
           <Card>

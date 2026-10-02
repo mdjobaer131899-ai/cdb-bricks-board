@@ -243,7 +243,7 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
                 <SelectContent>
                   <SelectItem value={NO_SARDAR}>— নেই —</SelectItem>
                   {(sardarsQ.data ?? [])
-                    .filter((s: any) => (step === "production" ? s.kind === "mill" : step === "load" ? s.kind === "load" : true))
+                    .filter((s: any) => (step === "production" ? s.kind === "mill" : step === "load" ? s.kind === "load" : s.kind !== "burn"))
                     .map((s: any) => <SelectItem key={s.id} value={s.id}>{s.mill_name ? `${s.mill_name} — ${s.name}` : s.name}</SelectItem>)}
                 </SelectContent>
               </Select>

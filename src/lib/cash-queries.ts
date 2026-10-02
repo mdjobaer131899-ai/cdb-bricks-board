@@ -185,3 +185,34 @@ export async function fetchCashDay(dayIso: string) {
 
   return { incomes, outs };
 }
+
+export type CashHistoryRow = { id: string; date: string; dir: "in" | "out"; head: string; detail: string; amount: number };
+
+/** মূল ক্যাশের সব আয়-ব্যয়ের হিস্টোরি — fetchCashSummary-র সব খাত থেকে */
+export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHistoryRow[]> {
+  const [col, exp, sar, wrk, sup, own, loans, lpay, opay] = await Promise.all([
+    applyRange(sdb.from("collections").select("id, amount, payment_date, note, customer:customers(name)").is("contract_id", null), "payment_date", filter),
+    applyRange(sdb.from("expenses").select("id, amount, expense_date, category, note"), "expense_date", filter),
+    applyRange(sdb.from("sardar_payments").select("id, amount, payment_date, note, sardar:sardars(name)"), "payment_date", filter),
+    applyRange(sdb.from("worker_payments").select("id, amount, payment_date, note, worker:workers(name, role)"), "payment_date", filter),
+    applyRange(sdb.from("supplier_payments").select("id, amount, payment_date, note, supplier:suppliers(name)"), "payment_date", filter),
+    applyRange(sdb.from("owner_transactions").select("id, amount, txn_date, txn_type, note, owner:owners(name)"), "txn_date", filter),
+    applyRange(sdb.from("loans").select("id, amount, loan_date, direction, party_name"), "loan_date", filter),
+    applyRange(sdb.from("loan_payments").select("id, amount, payment_date, loan:loans(direction, party_name)"), "payment_date", filter),
+    applyRange(sdb.from("opening_payments").select("id, amount, payment_date, ob:opening_balances(kind, party_name)"), "payment_date", filter),
+  ]);
+  for (const r of [col, exp, sar, wrk, sup, own, loans, lpay, opay]) if (r.error) throw r.error;
+  const A = (x: any) => (x.data ?? []) as any[];
+  const out: CashHistoryRow[] = [
+    ...A(col).map((r) => ({ id: `c${r.id}`, date: r.payment_date, dir: "in" as const, head: "ইট বিক্রয় / কালেকশন", detail: r.customer?.name ?? "—", amount: Number(r.amount) })),
+    ...A(exp).map((r) => ({ id: `e${r.id}`, date: r.expense_date, dir: "out" as const, head: r.category, detail: r.note ?? "", amount: Number(r.amount) })),
+    ...A(sar).map((r) => ({ id: `s${r.id}`, date: r.payment_date, dir: "out" as const, head: "সরদার পেমেন্ট", detail: r.sardar?.name ?? "—", amount: Number(r.amount) })),
+    ...A(wrk).map((r) => ({ id: `w${r.id}`, date: r.payment_date, dir: "out" as const, head: r.worker?.role === "daily" ? "ডেলি শ্রমিক" : "বেতন (মেস্তুরি/ম্যানেজার)", detail: r.worker?.name ?? "—", amount: Number(r.amount) })),
+    ...A(sup).map((r) => ({ id: `p${r.id}`, date: r.payment_date, dir: "out" as const, head: "মালামাল ক্রয় পরিশোধ", detail: r.supplier?.name ?? "—", amount: Number(r.amount) })),
+    ...A(own).map((r) => ({ id: `o${r.id}`, date: r.txn_date, dir: r.txn_type === "invest" ? ("in" as const) : ("out" as const), head: r.txn_type === "invest" ? "মালিকের বিনিয়োগ" : "মালিকের উত্তোলন", detail: r.owner?.name ?? "—", amount: Number(r.amount) })),
+    ...A(loans).map((r) => ({ id: `l${r.id}`, date: r.loan_date, dir: r.direction === "taken" ? ("in" as const) : ("out" as const), head: r.direction === "taken" ? "ঋণ নেওয়া" : "ঋণ দেওয়া", detail: r.party_name, amount: Number(r.amount) })),
+    ...A(lpay).map((r) => ({ id: `lp${r.id}`, date: r.payment_date, dir: r.loan?.direction === "given" ? ("in" as const) : ("out" as const), head: r.loan?.direction === "given" ? "দেওয়া ঋণ ফেরত" : "নেওয়া ঋণ পরিশোধ", detail: r.loan?.party_name ?? "—", amount: Number(r.amount) })),
+    ...A(opay).filter((r) => r.ob?.kind !== "customer_brick_due").map((r) => ({ id: `op${r.id}`, date: r.payment_date, dir: "out" as const, head: "পূর্বের বকেয়া পরিশোধ", detail: r.ob?.party_name ?? "—", amount: Number(r.amount) })),
+  ];
+  return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
