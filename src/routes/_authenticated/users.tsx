@@ -10,6 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { supabase } from "@/integrations/supabase/client";
+import { PAGES } from "@/lib/page-permissions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -58,6 +61,7 @@ function UsersPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [pwdUser, setPwdUser] = useState<AppUser | null>(null);
   const [delUser, setDelUser] = useState<AppUser | null>(null);
+  const [permUser, setPermUser] = useState<AppUser | null>(null);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["app-users"] });
 
@@ -132,6 +136,9 @@ function UsersPage() {
                       <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{bnDate(u.created_at)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          {u.role === "manager" && (
+                            <Button size="sm" variant="outline" className="h-8" onClick={() => setPermUser(u)}>অনুমতি</Button>
+                          )}
                           <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setPwdUser(u)} aria-label="পাসওয়ার্ড">
                             <KeyRound className="h-4 w-4" />
                           </Button>
@@ -205,7 +212,56 @@ function UsersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <PermissionsDialog user={permUser} onClose={() => setPermUser(null)} />
     </div>
+  );
+}
+
+function PermissionsDialog({ user, onClose }: { user: AppUser | null; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const q = useQuery({
+    queryKey: ["page-perms-admin", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("page_permissions").select("page_key").eq("user_id", user!.id);
+      if (error) throw error;
+      const s = new Set((data ?? []).map((r) => r.page_key));
+      setSel(s);
+      return s;
+    },
+  });
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("page_permissions").delete().eq("user_id", user!.id);
+      if (error) throw error;
+      const rows = [...sel].map((k) => ({ user_id: user!.id, page_key: k }));
+      if (rows.length) { const { error: e2 } = await supabase.from("page_permissions").insert(rows); if (e2) throw e2; }
+    },
+    onSuccess: () => { toast.success("অনুমতি সংরক্ষিত"); qc.invalidateQueries({ queryKey: ["page-perms"] }); onClose(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <Dialog open={!!user} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>পাতার অনুমতি — {user?.full_name || user?.email}</DialogTitle></DialogHeader>
+        {q.isLoading ? <Skeleton className="h-40" /> : (
+          <div className="max-h-[60vh] space-y-1 overflow-y-auto">
+            <div className="mb-2 flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setSel(new Set(PAGES.map((p) => p.key)))}>সব</Button>
+              <Button size="sm" variant="outline" onClick={() => setSel(new Set())}>কোনোটিই না</Button>
+            </div>
+            {PAGES.map((p) => (
+              <label key={p.key} className="flex items-center gap-3 rounded-md border p-2 text-sm">
+                <Checkbox checked={sel.has(p.key)} onCheckedChange={(c) => { const n = new Set(sel); c ? n.add(p.key) : n.delete(p.key); setSel(n); }} />
+                {p.label}
+              </label>
+            ))}
+          </div>
+        )}
+        <DialogFooter><Button onClick={() => save.mutate()} disabled={save.isPending}>সংরক্ষণ</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
