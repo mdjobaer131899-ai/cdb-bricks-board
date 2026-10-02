@@ -27,29 +27,12 @@ import { fetchCashDay } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
 
-/** এই খাত নির্বাচন করলে ব্যয় সরদারের পাওনা থেকেও বাদ যায় */
-const SARDAR_CATEGORY = "সরদার পেমেন্ট (পাওনা থেকে বাদ)";
-
-const EXPENSE_CATEGORIES = [
-  SARDAR_CATEGORY,
-  "লোড খরচ",
-  "আনলোড খরচ",
-  "ইট বহন / ভাড়া",
-  "মাটি কাটা মজুরি",
-  "ইট সাজানো / বের করা",
-  "শ্রমিক বেতন",
-  "শ্রমিক মজুরি",
-  "কাঁচামাল কেনা",
-  "জ্বালানি / কয়লা",
-  "মাটি ক্রয়",
-  "যন্ত্রপাতি / মেরামত",
-  "গাড়ি ভাড়া / জ্বালানি",
-  "অফিস খরচ",
-  "বিদ্যুৎ / পানি",
-  "খাবার / আপ্যায়ন",
-  "ট্যাক্স / ফি",
-  "অন্যান্য",
+export const EXPENSE_HEADS = [
+  "সরদার", "ডেলি", "মেস্তুরি ও ম্যানেজার", "ভেকু",
+  "কাঁচামাল", "যন্ত্রাংশ / মালামাল", "বিদ্যুৎ বিল", "আনুষাঙ্গিক",
 ];
+const RAW_ITEMS = ["কয়লা", "মাটি", "লাকড়ি", "তুষ"];
+const PART_ITEMS = ["ডিজেল", "মবিল", "কেরোসিন", "ইঞ্জিনের মালামাল"];
 
 // আজকের নগদ আয় ও সব ধরনের নগদ ব্যয় (সাধারণ ব্যয় + সরদার/শ্রমিক/সরবরাহকারী/গাড়ি)
 // একটিই হিসাব থেকে আসে — src/lib/cash-queries.ts
@@ -361,36 +344,28 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
   );
 }
 
-function AddExpenseDialog({ onDone }: { onDone: () => void }) {
+export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
+  const { data: me } = useCurrentUser();
   const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<string>("");
-  const [customCategory, setCustomCategory] = useState("");
+  const [head, setHead] = useState<string>("");
+  const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));
   const [note, setNote] = useState("");
-  const [workerId, setWorkerId] = useState<string>("");
-  const [materialId, setMaterialId] = useState<string>("");
-  const [sardarId, setSardarId] = useState<string>("");
+  const [personId, setPersonId] = useState<string>("");
   const [sardarType, setSardarType] = useState<"payment" | "advance">("payment");
+  const [hours, setHours] = useState("");
+  const [rate, setRate] = useState("");
+  const [vekuOwner, setVekuOwner] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const isSardar = category === SARDAR_CATEGORY;
+  const isSardar = head === "সরদার";
+  const isDaily = head === "ডেলি";
+  const isStaff = head === "মেস্তুরি ও ম্যানেজার";
+  const isVeku = head === "ভেকু";
+  const vekuTotal = (Number(hours) || 0) * (Number(rate) || 0);
+  const vekuDue = vekuTotal - (Number(amount) || 0);
 
-  const workersQ = useQuery({
-    queryKey: ["workers-active-select"],
-    enabled: open && category === "শ্রমিক বেতন",
-    queryFn: async () => {
-      const { data } = await sdb.from("workers").select("id, name").eq("active", true).order("name");
-      return (data ?? []) as Array<{ id: string; name: string }>;
-    },
-  });
-  const materialsQ = useQuery({
-    queryKey: ["materials-active-select"],
-    enabled: open && category === "কাঁচামাল কেনা",
-    queryFn: async () => {
-      const { data } = await sdb.from("raw_materials").select("id, name").eq("active", true).order("name");
-      return (data ?? []) as Array<{ id: string; name: string }>;
-    },
-  });
   const sardarsQ = useQuery({
     queryKey: ["sardars-active-select"],
     enabled: open && isSardar,
@@ -399,81 +374,90 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
       return (data ?? []) as Array<{ id: string; name: string }>;
     },
   });
-  const sardarBalQ = useQuery({
-    queryKey: ["sardar-balance-one", sardarId],
-    enabled: open && isSardar && !!sardarId,
+  const workersQ = useQuery({
+    queryKey: ["workers-all-select"],
+    enabled: open && (isDaily || isStaff),
     queryFn: async () => {
-      const { data } = await supabase.from("sardar_balances").select("*").eq("sardar_id", sardarId).maybeSingle();
+      const { data } = await supabase.from("workers").select("id, name, role").eq("active", true).order("name");
+      return (data ?? []) as Array<{ id: string; name: string; role: string }>;
+    },
+  });
+  const people = isSardar
+    ? sardarsQ.data ?? []
+    : (workersQ.data ?? []).filter((w) => (isDaily ? w.role === "daily" : w.role !== "daily"));
+
+  const sardarBalQ = useQuery({
+    queryKey: ["sardar-balance-one", personId],
+    enabled: open && isSardar && !!personId,
+    queryFn: async () => {
+      const { data } = await supabase.from("sardar_balances").select("*").eq("sardar_id", personId).maybeSingle();
       return data as any;
     },
   });
 
   function reset() {
-    setCategory(""); setCustomCategory(""); setAmount(""); setNote("");
-    setWorkerId(""); setMaterialId(""); setSardarId(""); setSardarType("payment");
+    setHead(""); setItem(""); setAmount(""); setNote(""); setPersonId("");
+    setSardarType("payment"); setHours(""); setRate(""); setVekuOwner("");
   }
 
-  type ExpenseInput = { category: string; amount: number; expense_date: string; note: string | null };
   const createFn = useServerFn(createExpense);
-  const mut = useMutation({
-    mutationFn: (input: ExpenseInput) => createFn({ data: input }),
-    onSuccess: () => {
-      toast.success("ব্যয় যোগ হয়েছে");
-      setOpen(false);
-      reset();
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  // সরদারকে দেওয়া টাকা sardar_payments-এ যায় — তাই তার কাজের পাওনা থেকে
-  // স্বয়ংক্রিয়ভাবে বাদ যায় এবং একই সাথে মূল ক্যাশ থেকেও কমে।
   const createSardarPay = useServerFn(createSardarPayment);
-  const sardarMut = useMutation({
-    mutationFn: (input: {
-      sardar_id: string; amount: number; payment_date: string;
-      payment_type: "payment" | "advance"; method: string | null; note: string | null;
-    }) => createSardarPay({ data: input }),
-    onSuccess: () => {
-      toast.success("সরদার পেমেন্ট যোগ হয়েছে — পাওনা থেকে বাদ গেছে");
-      setOpen(false);
-      reset();
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0) return toast.error("টাকার পরিমাণ সঠিক নয়");
-
-    if (isSardar) {
-      if (!sardarId) return toast.error("সরদার নির্বাচন করুন");
-      return sardarMut.mutate({
-        sardar_id: sardarId,
-        amount: amt,
-        payment_date: date,
-        payment_type: sardarType,
-        method: "cash",
-        note: note.trim() || null,
-      });
+    const amt = Number(amount || 0);
+    if (!head) return toast.error("খাত নির্বাচন করুন");
+    if (!isVeku && (!Number.isFinite(amt) || amt <= 0)) return toast.error("টাকার পরিমাণ সঠিক নয়");
+    setBusy(true);
+    try {
+      const n = note.trim() || null;
+      if (isSardar) {
+        if (!personId) throw new Error("সরদারের নাম নির্বাচন করুন");
+        await createSardarPay({ data: { sardar_id: personId, amount: amt, payment_date: date, payment_type: sardarType, method: "cash", note: n } });
+      } else if (isDaily || isStaff) {
+        if (!personId) throw new Error("নাম নির্বাচন করুন");
+        const { error } = await supabase.from("worker_payments").insert({
+          worker_id: personId, amount: amt, payment_date: date, payment_type: "payment", note: n, created_by: me!.user.id,
+        });
+        if (error) throw error;
+      } else if (isVeku) {
+        if (!vekuOwner.trim()) throw new Error("ভেকু মালিক/ড্রাইভারের নাম লিখুন");
+        if (vekuTotal <= 0) throw new Error("ঘণ্টা ও রেট দিন");
+        const name = vekuOwner.trim();
+        const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
+        let supId = ex?.id as string | undefined;
+        if (!supId) {
+          const { data, error } = await supabase.from("suppliers").insert({ name, material_type: "ভেকু" }).select("id").single();
+          if (error) throw error;
+          supId = data.id;
+        }
+        const { error } = await supabase.from("purchases").insert({
+          purchase_date: date, supplier_id: supId, item_name: "ভেকু", quantity: Number(hours), unit: "ঘণ্টা",
+          unit_price: Number(rate), total_amount: vekuTotal, note: n, created_by: me!.user.id,
+        });
+        if (error) throw error;
+        if (amt > 0) {
+          const { error: e2 } = await supabase.from("supplier_payments").insert({
+            supplier_id: supId, amount: amt, payment_date: date, note: `ভেকু ${bn(Number(hours))} ঘণ্টা — পরিশোধ`, created_by: me!.user.id,
+          });
+          if (e2) throw e2;
+        }
+      } else {
+        const sub = item.trim();
+        if (head === "আনুষাঙ্গিক" && !sub) throw new Error("খরচের বিবরণ লিখুন");
+        const category = sub ? `${head} — ${sub}` : head;
+        await createFn({ data: { category, amount: amt, expense_date: date, note: n } });
+      }
+      toast.success("ব্যয় যোগ হয়েছে");
+      setOpen(false); reset(); onDone();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
     }
-
-    const finalCat = category === "অন্যান্য" ? customCategory.trim() : category;
-    if (!finalCat) return toast.error("খাত নির্বাচন করুন");
-    let finalNote = note.trim();
-    if (category === "শ্রমিক বেতন" && workerId) {
-      const w = workersQ.data?.find((x) => x.id === workerId);
-      if (w) finalNote = `শ্রমিক: ${w.name}${finalNote ? " — " + finalNote : ""}`;
-    }
-    if (category === "কাঁচামাল কেনা" && materialId) {
-      const m = materialsQ.data?.find((x) => x.id === materialId);
-      if (m) finalNote = `উপকরণ: ${m.name}${finalNote ? " — " + finalNote : ""}`;
-    }
-    mut.mutate({ category: finalCat, amount: amt, expense_date: date, note: finalNote || null });
   };
 
+  const suggestions = head === "কাঁচামাল" ? RAW_ITEMS : head === "যন্ত্রাংশ / মালামাল" ? PART_ITEMS : [];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -485,44 +469,32 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>নতুন ব্যয় এন্ট্রি</DialogTitle>
-          <DialogDescription>ব্যয় খাত ও টাকার পরিমাণ লিখুন। আজকের ব্যয় নগদ কালেকশন থেকে বাদ যাবে।</DialogDescription>
+          <DialogDescription>খাত বেছে নিন, তারপর নাম/বিবরণ ও টাকা লিখুন।</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1">
             <Label>ব্যয়ের খাত *</Label>
-            <Select value={category} onValueChange={setCategory}>
+            <Select value={head} onValueChange={(v) => { setHead(v); setPersonId(""); setItem(""); }}>
               <SelectTrigger><SelectValue placeholder="খাত নির্বাচন করুন" /></SelectTrigger>
               <SelectContent>
-                {EXPENSE_CATEGORIES.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
+                {EXPENSE_HEADS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
-            {category === "অন্যান্য" && (
-              <Input
-                className="mt-2"
-                placeholder="খাতের নাম লিখুন"
-                value={customCategory}
-                onChange={(e) => setCustomCategory(e.target.value)}
-              />
-            )}
           </div>
 
-          {isSardar && (
+          {(isSardar || isDaily || isStaff) && (
             <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
-              <div className="space-y-1">
-                <Label>সরদার *</Label>
-                <Select value={sardarId} onValueChange={setSardarId}>
-                  <SelectTrigger><SelectValue placeholder="সরদার নির্বাচন করুন" /></SelectTrigger>
-                  <SelectContent>
-                    {(sardarsQ.data ?? []).map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>ধরন</Label>
+              <Label>{isSardar ? "সরদারের নাম *" : isDaily ? "ডেলি শ্রমিকের নাম *" : "মেস্তুরি / ম্যানেজারের নাম *"}</Label>
+              <Select value={personId} onValueChange={setPersonId}>
+                <SelectTrigger><SelectValue placeholder="নাম নির্বাচন করুন" /></SelectTrigger>
+                <SelectContent>
+                  {people.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {people.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">কোনো নাম নেই — আগে সংশ্লিষ্ট পাতায় নাম যোগ করুন।</p>
+              )}
+              {isSardar && (
                 <Select value={sardarType} onValueChange={(v) => setSardarType(v as "payment" | "advance")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -530,47 +502,51 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
                     <SelectItem value="advance">অগ্রিম</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              {sardarId && sardarBalQ.data && (
+              )}
+              {isSardar && personId && sardarBalQ.data && (
                 <p className="text-[11px] text-muted-foreground">
-                  মোট কাজের পাওনা ৳ {bn(Number(sardarBalQ.data.total_due ?? 0))} • পরিশোধিত ৳ {bn(Number(sardarBalQ.data.total_paid ?? 0))} •{" "}
+                  পাওনা ৳ {bn(Number(sardarBalQ.data.total_due ?? 0))} • পরিশোধিত ৳ {bn(Number(sardarBalQ.data.total_paid ?? 0))} •{" "}
                   <span className="font-semibold text-foreground">বাকি ৳ {bn(Number(sardarBalQ.data.balance ?? 0))}</span>
                 </p>
               )}
             </div>
           )}
 
-
-          {category === "শ্রমিক বেতন" && (
-            <div className="space-y-1">
-              <Label>কোন শ্রমিক? (ঐচ্ছিক)</Label>
-              <Select value={workerId} onValueChange={setWorkerId}>
-                <SelectTrigger><SelectValue placeholder="শ্রমিক নির্বাচন" /></SelectTrigger>
-                <SelectContent>
-                  {(workersQ.data ?? []).map((w) => (
-                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {isVeku && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+              <div className="space-y-1">
+                <Label>ভেকু মালিক / ড্রাইভার *</Label>
+                <Input value={vekuOwner} onChange={(e) => setVekuOwner(e.target.value)} placeholder="নাম লিখুন" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label>কত ঘণ্টা *</Label>
+                  <Input type="number" min="0" step="0.25" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="০" />
+                </div>
+                <div className="space-y-1">
+                  <Label>ঘণ্টার রেট *</Label>
+                  <Input type="number" min="0" step="0.01" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="০" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-md bg-background p-2">মোট বিল<br /><b>৳ {bn(vekuTotal)}</b></div>
+                <div className="rounded-md bg-background p-2">বাকি<br /><b className={vekuDue > 0 ? "text-destructive" : "text-success"}>৳ {bn(Math.max(vekuDue, 0))}</b></div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">বাকি টাকা "মালামাল ক্রয় ও বাকি" পাতায় ভেকু মালিকের নামে জমা থাকবে।</p>
             </div>
           )}
-          {category === "কাঁচামাল কেনা" && (
+
+          {!(isSardar || isDaily || isStaff || isVeku) && head && head !== "বিদ্যুৎ বিল" && (
             <div className="space-y-1">
-              <Label>কোন উপকরণ? (ঐচ্ছিক)</Label>
-              <Select value={materialId} onValueChange={setMaterialId}>
-                <SelectTrigger><SelectValue placeholder="উপকরণ নির্বাচন" /></SelectTrigger>
-                <SelectContent>
-                  {(materialsQ.data ?? []).map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>{head === "আনুষাঙ্গিক" ? "খরচের বিবরণ *" : "কী কেনা হলো (নিজে লিখুন বা বেছে নিন)"}</Label>
+              <Input list="exp-items" value={item} onChange={(e) => setItem(e.target.value)} placeholder="যেমন: কয়লা / ডিজেল / চা-নাস্তা" />
+              <datalist id="exp-items">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label>টাকা *</Label>
+              <Label>{isVeku ? "আজ পরিশোধ" : "টাকা *"}</Label>
               <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
             </div>
             <div className="space-y-1">
@@ -581,14 +557,12 @@ function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
           <div className="space-y-1">
             <Label>নোট</Label>
-            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="ঐচ্ছিক" />
+            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="ঐচ্ছিক — যা খুশি লিখুন" />
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>বাতিল</Button>
-            <Button type="submit" variant="destructive" disabled={mut.isPending || sardarMut.isPending}>
-              {mut.isPending ? "সংরক্ষণ..." : "সংরক্ষণ"}
-            </Button>
+            <Button type="submit" variant="destructive" disabled={busy}>{busy ? "সংরক্ষণ..." : "সংরক্ষণ"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
