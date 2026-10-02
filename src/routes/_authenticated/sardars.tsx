@@ -133,6 +133,22 @@ function SardarsPage() {
   }, [kachaQ.data, workQ.data, payQ.data, sardarsQ.data]);
 
   const [detail, setDetail] = useState<any | null>(null);
+  const openingQ = useQuery({
+    queryKey: ["opening-balances", "sardar", detail?.id],
+    enabled: !!detail?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("opening_balance_summary")
+        .select("amount, paid_amount, remaining_amount, fiscal_year")
+        .eq("sardar_id", detail!.id);
+      if (error) throw error;
+      return (data ?? []).reduce(
+        (a: any, r: any) => ({ amount: a.amount + Number(r.amount || 0), paid: a.paid + Number(r.paid_amount || 0), due: a.due + Number(r.remaining_amount || 0) }),
+        { amount: 0, paid: 0, due: 0 },
+      );
+    },
+  });
+
   const detailRows = useMemo(() => {
     if (!detail) return [] as Array<{ id: string; date: string; label: string; credit: number; debit: number }>;
     const rows: Array<{ id: string; date: string; label: string; credit: number; debit: number }> = [];
@@ -431,6 +447,13 @@ function SardarsPage() {
                   <div className="rounded-lg border p-2"><p className="text-[11px] text-muted-foreground">নিয়েছে</p><p className="font-bold tabular-nums text-destructive">৳ {bn(t.paid)}</p></div>
                   <div className="rounded-lg border p-2"><p className="text-[11px] text-muted-foreground">বাকি</p><p className={`font-bold tabular-nums ${t.due > 0 ? "text-warning" : "text-success"}`}>৳ {bn(t.due)}</p></div>
                 </div>
+                {openingQ.data && openingQ.data.amount > 0 && (
+                  <div className="rounded-lg border border-warning/40 bg-warning/5 p-2 text-xs">
+                    <span className="font-semibold">গত মৌসুমের পাওনা:</span> ৳ {bn(openingQ.data.amount)} • পরিশোধ ৳ {bn(openingQ.data.paid)} •{" "}
+                    <span className="font-semibold text-warning">বাকি ৳ {bn(openingQ.data.due)}</span>
+                    <div className="text-muted-foreground">পরিশোধ করুন "পূর্বের বকেয়া ও জের" পাতা থেকে — এ সিজনের খরচে যোগ হবে না।</div>
+                  </div>
+                )}
                 {detail.note && <p className="rounded-lg bg-muted p-2 text-xs">{detail.note}</p>}
                 {detailRows.length === 0 ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">কোনো লেনদেন নেই</div>
