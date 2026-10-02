@@ -1,0 +1,3 @@
+- Manager page access is governed by public.page_permissions (page_key = route URL) checked in the _authenticated layout guard and sidebar via src/lib/page-permissions.ts; admins bypass. Why: admin assigns per-page access.
+- Hand-cash/income-expense totals all come from fetchCashSummary in src/lib/cash-queries.ts; any new money table must be added there. Why: one consistent account across dashboard and reports.
+- Staff (daily workers, mestri, managers) share the workers table by role; daily pay = present days × daily_wage, salaried pay = months since join × monthly_salary. Why: reuse one payment ledger.
