@@ -26,11 +26,13 @@ import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authentica
 import { Route as AuthenticatedOwnersRouteImport } from './routes/_authenticated/owners'
 import { Route as AuthenticatedOpeningBalancesRouteImport } from './routes/_authenticated/opening-balances'
 import { Route as AuthenticatedLoansRouteImport } from './routes/_authenticated/loans'
+import { Route as AuthenticatedIncomeExpenseRouteImport } from './routes/_authenticated/income-expense'
 import { Route as AuthenticatedDailyWorkersRouteImport } from './routes/_authenticated/daily-workers'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedChallansRouteImport } from './routes/_authenticated/challans'
 import { Route as AuthenticatedCashBookRouteImport } from './routes/_authenticated/cash-book'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
+import { Route as AuthenticatedAdvanceSalesRouteImport } from './routes/_authenticated/advance-sales'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers.index'
 import { Route as AuthenticatedCollectionsIndexRouteImport } from './routes/_authenticated/collections.index'
 import { Route as AuthenticatedChallansIndexRouteImport } from './routes/_authenticated/challans.index'
@@ -129,6 +131,12 @@ const AuthenticatedLoansRoute = AuthenticatedLoansRouteImport.update({
   path: '/loans',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedIncomeExpenseRoute =
+  AuthenticatedIncomeExpenseRouteImport.update({
+    id: '/income-expense',
+    path: '/income-expense',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDailyWorkersRoute =
   AuthenticatedDailyWorkersRouteImport.update({
     id: '/daily-workers',
@@ -155,6 +163,12 @@ const AuthenticatedApprovalsRoute = AuthenticatedApprovalsRouteImport.update({
   path: '/approvals',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdvanceSalesRoute =
+  AuthenticatedAdvanceSalesRouteImport.update({
+    id: '/advance-sales',
+    path: '/advance-sales',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCustomersIndexRoute =
   AuthenticatedCustomersIndexRouteImport.update({
     id: '/',
@@ -224,11 +238,13 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/advance-sales': typeof AuthenticatedAdvanceSalesRoute
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/challans': typeof AuthenticatedChallansRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/income-expense': typeof AuthenticatedIncomeExpenseRoute
   '/loans': typeof AuthenticatedLoansRoute
   '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/owners': typeof AuthenticatedOwnersRoute
@@ -257,9 +273,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/advance-sales': typeof AuthenticatedAdvanceSalesRoute
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/income-expense': typeof AuthenticatedIncomeExpenseRoute
   '/loans': typeof AuthenticatedLoansRoute
   '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/owners': typeof AuthenticatedOwnersRoute
@@ -291,11 +309,13 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/_authenticated/advance-sales': typeof AuthenticatedAdvanceSalesRoute
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRoute
   '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/challans': typeof AuthenticatedChallansRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/_authenticated/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/_authenticated/income-expense': typeof AuthenticatedIncomeExpenseRoute
   '/_authenticated/loans': typeof AuthenticatedLoansRoute
   '/_authenticated/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/_authenticated/owners': typeof AuthenticatedOwnersRoute
@@ -328,11 +348,13 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/sitemap.xml'
+    | '/advance-sales'
     | '/approvals'
     | '/cash-book'
     | '/challans'
     | '/customers'
     | '/daily-workers'
+    | '/income-expense'
     | '/loans'
     | '/opening-balances'
     | '/owners'
@@ -361,9 +383,11 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/sitemap.xml'
+    | '/advance-sales'
     | '/approvals'
     | '/cash-book'
     | '/daily-workers'
+    | '/income-expense'
     | '/loans'
     | '/opening-balances'
     | '/owners'
@@ -394,11 +418,13 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/sitemap.xml'
+    | '/_authenticated/advance-sales'
     | '/_authenticated/approvals'
     | '/_authenticated/cash-book'
     | '/_authenticated/challans'
     | '/_authenticated/customers'
     | '/_authenticated/daily-workers'
+    | '/_authenticated/income-expense'
     | '/_authenticated/loans'
     | '/_authenticated/opening-balances'
     | '/_authenticated/owners'
@@ -554,6 +580,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLoansRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/income-expense': {
+      id: '/_authenticated/income-expense'
+      path: '/income-expense'
+      fullPath: '/income-expense'
+      preLoaderRoute: typeof AuthenticatedIncomeExpenseRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/daily-workers': {
       id: '/_authenticated/daily-workers'
       path: '/daily-workers'
@@ -587,6 +620,13 @@ declare module '@tanstack/react-router' {
       path: '/approvals'
       fullPath: '/approvals'
       preLoaderRoute: typeof AuthenticatedApprovalsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/advance-sales': {
+      id: '/_authenticated/advance-sales'
+      path: '/advance-sales'
+      fullPath: '/advance-sales'
+      preLoaderRoute: typeof AuthenticatedAdvanceSalesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/customers/': {
@@ -701,11 +741,13 @@ const AuthenticatedCustomersRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdvanceSalesRoute: typeof AuthenticatedAdvanceSalesRoute
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRoute
   AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedChallansRoute: typeof AuthenticatedChallansRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
   AuthenticatedDailyWorkersRoute: typeof AuthenticatedDailyWorkersRoute
+  AuthenticatedIncomeExpenseRoute: typeof AuthenticatedIncomeExpenseRoute
   AuthenticatedLoansRoute: typeof AuthenticatedLoansRoute
   AuthenticatedOpeningBalancesRoute: typeof AuthenticatedOpeningBalancesRoute
   AuthenticatedOwnersRoute: typeof AuthenticatedOwnersRoute
@@ -729,11 +771,13 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdvanceSalesRoute: AuthenticatedAdvanceSalesRoute,
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRoute,
   AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedChallansRoute: AuthenticatedChallansRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
   AuthenticatedDailyWorkersRoute: AuthenticatedDailyWorkersRoute,
+  AuthenticatedIncomeExpenseRoute: AuthenticatedIncomeExpenseRoute,
   AuthenticatedLoansRoute: AuthenticatedLoansRoute,
   AuthenticatedOpeningBalancesRoute: AuthenticatedOpeningBalancesRoute,
   AuthenticatedOwnersRoute: AuthenticatedOwnersRoute,
