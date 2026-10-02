@@ -66,7 +66,11 @@ export async function fetchCashSummary(filter: DateFilter = {}) {
   const ownRows = (own.data ?? []) as any[];
   const loanRows = (loans.data ?? []) as any[];
   const lpayRows = (lpay.data ?? []) as any[];
-  const opayRows = ((opay.data ?? []) as any[]).filter((p) => p.ob?.kind !== "customer_brick_due");
+  // পূর্বের জের: দায় পরিশোধ = ক্যাশ আউট, গ্রাহকের পুরোনো পাওনা আদায় = ক্যাশ ইন।
+  // কোনোটাই চলতি সিজনের লাভ-ক্ষতিতে যায় না (breakdown-এ আলাদা কী দিয়ে রাখা)।
+  const opAll = (opay.data ?? []) as any[];
+  const opayRows = opAll.filter((p) => p.ob?.kind === "sardar_payable" || p.ob?.kind === "other_payable");
+  const opayIn = opAll.filter((p) => p.ob?.kind === "customer_receivable");
   const s = (rows: any[]) => rows.reduce((a, b) => a + Number(b.amount || 0), 0);
 
   const incomeBreakdown = {
@@ -212,7 +216,10 @@ export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHis
     ...A(own).map((r) => ({ id: `o${r.id}`, date: r.txn_date, dir: r.txn_type === "invest" ? ("in" as const) : ("out" as const), head: r.txn_type === "invest" ? "মালিকের বিনিয়োগ" : "মালিকের উত্তোলন", detail: r.owner?.name ?? "—", amount: Number(r.amount) })),
     ...A(loans).map((r) => ({ id: `l${r.id}`, date: r.loan_date, dir: r.direction === "taken" ? ("in" as const) : ("out" as const), head: r.direction === "taken" ? "ঋণ নেওয়া" : "ঋণ দেওয়া", detail: r.party_name, amount: Number(r.amount) })),
     ...A(lpay).map((r) => ({ id: `lp${r.id}`, date: r.payment_date, dir: r.loan?.direction === "given" ? ("in" as const) : ("out" as const), head: r.loan?.direction === "given" ? "দেওয়া ঋণ ফেরত" : "নেওয়া ঋণ পরিশোধ", detail: r.loan?.party_name ?? "—", amount: Number(r.amount) })),
-    ...A(opay).filter((r) => r.ob?.kind !== "customer_brick_due").map((r) => ({ id: `op${r.id}`, date: r.payment_date, dir: "out" as const, head: "পূর্বের বকেয়া পরিশোধ", detail: r.ob?.party_name ?? "—", amount: Number(r.amount) })),
+    ...A(opay).filter((r) => r.ob?.kind !== "customer_brick_due").map((r) => {
+      const isIn = r.ob?.kind === "customer_receivable";
+      return { id: `op${r.id}`, date: r.payment_date, dir: isIn ? ("in" as const) : ("out" as const), head: isIn ? "গত বছরের পাওনা আদায়" : "পূর্বের দায় পরিশোধ", detail: r.ob?.party_name ?? "—", amount: Number(r.amount) };
+    }),
   ];
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
