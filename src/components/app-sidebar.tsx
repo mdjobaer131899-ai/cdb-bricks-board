@@ -12,12 +12,12 @@ export type NavGroup = { label: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "বিক্রয়",
+    label: "বিক্রয় ও চালান",
     items: [
       { title: "ড্যাশবোর্ড", url: "/", icon: LayoutDashboard },
       { title: "নতুন চালান", url: "/entries/new", icon: FilePlus2 },
       { title: "চালান তালিকা", url: "/challans", icon: FileText },
-      { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck },
+      { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck, adminOnly: true },
       { title: "গ্রাহক", url: "/customers", icon: Users },
       { title: "কালেকশন", url: "/collections", icon: Wallet },
       { title: "অগ্রিম ইট বিক্রয়", url: "/advance-sales", icon: PackageCheck },
@@ -29,27 +29,24 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "কাঁচা ইট (মিল)", url: "/production-steps/kacha", icon: Boxes },
       { title: "ভাটায় ঢোকানো", url: "/production-steps/load", icon: ArrowDownToLine },
       { title: "বের করা", url: "/production-steps/unload", icon: ArrowUpFromLine },
-      { title: "সরদার", url: "/sardars", icon: Users2 },
-      { title: "সরদার হিসাব", url: "/sardar-ledger", icon: HandCoins },
+      { title: "সরদার খাতা", url: "/sardars", icon: Users2 },
       { title: "ডেলি শ্রমিক", url: "/daily-workers", icon: CalendarCheck },
       { title: "মেস্তুরি ও ম্যানেজার বেতন", url: "/salaries", icon: BadgeDollarSign },
     ],
   },
   {
-    label: "হিসাব",
+    label: "ভাটার হিসাব",
     items: [
-      { title: "দৈনিক আয়-ব্যয়", url: "/cash-book", icon: Receipt },
-      { title: "মালামাল ক্রয় ও বাকি", url: "/purchases", icon: ShoppingCart },
-      { title: "সরবরাহকারী", url: "/suppliers", icon: Building2 },
-      { title: "মালিকের বিনিয়োগ", url: "/owners", icon: Crown },
-      { title: "ঋণ দেওয়া-নেওয়া", url: "/loans", icon: Landmark },
+      { title: "ক্যাশ বই (দৈনিক ড্রয়ার)", url: "/cash-book", icon: Receipt },
+      { title: "মালামাল ও সাপ্লায়ার", url: "/purchases", icon: ShoppingCart },
+      { title: "মালিক ও ঋণ", url: "/owners", icon: Crown },
       { title: "পূর্বের বকেয়া ও জের", url: "/opening-balances", icon: History },
-      { title: "মোট আয়-ব্যয়", url: "/income-expense", icon: Scale },
     ],
   },
   {
     label: "রিপোর্ট ও সেটিংস",
     items: [
+      { title: "লাভ-ক্ষতি ও ক্যাশ সামারি", url: "/income-expense", icon: Scale },
       { title: "রিপোর্ট", url: "/reports", icon: BarChart3 },
       { title: "মৌসুম", url: "/seasons", icon: CalendarRange },
       { title: "ইউজার ও অনুমতি", url: "/users", icon: UserCog, adminOnly: true },
