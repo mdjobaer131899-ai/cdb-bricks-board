@@ -29,9 +29,15 @@ export function CustomerLedger({ customerId, customerName }: Props) {
         sdb.from("sales_entries").select("id, challan_no, sale_date, total_amount, status, sale_type, quantity, contract_id, opening_balance_id, brick_type:brick_types(name)").eq("customer_id", customerId).eq("status", "approved").order("sale_date"),
         sdb.from("collections").select("id, amount, payment_date, method, note, contract_id, contract:contracts(contract_no)").eq("customer_id", customerId).order("payment_date"),
       ]);
+      // পূর্বের জের (সিজন নির্বিশেষে)
+      const { data: obs } = await supabase
+        .from("opening_balances")
+        .select("id, kind, amount, as_of_date, fiscal_year, opening_payments(amount, payment_date, method)")
+        .eq("customer_id", customerId);
       return {
         sales: salesRes.data ?? [],
         collections: colRes.data ?? [],
+        openings: (obs ?? []) as any[],
       };
     },
   });
@@ -51,16 +57,6 @@ export function CustomerLedger({ customerId, customerName }: Props) {
         credit: 0,
         ref: s.challan_no,
       });
-      // গত বছরের অগ্রিম থেকে সমন্বয় হলে সমপরিমাণ ক্রেডিট — এ বছরের পাওনা বাড়বে না
-      if (s.opening_balance_id) {
-        events.push({
-          date: s.sale_date,
-          description: `গত বছরের অগ্রিম থেকে সমন্বয় — চালান ${s.challan_no}`,
-          debit: 0,
-          credit: Number(s.total_amount || 0),
-          ref: s.challan_no,
-        });
-      }
     }
     // ক্রেডিট = কালেকশন (চুক্তির অগ্রিমসহ) — একটিই উৎস, তাই দ্বিগুণ হয় না।
     for (const p of q.data.collections as Array<{ amount: number; payment_date: string; method: string | null; note: string | null; contract: { contract_no?: string } | null }>) {
@@ -73,11 +69,32 @@ export function CustomerLedger({ customerId, customerName }: Props) {
         ref: p.contract?.contract_no ?? "—",
       });
     }
+    // পূর্বের জের: অগ্রিম জমা = ক্রেডিট, ভাটার পাওনা = ডেবিট; পাওনা আদায় = ক্রেডিট
+    for (const o of q.data.openings) {
+      const amt = Number(o.amount || 0);
+      const isAdv = o.kind === "customer_brick_due";
+      events.push({
+        date: "0000-" + String(o.as_of_date ?? ""),
+        description: isAdv ? `গত বছরের জের — অগ্রিম জমা (ইট পাবে) ${bn(o.fiscal_year)}` : `গত বছরের জের — ভাটার পাওনা (টাকা বাকি) ${bn(o.fiscal_year)}`,
+        debit: isAdv ? 0 : amt,
+        credit: isAdv ? amt : 0,
+        ref: "জের",
+      });
+      for (const p of (o.opening_payments ?? []) as any[]) {
+        events.push({
+          date: p.payment_date,
+          description: isAdv ? "গত বছরের অগ্রিম থেকে ইট সমন্বয়" : `গত বছরের পাওনা আদায়${p.method ? ` (${p.method})` : ""}`,
+          debit: isAdv ? Number(p.amount || 0) : 0,
+          credit: isAdv ? 0 : Number(p.amount || 0),
+          ref: "জের",
+        });
+      }
+    }
     events.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     let bal = 0;
     return events.map((e) => {
       bal += e.debit - e.credit;
-      return { ...e, balance: bal };
+      return { ...e, date: e.date.startsWith("0000-") ? e.date.slice(5) : e.date, balance: bal };
     });
   }, [q.data]);
 
