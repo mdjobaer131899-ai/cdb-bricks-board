@@ -407,16 +407,16 @@ function OpeningBalancesPage() {
                               {r.note && <div className="text-[11px] text-muted-foreground">{r.note}</div>}
                             </TableCell>
                             <TableCell>
-                              {isCust(k) ? (
+                              {k !== "payable" ? (
                                 <Badge variant="outline">{bn(r.fiscal_year)}</Badge>
                               ) : (
-                                <Badge variant="secondary">{r.category || "—"}</Badge>
+                                <Badge variant="secondary">{r.category || (r.kind === "sardar_payable" ? "সরদার" : "অন্যান্য")}</Badge>
                               )}
                             </TableCell>
                             <TableCell className="text-right">৳ {bn(r.amount)}</TableCell>
                             <TableCell className="text-right text-emerald-600">৳ {bn(r.paid_amount)}</TableCell>
                             <TableCell className={`text-right font-semibold ${r.remaining_amount > 0 ? "text-destructive" : "text-emerald-600"}`}>
-                              ৳ {bn(r.remaining_amount)}
+                              {r.remaining_amount > 0 ? `৳ ${bn(r.remaining_amount)}` : "✓ পরিশোধিত"}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
@@ -471,7 +471,8 @@ function OpeningBalancesPage() {
               </CardContent>
             </Card>
           </TabsContent>
-        ))}
+          );
+        })}
       </Tabs>
 
       {/* নতুন / সম্পাদনা */}
