@@ -22,7 +22,10 @@ import { Route as AuthenticatedSardarsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedSardarLedgerRouteImport } from './routes/_authenticated/sardar-ledger'
 import { Route as AuthenticatedSalariesRouteImport } from './routes/_authenticated/salaries'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
+import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authenticated/purchases'
+import { Route as AuthenticatedOwnersRouteImport } from './routes/_authenticated/owners'
 import { Route as AuthenticatedOpeningBalancesRouteImport } from './routes/_authenticated/opening-balances'
+import { Route as AuthenticatedLoansRouteImport } from './routes/_authenticated/loans'
 import { Route as AuthenticatedDailyWorkersRouteImport } from './routes/_authenticated/daily-workers'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedChallansRouteImport } from './routes/_authenticated/challans'
@@ -105,12 +108,27 @@ const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPurchasesRoute = AuthenticatedPurchasesRouteImport.update({
+  id: '/purchases',
+  path: '/purchases',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedOwnersRoute = AuthenticatedOwnersRouteImport.update({
+  id: '/owners',
+  path: '/owners',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedOpeningBalancesRoute =
   AuthenticatedOpeningBalancesRouteImport.update({
     id: '/opening-balances',
     path: '/opening-balances',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedLoansRoute = AuthenticatedLoansRouteImport.update({
+  id: '/loans',
+  path: '/loans',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDailyWorkersRoute =
   AuthenticatedDailyWorkersRouteImport.update({
     id: '/daily-workers',
@@ -211,7 +229,10 @@ export interface FileRoutesByFullPath {
   '/challans': typeof AuthenticatedChallansRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/loans': typeof AuthenticatedLoansRoute
   '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
+  '/owners': typeof AuthenticatedOwnersRoute
+  '/purchases': typeof AuthenticatedPurchasesRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/salaries': typeof AuthenticatedSalariesRoute
   '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
@@ -239,7 +260,10 @@ export interface FileRoutesByTo {
   '/approvals': typeof AuthenticatedApprovalsRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/loans': typeof AuthenticatedLoansRoute
   '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
+  '/owners': typeof AuthenticatedOwnersRoute
+  '/purchases': typeof AuthenticatedPurchasesRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/salaries': typeof AuthenticatedSalariesRoute
   '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
@@ -272,7 +296,10 @@ export interface FileRoutesById {
   '/_authenticated/challans': typeof AuthenticatedChallansRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
   '/_authenticated/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/_authenticated/loans': typeof AuthenticatedLoansRoute
   '/_authenticated/opening-balances': typeof AuthenticatedOpeningBalancesRoute
+  '/_authenticated/owners': typeof AuthenticatedOwnersRoute
+  '/_authenticated/purchases': typeof AuthenticatedPurchasesRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/salaries': typeof AuthenticatedSalariesRoute
   '/_authenticated/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
@@ -306,7 +333,10 @@ export interface FileRouteTypes {
     | '/challans'
     | '/customers'
     | '/daily-workers'
+    | '/loans'
     | '/opening-balances'
+    | '/owners'
+    | '/purchases'
     | '/reports'
     | '/salaries'
     | '/sardar-ledger'
@@ -334,7 +364,10 @@ export interface FileRouteTypes {
     | '/approvals'
     | '/cash-book'
     | '/daily-workers'
+    | '/loans'
     | '/opening-balances'
+    | '/owners'
+    | '/purchases'
     | '/reports'
     | '/salaries'
     | '/sardar-ledger'
@@ -366,7 +399,10 @@ export interface FileRouteTypes {
     | '/_authenticated/challans'
     | '/_authenticated/customers'
     | '/_authenticated/daily-workers'
+    | '/_authenticated/loans'
     | '/_authenticated/opening-balances'
+    | '/_authenticated/owners'
+    | '/_authenticated/purchases'
     | '/_authenticated/reports'
     | '/_authenticated/salaries'
     | '/_authenticated/sardar-ledger'
@@ -490,11 +526,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedReportsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/purchases': {
+      id: '/_authenticated/purchases'
+      path: '/purchases'
+      fullPath: '/purchases'
+      preLoaderRoute: typeof AuthenticatedPurchasesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/owners': {
+      id: '/_authenticated/owners'
+      path: '/owners'
+      fullPath: '/owners'
+      preLoaderRoute: typeof AuthenticatedOwnersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/opening-balances': {
       id: '/_authenticated/opening-balances'
       path: '/opening-balances'
       fullPath: '/opening-balances'
       preLoaderRoute: typeof AuthenticatedOpeningBalancesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/loans': {
+      id: '/_authenticated/loans'
+      path: '/loans'
+      fullPath: '/loans'
+      preLoaderRoute: typeof AuthenticatedLoansRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/daily-workers': {
@@ -649,7 +706,10 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChallansRoute: typeof AuthenticatedChallansRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
   AuthenticatedDailyWorkersRoute: typeof AuthenticatedDailyWorkersRoute
+  AuthenticatedLoansRoute: typeof AuthenticatedLoansRoute
   AuthenticatedOpeningBalancesRoute: typeof AuthenticatedOpeningBalancesRoute
+  AuthenticatedOwnersRoute: typeof AuthenticatedOwnersRoute
+  AuthenticatedPurchasesRoute: typeof AuthenticatedPurchasesRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSalariesRoute: typeof AuthenticatedSalariesRoute
   AuthenticatedSardarLedgerRoute: typeof AuthenticatedSardarLedgerRoute
@@ -674,7 +734,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChallansRoute: AuthenticatedChallansRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
   AuthenticatedDailyWorkersRoute: AuthenticatedDailyWorkersRoute,
+  AuthenticatedLoansRoute: AuthenticatedLoansRoute,
   AuthenticatedOpeningBalancesRoute: AuthenticatedOpeningBalancesRoute,
+  AuthenticatedOwnersRoute: AuthenticatedOwnersRoute,
+  AuthenticatedPurchasesRoute: AuthenticatedPurchasesRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSalariesRoute: AuthenticatedSalariesRoute,
   AuthenticatedSardarLedgerRoute: AuthenticatedSardarLedgerRoute,
