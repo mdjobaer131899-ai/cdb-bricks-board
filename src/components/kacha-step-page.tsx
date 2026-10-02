@@ -22,7 +22,6 @@ export type KachaStep = "production" | "load" | "damage";
 const STEP_ORDER: Array<{ key: KachaStep | "unload"; label: string }> = [
   { key: "production", label: "কাঁচা ইট" },
   { key: "load", label: "ঢোকানো" },
-  { key: "damage", label: "পোড়ানো" },
   { key: "unload", label: "বের করা" },
 ];
 

@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, Flame, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
 } from "@/components/ui/sidebar";
@@ -28,7 +28,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { title: "কাঁচা ইট (মিল)", url: "/production-steps/kacha", icon: Boxes },
       { title: "ভাটায় ঢোকানো", url: "/production-steps/load", icon: ArrowDownToLine },
-      { title: "পোড়ানো", url: "/production-steps/burn", icon: Flame },
       { title: "বের করা", url: "/production-steps/unload", icon: ArrowUpFromLine },
       { title: "সরদার", url: "/sardars", icon: Users2 },
       { title: "সরদার হিসাব", url: "/sardar-ledger", icon: HandCoins },

@@ -12,7 +12,6 @@ export const PAGES: { key: string; label: string }[] = [
   { key: "/advance-sales", label: "অগ্রিম ইট বিক্রয়" },
   { key: "/production-steps/kacha", label: "কাঁচা ইট (মিল)" },
   { key: "/production-steps/load", label: "ভাটায় ঢোকানো" },
-  { key: "/production-steps/burn", label: "পোড়ানো" },
   { key: "/production-steps/unload", label: "বের করা" },
   { key: "/sardars", label: "সরদার" },
   { key: "/sardar-ledger", label: "সরদার হিসাব" },
