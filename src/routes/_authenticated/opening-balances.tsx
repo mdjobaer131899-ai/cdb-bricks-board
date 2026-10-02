@@ -32,10 +32,12 @@ export const Route = createFileRoute("/_authenticated/opening-balances")({
   component: OpeningBalancesPage,
 });
 
-type Kind = "customer_brick_due" | "sardar_payable" | "other_payable";
+type Kind = "customer_brick_due" | "customer_receivable" | "sardar_payable" | "other_payable";
+const isCust = (k: Kind) => k === "customer_brick_due" || k === "customer_receivable";
 
 const KIND_LABEL: Record<Kind, string> = {
-  customer_brick_due: "গ্রাহক ইট বাকি",
+  customer_brick_due: "গ্রাহক ইট পাবে (অগ্রিম জমা)",
+  customer_receivable: "ভাটার পাওনা (গ্রাহক টাকা দেবে)",
   sardar_payable: "সরদার/শ্রমিক পাওনা",
   other_payable: "অন্যান্য বকেয়া",
 };
@@ -189,12 +191,11 @@ function OpeningBalancesPage() {
     const byKind = (k: Kind) => rows.filter((r) => r.kind === k);
     const s = (list: Row[], f: (r: Row) => number) => list.reduce((a, b) => a + f(b), 0);
     return {
-      customer: s(byKind("customer_brick_due"), (r) => r.amount),
+      customer: s(byKind("customer_brick_due"), (r) => r.remaining_amount),
+      receivable: s(byKind("customer_receivable"), (r) => r.remaining_amount),
       sardar: s(byKind("sardar_payable"), (r) => r.amount),
       other: s(byKind("other_payable"), (r) => r.amount),
-      total: s(rows, (r) => r.amount),
-      paid: s(rows, (r) => r.paid_amount),
-      remaining: s(rows, (r) => r.remaining_amount),
+      payable: s(rows.filter((r) => r.kind === "sardar_payable" || r.kind === "other_payable"), (r) => r.remaining_amount),
     };
   }, [rows]);
 
@@ -203,14 +204,14 @@ function OpeningBalancesPage() {
       const f = dialog.form;
       const amt = Number(f.amount);
       if (!(amt > 0)) throw new Error("পরিমাণ লিখুন");
-      if (f.kind === "customer_brick_due" && !f.customer_id) throw new Error("গ্রাহক নির্বাচন করুন");
+      if (isCust(f.kind) && !f.customer_id) throw new Error("গ্রাহক নির্বাচন করুন");
       if (f.kind === "sardar_payable" && !f.sardar_id && !f.worker_id && !f.party_name.trim())
         throw new Error("সরদার/শ্রমিক নির্বাচন করুন বা নাম লিখুন");
       if (f.kind === "other_payable" && !f.party_name.trim()) throw new Error("নাম লিখুন");
 
       const payload: any = {
         kind: f.kind,
-        customer_id: f.kind === "customer_brick_due" ? f.customer_id : null,
+        customer_id: isCust(f.kind) ? f.customer_id : null,
         sardar_id: f.kind === "sardar_payable" && f.sardar_id ? f.sardar_id : null,
         worker_id: f.kind === "sardar_payable" && f.worker_id ? f.worker_id : null,
         party_name: f.party_name.trim() || null,
@@ -253,7 +254,7 @@ function OpeningBalancesPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("সংরক্ষিত হয়েছে — এটি নতুন বছরের খরচ হিসেবে গণনা হবে না");
+      toast.success("সংরক্ষিত — ক্যাশে প্রভাব পড়েছে, কিন্তু এ সিজনের লাভ-ক্ষতিতে যোগ হয়নি");
       setPayDialog({ open: false, row: null, amount: "", date: todayBD(), method: "নগদ", note: "" });
       qc.invalidateQueries({ queryKey: ["opening-balances"] });
       qc.invalidateQueries({ queryKey: ["opening-payments"] });
@@ -314,7 +315,7 @@ function OpeningBalancesPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <History className="h-5 w-5 text-primary" />
-          <h1 className="text-2xl font-bold">গত বছরের বকেয়া (ওপেনিং ব্যালেন্স)</h1>
+          <h1 className="text-2xl font-bold">পূর্বের বকেয়া ও জের</h1>
         </div>
         <Button onClick={() => openNew(tab)}>
           <Plus className="mr-1 h-4 w-4" /> নতুন এন্ট্রি
@@ -322,27 +323,28 @@ function OpeningBalancesPage() {
       </div>
 
       <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
-        নিয়ম: গত বছরের বকেয়া পরিশোধ করলে সেটি নতুন বছরের খরচ হিসেবে গণনা হয় না — শুধু এখানের বকেয়া কমে ও নগদ/ব্যাংক কমে।
-        গ্রাহকের গত বছরের অগ্রিমের ক্ষেত্রে টাকা ফেরত নয়, ইট সরবরাহ করলেই তার ইট-বাকি সমন্বয় হবে।
+        নিয়ম: পুরোনো দেনা পরিশোধ করলে ক্যাশ কমবে, পুরোনো পাওনা আদায় হলে ক্যাশ বাড়বে — কিন্তু কোনোটাই এ সিজনের লাভ-ক্ষতিতে যোগ হবে না।
+        গ্রাহকের অগ্রিম জমার বিপরীতে নতুন চালানে ইট দিলে শুধু জমা কমবে, ক্যাশে কোনো প্রভাব নেই।
       </p>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Summary label="গ্রাহক ইট বাকি" value={totals.customer} icon={Users} tone="info" />
-        <Summary label="সরদার/শ্রমিক পাওনা" value={totals.sardar} icon={Users2} tone="warning" />
-        <Summary label="অন্যান্য বকেয়া" value={totals.other} icon={Building2} tone="warning" />
-        <Summary label="মোট গত বছরের দায়" value={totals.total} icon={Wallet} tone="primary" />
-        <Summary label="পরিশোধ হয়েছে" value={totals.paid} icon={HandCoins} tone="success" />
-        <Summary label="এখনো বাকি" value={totals.remaining} icon={FileText} tone="destructive" />
+        <Summary label="গ্রাহক ইট পাবে (বাকি)" value={totals.customer} icon={Users} tone="info" />
+        <Summary label="ভাটার পাওনা আদায় বাকি" value={totals.receivable} icon={HandCoins} tone="success" />
+        <Summary label="সরদার/মেস্তুরি পাওনা" value={totals.sardar} icon={Users2} tone="warning" />
+        <Summary label="অন্যান্য দেনা" value={totals.other} icon={Building2} tone="warning" />
+        <Summary label="মোট দেনা পরিশোধ বাকি" value={totals.payable} icon={FileText} tone="destructive" />
+        <Summary label="নিট (পাওনা − দেনা)" value={totals.receivable - totals.payable} icon={Wallet} tone="primary" />
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Kind)}>
         <TabsList className="flex-wrap">
-          <TabsTrigger value="customer_brick_due">গ্রাহক ইট বাকি</TabsTrigger>
-          <TabsTrigger value="sardar_payable">সরদার/শ্রমিক</TabsTrigger>
+          <TabsTrigger value="customer_brick_due">গ্রাহক ইট পাবে</TabsTrigger>
+          <TabsTrigger value="customer_receivable">ভাটার পাওনা</TabsTrigger>
+          <TabsTrigger value="sardar_payable">সরদার/মেস্তুরি</TabsTrigger>
           <TabsTrigger value="other_payable">অন্যান্য</TabsTrigger>
         </TabsList>
 
-        {(["customer_brick_due", "sardar_payable", "other_payable"] as Kind[]).map((k) => (
+        {(["customer_brick_due", "customer_receivable", "sardar_payable", "other_payable"] as Kind[]).map((k) => (
           <TabsContent key={k} value={k}>
             <Card>
               <CardHeader className="pb-2">
@@ -357,10 +359,10 @@ function OpeningBalancesPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>নাম</TableHead>
-                          <TableHead>{k === "customer_brick_due" ? "বছর" : "ক্যাটেগরি"}</TableHead>
-                          <TableHead className="text-right">{k === "customer_brick_due" ? "গত বছরের অগ্রিম" : "ওপেনিং"}</TableHead>
-                          <TableHead className="text-right">{k === "customer_brick_due" ? "সমন্বয় হয়েছে" : "পরিশোধ"}</TableHead>
-                          <TableHead className="text-right">{k === "customer_brick_due" ? "ইট দেওয়া বাকি" : "বাকি"}</TableHead>
+                          <TableHead>{isCust(k) ? "বছর" : "ক্যাটেগরি"}</TableHead>
+                          <TableHead className="text-right">{k === "customer_brick_due" ? "গত বছরের অগ্রিম" : k === "customer_receivable" ? "গত বছরের বাকি" : "ওপেনিং"}</TableHead>
+                          <TableHead className="text-right">{k === "customer_brick_due" ? "সমন্বয় হয়েছে" : k === "customer_receivable" ? "আদায়" : "পরিশোধ"}</TableHead>
+                          <TableHead className="text-right">{k === "customer_brick_due" ? "ইট দেওয়া বাকি" : k === "customer_receivable" ? "আদায় বাকি" : "বাকি"}</TableHead>
                           <TableHead className="text-right">অ্যাকশন</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -374,7 +376,7 @@ function OpeningBalancesPage() {
                               {r.note && <div className="text-[11px] text-muted-foreground">{r.note}</div>}
                             </TableCell>
                             <TableCell>
-                              {k === "customer_brick_due" ? (
+                              {isCust(k) ? (
                                 <Badge variant="outline">{bn(r.fiscal_year)}</Badge>
                               ) : (
                                 <Badge variant="secondary">{r.category || "—"}</Badge>
@@ -402,7 +404,7 @@ function OpeningBalancesPage() {
                                     })
                                   }
                                 >
-                                  {r.kind === "customer_brick_due" ? "ইট সমন্বয়" : "পরিশোধ"}
+                                  {r.kind === "customer_brick_due" ? "ইট সমন্বয়" : r.kind === "customer_receivable" ? "টাকা আদায়" : "পরিশোধ"}
                                 </Button>
                                 {isAdmin && (
                                   <>
@@ -463,7 +465,7 @@ function OpeningBalancesPage() {
               </Select>
             </div>
 
-            {f.kind === "customer_brick_due" && (
+            {isCust(f.kind) && (
               <div>
                 <Label>গ্রাহক</Label>
                 <Select value={f.customer_id} onValueChange={(v) => setDialog((d) => ({ ...d, form: { ...d.form, customer_id: v } }))}>
@@ -533,7 +535,7 @@ function OpeningBalancesPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>{f.kind === "customer_brick_due" ? "গত বছরের অগ্রিম (৳)" : "ওপেনিং পরিমাণ (৳)"}</Label>
+                <Label>{f.kind === "customer_brick_due" ? "গত বছরের অগ্রিম জমা (৳)" : f.kind === "customer_receivable" ? "গ্রাহকের কাছে বাকি (৳)" : "পাওনা/দেনার পরিমাণ (৳)"}</Label>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -574,13 +576,13 @@ function OpeningBalancesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {payDialog.row?.kind === "customer_brick_due" ? "ইট সরবরাহ সমন্বয়" : "বকেয়া পরিশোধ"} — {payDialog.row?.display_name}
+              {payDialog.row?.kind === "customer_brick_due" ? "ইট সরবরাহ সমন্বয়" : payDialog.row?.kind === "customer_receivable" ? "পুরোনো পাওনা আদায়" : "পুরোনো দেনা পরিশোধ"} — {payDialog.row?.display_name}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
               বাকি: ৳ {bn(payDialog.row?.remaining_amount ?? 0)}
-              {payDialog.row?.kind !== "customer_brick_due" && " • এটি নতুন বছরের খরচে যোগ হবে না"}
+              {payDialog.row?.kind === "customer_receivable" ? " • ক্যাশে যোগ হবে, এ বছরের বিক্রিতে নয়" : payDialog.row?.kind !== "customer_brick_due" ? " • ক্যাশ থেকে কমবে, এ বছরের খরচে যোগ হবে না" : ""}
             </div>
             <div>
               <Label>পরিমাণ (৳)</Label>

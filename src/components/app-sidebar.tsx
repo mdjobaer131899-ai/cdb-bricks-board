@@ -43,7 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "সরবরাহকারী", url: "/suppliers", icon: Building2 },
       { title: "মালিকের বিনিয়োগ", url: "/owners", icon: Crown },
       { title: "ঋণ দেওয়া-নেওয়া", url: "/loans", icon: Landmark },
-      { title: "পূর্বের বকেয়া", url: "/opening-balances", icon: History },
+      { title: "পূর্বের বকেয়া ও জের", url: "/opening-balances", icon: History },
       { title: "মোট আয়-ব্যয়", url: "/income-expense", icon: Scale },
     ],
   },
