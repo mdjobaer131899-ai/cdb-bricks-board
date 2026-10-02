@@ -46,29 +46,49 @@ function applyRange<T>(q: T, column: string, f: DateFilter): T {
 
 /** নির্দিষ্ট পরিসরের (বা সব সময়ের) মোট নগদ আয়, ব্যয় ও নিট ব্যালেন্স */
 export async function fetchCashSummary(filter: DateFilter = {}) {
-  const [col, exp, sar, wrk, sup, veh] = await Promise.all([
+  const [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay] = await Promise.all([
     applyRange(sdb.from("collections").select("amount").is("contract_id", null), "payment_date", filter),
     applyRange(sdb.from("expenses").select("amount"), "expense_date", filter),
     applyRange(sdb.from("sardar_payments").select("amount"), "payment_date", filter),
     applyRange(sdb.from("worker_payments").select("amount"), "payment_date", filter),
     applyRange(sdb.from("supplier_payments").select("amount"), "payment_date", filter),
     applyRange(sdb.from("vehicle_expenses").select("amount"), "expense_date", filter),
+    applyRange(sdb.from("owner_transactions").select("amount, txn_type"), "txn_date", filter),
+    applyRange(sdb.from("loans").select("amount, direction"), "loan_date", filter),
+    applyRange(sdb.from("loan_payments").select("amount, loan:loans(direction)"), "payment_date", filter),
+    applyRange(sdb.from("opening_payments").select("amount, ob:opening_balances(kind)"), "payment_date", filter),
   ]);
 
-  for (const r of [col, exp, sar, wrk, sup, veh]) {
+  for (const r of [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay]) {
     if (r.error) throw r.error;
   }
 
-  const income = sum(col.data as any);
+  const ownRows = (own.data ?? []) as any[];
+  const loanRows = (loans.data ?? []) as any[];
+  const lpayRows = (lpay.data ?? []) as any[];
+  const opayRows = ((opay.data ?? []) as any[]).filter((p) => p.ob?.kind !== "customer_brick_due");
+  const s = (rows: any[]) => rows.reduce((a, b) => a + Number(b.amount || 0), 0);
+
+  const incomeBreakdown = {
+    sales: sum(col.data as any),
+    ownerInvest: s(ownRows.filter((r) => r.txn_type === "invest")),
+    loanTaken: s(loanRows.filter((r) => r.direction === "taken")),
+    loanReturned: s(lpayRows.filter((r) => r.loan?.direction === "given")),
+  };
+  const income = Object.values(incomeBreakdown).reduce((a, b) => a + b, 0);
   const breakdown = {
     expenses: sum(exp.data as any),
     sardar: sum(sar.data as any),
     worker: sum(wrk.data as any),
     supplier: sum(sup.data as any),
     vehicle: sum(veh.data as any),
+    ownerWithdraw: s(ownRows.filter((r) => r.txn_type === "withdraw")),
+    loanGiven: s(loanRows.filter((r) => r.direction === "given")),
+    loanRepaid: s(lpayRows.filter((r) => r.loan?.direction === "taken")),
+    openingPaid: s(opayRows),
   };
   const expense = Object.values(breakdown).reduce((a, b) => a + b, 0);
-  return { income, expense, net: income - expense, breakdown };
+  return { income, expense, net: income - expense, breakdown, incomeBreakdown };
 }
 
 /** নির্দিষ্ট এক দিনের সব নগদ আয় ও নগদ ব্যয়ের বিস্তারিত তালিকা */
