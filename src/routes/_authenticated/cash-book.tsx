@@ -368,7 +368,7 @@ function ExpenseDialog({ row, onDone }: { row?: ExpenseRow; onDone: () => void }
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger><SelectValue placeholder="খাত নির্বাচন করুন" /></SelectTrigger>
               <SelectContent>
-                {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {Array.from(new Set([...(category ? [category] : []), ...EXPENSE_CATEGORIES])).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
