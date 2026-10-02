@@ -65,7 +65,7 @@ export function GlobalSearch() {
     setQ("");
     if (h.kind === "customer") navigate({ to: "/customers/$id", params: { id: h.id } });
     else if (h.kind === "challan") navigate({ to: "/challans/$id", params: { id: h.id } });
-    else navigate({ to: "/contracts/$id", params: { id: h.id } });
+    else navigate({ to: "/customers" });
   }
 
   return (
