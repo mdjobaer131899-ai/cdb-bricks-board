@@ -173,23 +173,37 @@ function CashBookPage() {
                   ))}
                 </div>
               )}
-              {history.isLoading ? <Skeleton className="h-32" /> : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader><TableRow><TableHead>তারিখ</TableHead><TableHead>খাত</TableHead><TableHead>বিবরণ</TableHead><TableHead className="text-right">আয়</TableHead><TableHead className="text-right">ব্যয়</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {hRows.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">কোনো লেনদেন নেই</TableCell></TableRow>}
-                      {hRows.map((r) => (
-                        <TableRow key={r.id}>
-                          <TableCell>{bnDate(r.date)}</TableCell>
-                          <TableCell className="font-medium">{r.head}</TableCell>
-                          <TableCell className="text-muted-foreground">{r.detail}</TableCell>
-                          <TableCell className="text-right text-success tabular-nums">{r.dir === "in" ? `৳ ${bn(r.amount)}` : ""}</TableCell>
-                          <TableCell className="text-right text-destructive tabular-nums">{r.dir === "out" ? `৳ ${bn(r.amount)}` : ""}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              {history.isLoading ? <Skeleton className="h-32" /> : hRows.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">কোনো লেনদেন নেই</div>
+              ) : (
+                <div className="space-y-3">
+                  {Array.from(hRows.reduce((m, r) => { const k = r.date?.slice(0, 10) ?? ""; (m.get(k) ?? m.set(k, []).get(k)!).push(r); return m; }, new Map<string, typeof hRows>())).map(([d, rows]) => {
+                    const inc = rows.filter((r) => r.dir === "in").reduce((a, b) => a + b.amount, 0);
+                    const exp = rows.filter((r) => r.dir === "out").reduce((a, b) => a + b.amount, 0);
+                    return (
+                      <div key={d} className="overflow-hidden rounded-lg border">
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-muted px-3 py-2">
+                          <b>{bnDate(d)}</b>
+                          <div className="flex gap-3 text-sm">
+                            <span className="text-success">আয় ৳ {bn(inc)}</span>
+                            <span className="text-destructive">ব্যয় ৳ {bn(exp)}</span>
+                            <span className="font-semibold">নিট ৳ {bn(inc - exp)}</span>
+                          </div>
+                        </div>
+                        <div className="divide-y">
+                          {rows.map((r) => (
+                            <div key={r.id} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
+                              <div className="min-w-0">
+                                <div className="font-medium">{r.head}</div>
+                                <div className="text-xs text-muted-foreground">{r.detail || "—"}</div>
+                              </div>
+                              <b className={`shrink-0 tabular-nums ${r.dir === "in" ? "text-success" : "text-destructive"}`}>{r.dir === "in" ? "+" : "−"} ৳ {bn(r.amount)}</b>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

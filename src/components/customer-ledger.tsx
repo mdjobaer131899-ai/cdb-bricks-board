@@ -97,14 +97,14 @@ export function CustomerLedger({ customerId, customerName }: Props) {
             <td>${escapeHtml(r.description)}</td>
             <td class="right">${r.debit ? `৳ ${bn(r.debit)}` : "—"}</td>
             <td class="right">${r.credit ? `৳ ${bn(r.credit)}` : "—"}</td>
-            <td class="right">৳ ${bn(r.balance)}</td>
+            <td class="right">৳ ${bn(Math.abs(r.balance))} ${r.balance > 0 ? "(বকেয়া)" : r.balance < 0 ? "(জমা)" : ""}</td>
           </tr>`).join("")}
         </tbody>
       </table>
       <div class="totals">
         <div class="row"><span>মোট ডেবিট</span><span>৳ ${bn(totals.debit)}</span></div>
         <div class="row"><span>মোট ক্রেডিট</span><span>৳ ${bn(totals.credit)}</span></div>
-        <div class="row grand"><span>বর্তমান বকেয়া</span><span>৳ ${bn(totals.balance)}</span></div>
+        <div class="row grand"><span>${totals.balance > 0 ? "বর্তমান বকেয়া (ভাটার পাওনা)" : totals.balance < 0 ? "অগ্রিম জমা (গ্রাহক ইট পাবে)" : "পরিশোধিত"}</span><span>৳ ${bn(Math.abs(totals.balance))}</span></div>
       </div>
     `;
     printReport({ title: "গ্রাহক লেজার", subtitle: customerName, bodyHtml: body });
@@ -161,7 +161,7 @@ export function CustomerLedger({ customerId, customerName }: Props) {
                     <TableCell>{r.description}</TableCell>
                     <TableCell className="text-right tabular-nums text-warning">{r.debit ? `৳ ${bn(r.debit)}` : "—"}</TableCell>
                     <TableCell className="text-right tabular-nums text-success">{r.credit ? `৳ ${bn(r.credit)}` : "—"}</TableCell>
-                    <TableCell className={`text-right tabular-nums font-semibold ${r.balance > 0 ? "text-destructive" : r.balance < 0 ? "text-success" : ""}`}>৳ {bn(r.balance)}</TableCell>
+                    <TableCell className={`text-right tabular-nums font-semibold ${r.balance > 0 ? "text-destructive" : r.balance < 0 ? "text-success" : ""}`}>৳ {bn(Math.abs(r.balance))} {r.balance > 0 ? "(বকেয়া)" : r.balance < 0 ? "(জমা)" : ""}</TableCell>
                   </TableRow>
                 ))}
                 {rows.length > 0 && (
@@ -169,7 +169,7 @@ export function CustomerLedger({ customerId, customerName }: Props) {
                     <TableCell colSpan={2}>মোট</TableCell>
                     <TableCell className="text-right tabular-nums">৳ {bn(totals.debit)}</TableCell>
                     <TableCell className="text-right tabular-nums">৳ {bn(totals.credit)}</TableCell>
-                    <TableCell className={`text-right tabular-nums ${totals.balance > 0 ? "text-destructive" : "text-success"}`}>৳ {bn(totals.balance)}</TableCell>
+                    <TableCell className={`text-right tabular-nums ${totals.balance > 0 ? "text-destructive" : "text-success"}`}>৳ {bn(Math.abs(totals.balance))} {totals.balance > 0 ? "(বকেয়া)" : totals.balance < 0 ? "(অগ্রিম জমা)" : ""}</TableCell>
                   </TableRow>
                 )}
               </TableBody>
