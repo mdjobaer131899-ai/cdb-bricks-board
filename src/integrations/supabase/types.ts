@@ -2764,7 +2764,11 @@ export type Database = {
         | "transfer"
         | "supplier"
         | "production"
-      opening_kind: "customer_brick_due" | "sardar_payable" | "other_payable"
+      opening_kind:
+        | "customer_brick_due"
+        | "sardar_payable"
+        | "other_payable"
+        | "customer_receivable"
       sale_status: "pending" | "approved" | "rejected"
       sale_type: "advance" | "regular"
     }
@@ -2914,7 +2918,12 @@ export const Constants = {
         "supplier",
         "production",
       ],
-      opening_kind: ["customer_brick_due", "sardar_payable", "other_payable"],
+      opening_kind: [
+        "customer_brick_due",
+        "sardar_payable",
+        "other_payable",
+        "customer_receivable",
+      ],
       sale_status: ["pending", "approved", "rejected"],
       sale_type: ["advance", "regular"],
     },

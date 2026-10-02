@@ -1,0 +1,1 @@
+ALTER TYPE public.opening_kind ADD VALUE IF NOT EXISTS 'customer_receivable';
