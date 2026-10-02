@@ -3,7 +3,7 @@ import { FileText, HandCoins, Receipt, UserPlus, Zap, Banknote, Boxes, ArrowDown
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const actions = [
-  { to: "/contracts/new" as const, label: "নতুন বুকিং", icon: FileText, tone: "from-primary/15 to-primary/5 text-primary" },
+  { to: "/advance-sales" as const, label: "অগ্রিম বিক্রয়", icon: FileText, tone: "from-primary/15 to-primary/5 text-primary" },
   { to: "/entries/new" as const, label: "নগদ বিক্রি", icon: Banknote, tone: "from-accent/15 to-accent/5 text-accent-foreground" },
   { to: "/collections" as const, label: "নতুন কালেকশন", icon: HandCoins, tone: "from-success/15 to-success/5 text-success" },
   { to: "/cash-book" as const, label: "আয়-ব্যায়", icon: Receipt, tone: "from-destructive/15 to-destructive/5 text-destructive" },

@@ -71,7 +71,7 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
   const sardarsQ = useQuery({
     queryKey: ["sardars"],
     queryFn: async () => {
-      const { data, error } = await sdb.from("sardars").select("id,name,is_active").order("name");
+      const { data, error } = await sdb.from("sardars").select("*").order("name");
       if (error) throw error;
       return data ?? [];
     },
@@ -243,7 +243,9 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
                 <SelectTrigger><SelectValue placeholder="বেছে নিন" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_SARDAR}>— নেই —</SelectItem>
-                  {(sardarsQ.data ?? []).map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  {(sardarsQ.data ?? [])
+                    .filter((s: any) => (step === "production" ? s.kind === "mill" : step === "load" ? s.kind === "load" : true))
+                    .map((s: any) => <SelectItem key={s.id} value={s.id}>{s.mill_name ? `${s.mill_name} — ${s.name}` : s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

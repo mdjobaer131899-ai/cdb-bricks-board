@@ -25,7 +25,7 @@ export function StockSummaryCard() {
         <CardTitle className="flex items-center gap-2 text-base">
           <Boxes className="h-4 w-4 text-primary" /> বর্তমান স্টক
         </CardTitle>
-        <Link to="/inventory" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+        <Link to="/production-steps/unload" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
           সব দেখুন <ArrowRight className="h-3 w-3" />
         </Link>
       </CardHeader>

@@ -1,68 +1,60 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, Factory, UserCog, ScrollText, Wallet, Boxes, BookOpen, Users2, Truck, Building2, CalendarRange, Package, ClipboardList, Landmark, HandCoins, History } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, Flame, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck } from "lucide-react";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { usePageAccess } from "@/lib/page-permissions";
 import { BrandLogo } from "@/components/brand-logo";
 
-export type NavItem = { title: string; url: string; icon: any; roles: readonly ("admin" | "manager")[] };
+export type NavItem = { title: string; url: string; icon: any; adminOnly?: boolean };
 export type NavGroup = { label: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "বিক্রয়",
     items: [
-      { title: "ড্যাশবোর্ড", url: "/", icon: LayoutDashboard, roles: ["admin", "manager"] },
-      { title: "নতুন এন্ট্রি", url: "/entries/new", icon: FilePlus2, roles: ["admin", "manager"] },
-      { title: "চালান তালিকা", url: "/challans", icon: FileText, roles: ["admin", "manager"] },
-      { title: "অর্ডার ও ডেলিভারি", url: "/orders", icon: ClipboardList, roles: ["admin", "manager"] },
-      { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck, roles: ["admin"] },
-      { title: "চুক্তি", url: "/contracts", icon: ScrollText, roles: ["admin"] },
-      { title: "কালেকশন", url: "/collections", icon: Wallet, roles: ["admin"] },
-      { title: "গ্রাহক", url: "/customers", icon: Users, roles: ["admin", "manager"] },
+      { title: "ড্যাশবোর্ড", url: "/", icon: LayoutDashboard },
+      { title: "নতুন চালান", url: "/entries/new", icon: FilePlus2 },
+      { title: "চালান তালিকা", url: "/challans", icon: FileText },
+      { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck },
+      { title: "গ্রাহক", url: "/customers", icon: Users },
+      { title: "কালেকশন", url: "/collections", icon: Wallet },
+      { title: "অগ্রিম ইট বিক্রয়", url: "/advance-sales", icon: PackageCheck },
     ],
   },
   {
-    label: "অপারেশন",
+    label: "উৎপাদন ও শ্রমিক",
     items: [
-      { title: "প্রোডাকশন", url: "/production", icon: Package, roles: ["admin"] },
-      { title: "কাঁচা ইট", url: "/kacha-bricks", icon: Boxes, roles: ["admin", "manager"] },
-      { title: "স্টক", url: "/inventory", icon: Boxes, roles: ["admin"] },
-      { title: "কাঁচামাল", url: "/raw-materials", icon: Boxes, roles: ["admin"] },
-      { title: "সরদার", url: "/sardars", icon: Users2, roles: ["admin"] },
-      { title: "সরদার হিসাব", url: "/sardar-ledger", icon: HandCoins, roles: ["admin"] },
-      { title: "শ্রমিক", url: "/workers", icon: Users2, roles: ["admin"] },
-      { title: "স্টাফ সেটআপ", url: "/staff-setup", icon: UserCog, roles: ["admin"] },
-      { title: "সরবরাহকারী", url: "/suppliers", icon: Building2, roles: ["admin"] },
-      { title: "গাড়ি", url: "/vehicles", icon: Truck, roles: ["admin"] },
-      { title: "মৌসুম", url: "/seasons", icon: CalendarRange, roles: ["admin"] },
+      { title: "কাঁচা ইট (মিল)", url: "/production-steps/kacha", icon: Boxes },
+      { title: "ভাটায় ঢোকানো", url: "/production-steps/load", icon: ArrowDownToLine },
+      { title: "পোড়ানো", url: "/production-steps/burn", icon: Flame },
+      { title: "বের করা", url: "/production-steps/unload", icon: ArrowUpFromLine },
+      { title: "সরদার", url: "/sardars", icon: Users2 },
+      { title: "সরদার হিসাব", url: "/sardar-ledger", icon: HandCoins },
+      { title: "ডেলি শ্রমিক", url: "/daily-workers", icon: CalendarCheck },
+      { title: "মেস্তুরি ও ম্যানেজার বেতন", url: "/salaries", icon: BadgeDollarSign },
     ],
   },
   {
     label: "হিসাব",
     items: [
-      { title: "অ্যাকাউন্টস", url: "/accounts", icon: BookOpen, roles: ["admin"] },
-      { title: "খাতিয়ান", url: "/ledger-heads", icon: BookOpen, roles: ["admin", "manager"] },
-      { title: "ব্যাংক ও ট্রান্সফার", url: "/bank", icon: Landmark, roles: ["admin"] },
-      { title: "গত বছরের বকেয়া", url: "/opening-balances", icon: History, roles: ["admin"] },
+      { title: "দৈনিক আয়-ব্যয়", url: "/cash-book", icon: Receipt },
+      { title: "মালামাল ক্রয় ও বাকি", url: "/purchases", icon: ShoppingCart },
+      { title: "সরবরাহকারী", url: "/suppliers", icon: Building2 },
+      { title: "মালিকের বিনিয়োগ", url: "/owners", icon: Crown },
+      { title: "ঋণ দেওয়া-নেওয়া", url: "/loans", icon: Landmark },
+      { title: "পূর্বের বকেয়া", url: "/opening-balances", icon: History },
+      { title: "মোট আয়-ব্যয়", url: "/income-expense", icon: Scale },
     ],
   },
   {
     label: "রিপোর্ট ও সেটিংস",
     items: [
-      { title: "রিপোর্ট", url: "/reports", icon: BarChart3, roles: ["admin", "manager"] },
-      { title: "ইউজার", url: "/users", icon: UserCog, roles: ["admin"] },
-      { title: "সেটিংস", url: "/settings", icon: Settings, roles: ["admin"] },
+      { title: "রিপোর্ট", url: "/reports", icon: BarChart3 },
+      { title: "মৌসুম", url: "/seasons", icon: CalendarRange },
+      { title: "ইউজার ও অনুমতি", url: "/users", icon: UserCog, adminOnly: true },
+      { title: "সেটিংস", url: "/settings", icon: Settings, adminOnly: true },
     ],
   },
 ];
@@ -70,6 +62,7 @@ export const NAV_GROUPS: NavGroup[] = [
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { data } = useCurrentUser();
+  const { can, isAdmin } = usePageAccess();
   const role = data?.role;
 
   return (
@@ -85,31 +78,26 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         {!role ? (
-          <div className="p-3 text-xs text-sidebar-foreground/60 text-center group-data-[collapsible=icon]:hidden">
-            ভূমিকা অপেক্ষমাণ
-          </div>
+          <div className="p-3 text-xs text-sidebar-foreground/60 text-center group-data-[collapsible=icon]:hidden">ভূমিকা অপেক্ষমাণ</div>
         ) : (
           NAV_GROUPS.map((g) => {
-            const items = g.items.filter((i) => (i.roles as readonly string[]).includes(role));
+            const items = g.items.filter((i) => (i.adminOnly ? isAdmin : can(i.url)));
             if (items.length === 0) return null;
             return (
               <SidebarGroup key={g.label}>
                 <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {items.map((it) => {
-                      const active = path === it.url;
-                      return (
-                        <SidebarMenuItem key={it.url}>
-                          <SidebarMenuButton asChild isActive={active} tooltip={it.title}>
-                            <Link to={it.url}>
-                              <it.icon className="h-4 w-4" />
-                              <span>{it.title}</span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      );
-                    })}
+                    {items.map((it) => (
+                      <SidebarMenuItem key={it.url}>
+                        <SidebarMenuButton asChild isActive={path === it.url} tooltip={it.title}>
+                          <Link to={it.url}>
+                            <it.icon className="h-4 w-4" />
+                            <span>{it.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -118,9 +106,7 @@ export function AppSidebar() {
         )}
       </SidebarContent>
       <SidebarFooter>
-        <div className="px-2 py-2 text-[10px] text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">
-          © {new Date().getFullYear()} CDB Bricks Ltd.
-        </div>
+        <div className="px-2 py-2 text-[10px] text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden">© {new Date().getFullYear()} CDB Bricks Ltd.</div>
       </SidebarFooter>
     </Sidebar>
   );

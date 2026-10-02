@@ -14,46 +14,35 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
-import { Route as AuthenticatedWorkersRouteImport } from './routes/_authenticated/workers'
-import { Route as AuthenticatedVehiclesRouteImport } from './routes/_authenticated/vehicles'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
-import { Route as AuthenticatedStaffSetupRouteImport } from './routes/_authenticated/staff-setup'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticated/seasons'
 import { Route as AuthenticatedSardarsRouteImport } from './routes/_authenticated/sardars'
 import { Route as AuthenticatedSardarLedgerRouteImport } from './routes/_authenticated/sardar-ledger'
+import { Route as AuthenticatedSalariesRouteImport } from './routes/_authenticated/salaries'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
-import { Route as AuthenticatedRawMaterialsRouteImport } from './routes/_authenticated/raw-materials'
-import { Route as AuthenticatedProductionRouteImport } from './routes/_authenticated/production'
-import { Route as AuthenticatedOrdersRouteImport } from './routes/_authenticated/orders'
+import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authenticated/purchases'
+import { Route as AuthenticatedOwnersRouteImport } from './routes/_authenticated/owners'
 import { Route as AuthenticatedOpeningBalancesRouteImport } from './routes/_authenticated/opening-balances'
-import { Route as AuthenticatedLedgerHeadsRouteImport } from './routes/_authenticated/ledger-heads'
-import { Route as AuthenticatedKachaBricksRouteImport } from './routes/_authenticated/kacha-bricks'
-import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
+import { Route as AuthenticatedLoansRouteImport } from './routes/_authenticated/loans'
+import { Route as AuthenticatedIncomeExpenseRouteImport } from './routes/_authenticated/income-expense'
+import { Route as AuthenticatedDailyWorkersRouteImport } from './routes/_authenticated/daily-workers'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
-import { Route as AuthenticatedContractsRouteImport } from './routes/_authenticated/contracts'
 import { Route as AuthenticatedChallansRouteImport } from './routes/_authenticated/challans'
 import { Route as AuthenticatedCashBookRouteImport } from './routes/_authenticated/cash-book'
-import { Route as AuthenticatedBankRouteImport } from './routes/_authenticated/bank'
 import { Route as AuthenticatedApprovalsRouteImport } from './routes/_authenticated/approvals'
-import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
+import { Route as AuthenticatedAdvanceSalesRouteImport } from './routes/_authenticated/advance-sales'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers.index'
-import { Route as AuthenticatedContractsIndexRouteImport } from './routes/_authenticated/contracts.index'
 import { Route as AuthenticatedCollectionsIndexRouteImport } from './routes/_authenticated/collections.index'
 import { Route as AuthenticatedChallansIndexRouteImport } from './routes/_authenticated/challans.index'
-import { Route as AuthenticatedReportsProductionCostRouteImport } from './routes/_authenticated/reports.production-cost'
 import { Route as AuthenticatedProductionStepsUnloadRouteImport } from './routes/_authenticated/production-steps.unload'
 import { Route as AuthenticatedProductionStepsLoadRouteImport } from './routes/_authenticated/production-steps.load'
 import { Route as AuthenticatedProductionStepsKachaRouteImport } from './routes/_authenticated/production-steps.kacha'
 import { Route as AuthenticatedProductionStepsBurnRouteImport } from './routes/_authenticated/production-steps.burn'
-import { Route as AuthenticatedInventoryRawMaterialsRouteImport } from './routes/_authenticated/inventory.raw-materials'
 import { Route as AuthenticatedEntriesNewRouteImport } from './routes/_authenticated/entries.new'
 import { Route as AuthenticatedCustomersIdRouteImport } from './routes/_authenticated/customers.$id'
-import { Route as AuthenticatedContractsNewRouteImport } from './routes/_authenticated/contracts.new'
-import { Route as AuthenticatedContractsIdRouteImport } from './routes/_authenticated/contracts.$id'
 import { Route as AuthenticatedChallansIdRouteImport } from './routes/_authenticated/challans.$id'
-import { Route as AuthenticatedAccountsClosingRouteImport } from './routes/_authenticated/accounts.closing'
 import { Route as AuthenticatedEntriesIdEditRouteImport } from './routes/_authenticated/entries.$id.edit'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -80,16 +69,6 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedWorkersRoute = AuthenticatedWorkersRouteImport.update({
-  id: '/workers',
-  path: '/workers',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedVehiclesRoute = AuthenticatedVehiclesRouteImport.update({
-  id: '/vehicles',
-  path: '/vehicles',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -98,11 +77,6 @@ const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
 const AuthenticatedSuppliersRoute = AuthenticatedSuppliersRouteImport.update({
   id: '/suppliers',
   path: '/suppliers',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedStaffSetupRoute = AuthenticatedStaffSetupRouteImport.update({
-  id: '/staff-setup',
-  path: '/staff-setup',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
@@ -126,25 +100,24 @@ const AuthenticatedSardarLedgerRoute =
     path: '/sardar-ledger',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSalariesRoute = AuthenticatedSalariesRouteImport.update({
+  id: '/salaries',
+  path: '/salaries',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedReportsRoute = AuthenticatedReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedRawMaterialsRoute =
-  AuthenticatedRawMaterialsRouteImport.update({
-    id: '/raw-materials',
-    path: '/raw-materials',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedProductionRoute = AuthenticatedProductionRouteImport.update({
-  id: '/production',
-  path: '/production',
+const AuthenticatedPurchasesRoute = AuthenticatedPurchasesRouteImport.update({
+  id: '/purchases',
+  path: '/purchases',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedOrdersRoute = AuthenticatedOrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
+const AuthenticatedOwnersRoute = AuthenticatedOwnersRouteImport.update({
+  id: '/owners',
+  path: '/owners',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedOpeningBalancesRoute =
@@ -153,31 +126,26 @@ const AuthenticatedOpeningBalancesRoute =
     path: '/opening-balances',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedLedgerHeadsRoute =
-  AuthenticatedLedgerHeadsRouteImport.update({
-    id: '/ledger-heads',
-    path: '/ledger-heads',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedKachaBricksRoute =
-  AuthenticatedKachaBricksRouteImport.update({
-    id: '/kacha-bricks',
-    path: '/kacha-bricks',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
-  id: '/inventory',
-  path: '/inventory',
+const AuthenticatedLoansRoute = AuthenticatedLoansRouteImport.update({
+  id: '/loans',
+  path: '/loans',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedIncomeExpenseRoute =
+  AuthenticatedIncomeExpenseRouteImport.update({
+    id: '/income-expense',
+    path: '/income-expense',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDailyWorkersRoute =
+  AuthenticatedDailyWorkersRouteImport.update({
+    id: '/daily-workers',
+    path: '/daily-workers',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCustomersRoute = AuthenticatedCustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedContractsRoute = AuthenticatedContractsRouteImport.update({
-  id: '/contracts',
-  path: '/contracts',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedChallansRoute = AuthenticatedChallansRouteImport.update({
@@ -190,32 +158,22 @@ const AuthenticatedCashBookRoute = AuthenticatedCashBookRouteImport.update({
   path: '/cash-book',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedBankRoute = AuthenticatedBankRouteImport.update({
-  id: '/bank',
-  path: '/bank',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedApprovalsRoute = AuthenticatedApprovalsRouteImport.update({
   id: '/approvals',
   path: '/approvals',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedAccountsRoute = AuthenticatedAccountsRouteImport.update({
-  id: '/accounts',
-  path: '/accounts',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
+const AuthenticatedAdvanceSalesRoute =
+  AuthenticatedAdvanceSalesRouteImport.update({
+    id: '/advance-sales',
+    path: '/advance-sales',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCustomersIndexRoute =
   AuthenticatedCustomersIndexRouteImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedCustomersRoute,
-  } as any)
-const AuthenticatedContractsIndexRoute =
-  AuthenticatedContractsIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => AuthenticatedContractsRoute,
   } as any)
 const AuthenticatedCollectionsIndexRoute =
   AuthenticatedCollectionsIndexRouteImport.update({
@@ -228,12 +186,6 @@ const AuthenticatedChallansIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedChallansRoute,
-  } as any)
-const AuthenticatedReportsProductionCostRoute =
-  AuthenticatedReportsProductionCostRouteImport.update({
-    id: '/production-cost',
-    path: '/production-cost',
-    getParentRoute: () => AuthenticatedReportsRoute,
   } as any)
 const AuthenticatedProductionStepsUnloadRoute =
   AuthenticatedProductionStepsUnloadRouteImport.update({
@@ -259,12 +211,6 @@ const AuthenticatedProductionStepsBurnRoute =
     path: '/production-steps/burn',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedInventoryRawMaterialsRoute =
-  AuthenticatedInventoryRawMaterialsRouteImport.update({
-    id: '/raw-materials',
-    path: '/raw-materials',
-    getParentRoute: () => AuthenticatedInventoryRoute,
-  } as any)
 const AuthenticatedEntriesNewRoute = AuthenticatedEntriesNewRouteImport.update({
   id: '/entries/new',
   path: '/entries/new',
@@ -276,29 +222,11 @@ const AuthenticatedCustomersIdRoute =
     path: '/$id',
     getParentRoute: () => AuthenticatedCustomersRoute,
   } as any)
-const AuthenticatedContractsNewRoute =
-  AuthenticatedContractsNewRouteImport.update({
-    id: '/new',
-    path: '/new',
-    getParentRoute: () => AuthenticatedContractsRoute,
-  } as any)
-const AuthenticatedContractsIdRoute =
-  AuthenticatedContractsIdRouteImport.update({
-    id: '/$id',
-    path: '/$id',
-    getParentRoute: () => AuthenticatedContractsRoute,
-  } as any)
 const AuthenticatedChallansIdRoute = AuthenticatedChallansIdRouteImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => AuthenticatedChallansRoute,
 } as any)
-const AuthenticatedAccountsClosingRoute =
-  AuthenticatedAccountsClosingRouteImport.update({
-    id: '/closing',
-    path: '/closing',
-    getParentRoute: () => AuthenticatedAccountsRoute,
-  } as any)
 const AuthenticatedEntriesIdEditRoute =
   AuthenticatedEntriesIdEditRouteImport.update({
     id: '/entries/$id/edit',
@@ -310,90 +238,69 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/accounts': typeof AuthenticatedAccountsRouteWithChildren
+  '/advance-sales': typeof AuthenticatedAdvanceSalesRoute
   '/approvals': typeof AuthenticatedApprovalsRoute
-  '/bank': typeof AuthenticatedBankRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
   '/challans': typeof AuthenticatedChallansRouteWithChildren
-  '/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/customers': typeof AuthenticatedCustomersRouteWithChildren
-  '/inventory': typeof AuthenticatedInventoryRouteWithChildren
-  '/kacha-bricks': typeof AuthenticatedKachaBricksRoute
-  '/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/income-expense': typeof AuthenticatedIncomeExpenseRoute
+  '/loans': typeof AuthenticatedLoansRoute
   '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
-  '/orders': typeof AuthenticatedOrdersRoute
-  '/production': typeof AuthenticatedProductionRoute
-  '/raw-materials': typeof AuthenticatedRawMaterialsRoute
-  '/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/owners': typeof AuthenticatedOwnersRoute
+  '/purchases': typeof AuthenticatedPurchasesRoute
+  '/reports': typeof AuthenticatedReportsRoute
+  '/salaries': typeof AuthenticatedSalariesRoute
   '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/staff-setup': typeof AuthenticatedStaffSetupRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
-  '/vehicles': typeof AuthenticatedVehiclesRoute
-  '/workers': typeof AuthenticatedWorkersRoute
   '/api/chat': typeof ApiChatRoute
-  '/accounts/closing': typeof AuthenticatedAccountsClosingRoute
   '/challans/$id': typeof AuthenticatedChallansIdRoute
-  '/contracts/$id': typeof AuthenticatedContractsIdRoute
-  '/contracts/new': typeof AuthenticatedContractsNewRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
-  '/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
   '/production-steps/burn': typeof AuthenticatedProductionStepsBurnRoute
   '/production-steps/kacha': typeof AuthenticatedProductionStepsKachaRoute
   '/production-steps/load': typeof AuthenticatedProductionStepsLoadRoute
   '/production-steps/unload': typeof AuthenticatedProductionStepsUnloadRoute
-  '/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
   '/challans/': typeof AuthenticatedChallansIndexRoute
   '/collections/': typeof AuthenticatedCollectionsIndexRoute
-  '/contracts/': typeof AuthenticatedContractsIndexRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
   '/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/accounts': typeof AuthenticatedAccountsRouteWithChildren
+  '/advance-sales': typeof AuthenticatedAdvanceSalesRoute
   '/approvals': typeof AuthenticatedApprovalsRoute
-  '/bank': typeof AuthenticatedBankRoute
   '/cash-book': typeof AuthenticatedCashBookRoute
-  '/inventory': typeof AuthenticatedInventoryRouteWithChildren
-  '/kacha-bricks': typeof AuthenticatedKachaBricksRoute
-  '/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/income-expense': typeof AuthenticatedIncomeExpenseRoute
+  '/loans': typeof AuthenticatedLoansRoute
   '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
-  '/orders': typeof AuthenticatedOrdersRoute
-  '/production': typeof AuthenticatedProductionRoute
-  '/raw-materials': typeof AuthenticatedRawMaterialsRoute
-  '/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/owners': typeof AuthenticatedOwnersRoute
+  '/purchases': typeof AuthenticatedPurchasesRoute
+  '/reports': typeof AuthenticatedReportsRoute
+  '/salaries': typeof AuthenticatedSalariesRoute
   '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/staff-setup': typeof AuthenticatedStaffSetupRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
-  '/vehicles': typeof AuthenticatedVehiclesRoute
-  '/workers': typeof AuthenticatedWorkersRoute
   '/api/chat': typeof ApiChatRoute
   '/': typeof AuthenticatedIndexRoute
-  '/accounts/closing': typeof AuthenticatedAccountsClosingRoute
   '/challans/$id': typeof AuthenticatedChallansIdRoute
-  '/contracts/$id': typeof AuthenticatedContractsIdRoute
-  '/contracts/new': typeof AuthenticatedContractsNewRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/entries/new': typeof AuthenticatedEntriesNewRoute
-  '/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
   '/production-steps/burn': typeof AuthenticatedProductionStepsBurnRoute
   '/production-steps/kacha': typeof AuthenticatedProductionStepsKachaRoute
   '/production-steps/load': typeof AuthenticatedProductionStepsLoadRoute
   '/production-steps/unload': typeof AuthenticatedProductionStepsUnloadRoute
-  '/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
   '/challans': typeof AuthenticatedChallansIndexRoute
   '/collections': typeof AuthenticatedCollectionsIndexRoute
-  '/contracts': typeof AuthenticatedContractsIndexRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
   '/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
@@ -402,47 +309,36 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/_authenticated/accounts': typeof AuthenticatedAccountsRouteWithChildren
+  '/_authenticated/advance-sales': typeof AuthenticatedAdvanceSalesRoute
   '/_authenticated/approvals': typeof AuthenticatedApprovalsRoute
-  '/_authenticated/bank': typeof AuthenticatedBankRoute
   '/_authenticated/cash-book': typeof AuthenticatedCashBookRoute
   '/_authenticated/challans': typeof AuthenticatedChallansRouteWithChildren
-  '/_authenticated/contracts': typeof AuthenticatedContractsRouteWithChildren
   '/_authenticated/customers': typeof AuthenticatedCustomersRouteWithChildren
-  '/_authenticated/inventory': typeof AuthenticatedInventoryRouteWithChildren
-  '/_authenticated/kacha-bricks': typeof AuthenticatedKachaBricksRoute
-  '/_authenticated/ledger-heads': typeof AuthenticatedLedgerHeadsRoute
+  '/_authenticated/daily-workers': typeof AuthenticatedDailyWorkersRoute
+  '/_authenticated/income-expense': typeof AuthenticatedIncomeExpenseRoute
+  '/_authenticated/loans': typeof AuthenticatedLoansRoute
   '/_authenticated/opening-balances': typeof AuthenticatedOpeningBalancesRoute
-  '/_authenticated/orders': typeof AuthenticatedOrdersRoute
-  '/_authenticated/production': typeof AuthenticatedProductionRoute
-  '/_authenticated/raw-materials': typeof AuthenticatedRawMaterialsRoute
-  '/_authenticated/reports': typeof AuthenticatedReportsRouteWithChildren
+  '/_authenticated/owners': typeof AuthenticatedOwnersRoute
+  '/_authenticated/purchases': typeof AuthenticatedPurchasesRoute
+  '/_authenticated/reports': typeof AuthenticatedReportsRoute
+  '/_authenticated/salaries': typeof AuthenticatedSalariesRoute
   '/_authenticated/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/_authenticated/sardars': typeof AuthenticatedSardarsRoute
   '/_authenticated/seasons': typeof AuthenticatedSeasonsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/staff-setup': typeof AuthenticatedStaffSetupRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
-  '/_authenticated/vehicles': typeof AuthenticatedVehiclesRoute
-  '/_authenticated/workers': typeof AuthenticatedWorkersRoute
   '/api/chat': typeof ApiChatRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
-  '/_authenticated/accounts/closing': typeof AuthenticatedAccountsClosingRoute
   '/_authenticated/challans/$id': typeof AuthenticatedChallansIdRoute
-  '/_authenticated/contracts/$id': typeof AuthenticatedContractsIdRoute
-  '/_authenticated/contracts/new': typeof AuthenticatedContractsNewRoute
   '/_authenticated/customers/$id': typeof AuthenticatedCustomersIdRoute
   '/_authenticated/entries/new': typeof AuthenticatedEntriesNewRoute
-  '/_authenticated/inventory/raw-materials': typeof AuthenticatedInventoryRawMaterialsRoute
   '/_authenticated/production-steps/burn': typeof AuthenticatedProductionStepsBurnRoute
   '/_authenticated/production-steps/kacha': typeof AuthenticatedProductionStepsKachaRoute
   '/_authenticated/production-steps/load': typeof AuthenticatedProductionStepsLoadRoute
   '/_authenticated/production-steps/unload': typeof AuthenticatedProductionStepsUnloadRoute
-  '/_authenticated/reports/production-cost': typeof AuthenticatedReportsProductionCostRoute
   '/_authenticated/challans/': typeof AuthenticatedChallansIndexRoute
   '/_authenticated/collections/': typeof AuthenticatedCollectionsIndexRoute
-  '/_authenticated/contracts/': typeof AuthenticatedContractsIndexRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
   '/_authenticated/entries/$id/edit': typeof AuthenticatedEntriesIdEditRoute
 }
@@ -452,90 +348,69 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/sitemap.xml'
-    | '/accounts'
+    | '/advance-sales'
     | '/approvals'
-    | '/bank'
     | '/cash-book'
     | '/challans'
-    | '/contracts'
     | '/customers'
-    | '/inventory'
-    | '/kacha-bricks'
-    | '/ledger-heads'
+    | '/daily-workers'
+    | '/income-expense'
+    | '/loans'
     | '/opening-balances'
-    | '/orders'
-    | '/production'
-    | '/raw-materials'
+    | '/owners'
+    | '/purchases'
     | '/reports'
+    | '/salaries'
     | '/sardar-ledger'
     | '/sardars'
     | '/seasons'
     | '/settings'
-    | '/staff-setup'
     | '/suppliers'
     | '/users'
-    | '/vehicles'
-    | '/workers'
     | '/api/chat'
-    | '/accounts/closing'
     | '/challans/$id'
-    | '/contracts/$id'
-    | '/contracts/new'
     | '/customers/$id'
     | '/entries/new'
-    | '/inventory/raw-materials'
     | '/production-steps/burn'
     | '/production-steps/kacha'
     | '/production-steps/load'
     | '/production-steps/unload'
-    | '/reports/production-cost'
     | '/challans/'
     | '/collections/'
-    | '/contracts/'
     | '/customers/'
     | '/entries/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
     | '/sitemap.xml'
-    | '/accounts'
+    | '/advance-sales'
     | '/approvals'
-    | '/bank'
     | '/cash-book'
-    | '/inventory'
-    | '/kacha-bricks'
-    | '/ledger-heads'
+    | '/daily-workers'
+    | '/income-expense'
+    | '/loans'
     | '/opening-balances'
-    | '/orders'
-    | '/production'
-    | '/raw-materials'
+    | '/owners'
+    | '/purchases'
     | '/reports'
+    | '/salaries'
     | '/sardar-ledger'
     | '/sardars'
     | '/seasons'
     | '/settings'
-    | '/staff-setup'
     | '/suppliers'
     | '/users'
-    | '/vehicles'
-    | '/workers'
     | '/api/chat'
     | '/'
-    | '/accounts/closing'
     | '/challans/$id'
-    | '/contracts/$id'
-    | '/contracts/new'
     | '/customers/$id'
     | '/entries/new'
-    | '/inventory/raw-materials'
     | '/production-steps/burn'
     | '/production-steps/kacha'
     | '/production-steps/load'
     | '/production-steps/unload'
-    | '/reports/production-cost'
     | '/challans'
     | '/collections'
-    | '/contracts'
     | '/customers'
     | '/entries/$id/edit'
   id:
@@ -543,47 +418,36 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/sitemap.xml'
-    | '/_authenticated/accounts'
+    | '/_authenticated/advance-sales'
     | '/_authenticated/approvals'
-    | '/_authenticated/bank'
     | '/_authenticated/cash-book'
     | '/_authenticated/challans'
-    | '/_authenticated/contracts'
     | '/_authenticated/customers'
-    | '/_authenticated/inventory'
-    | '/_authenticated/kacha-bricks'
-    | '/_authenticated/ledger-heads'
+    | '/_authenticated/daily-workers'
+    | '/_authenticated/income-expense'
+    | '/_authenticated/loans'
     | '/_authenticated/opening-balances'
-    | '/_authenticated/orders'
-    | '/_authenticated/production'
-    | '/_authenticated/raw-materials'
+    | '/_authenticated/owners'
+    | '/_authenticated/purchases'
     | '/_authenticated/reports'
+    | '/_authenticated/salaries'
     | '/_authenticated/sardar-ledger'
     | '/_authenticated/sardars'
     | '/_authenticated/seasons'
     | '/_authenticated/settings'
-    | '/_authenticated/staff-setup'
     | '/_authenticated/suppliers'
     | '/_authenticated/users'
-    | '/_authenticated/vehicles'
-    | '/_authenticated/workers'
     | '/api/chat'
     | '/_authenticated/'
-    | '/_authenticated/accounts/closing'
     | '/_authenticated/challans/$id'
-    | '/_authenticated/contracts/$id'
-    | '/_authenticated/contracts/new'
     | '/_authenticated/customers/$id'
     | '/_authenticated/entries/new'
-    | '/_authenticated/inventory/raw-materials'
     | '/_authenticated/production-steps/burn'
     | '/_authenticated/production-steps/kacha'
     | '/_authenticated/production-steps/load'
     | '/_authenticated/production-steps/unload'
-    | '/_authenticated/reports/production-cost'
     | '/_authenticated/challans/'
     | '/_authenticated/collections/'
-    | '/_authenticated/contracts/'
     | '/_authenticated/customers/'
     | '/_authenticated/entries/$id/edit'
   fileRoutesById: FileRoutesById
@@ -632,20 +496,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/workers': {
-      id: '/_authenticated/workers'
-      path: '/workers'
-      fullPath: '/workers'
-      preLoaderRoute: typeof AuthenticatedWorkersRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/vehicles': {
-      id: '/_authenticated/vehicles'
-      path: '/vehicles'
-      fullPath: '/vehicles'
-      preLoaderRoute: typeof AuthenticatedVehiclesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/users': {
       id: '/_authenticated/users'
       path: '/users'
@@ -658,13 +508,6 @@ declare module '@tanstack/react-router' {
       path: '/suppliers'
       fullPath: '/suppliers'
       preLoaderRoute: typeof AuthenticatedSuppliersRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/staff-setup': {
-      id: '/_authenticated/staff-setup'
-      path: '/staff-setup'
-      fullPath: '/staff-setup'
-      preLoaderRoute: typeof AuthenticatedStaffSetupRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings': {
@@ -695,6 +538,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSardarLedgerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/salaries': {
+      id: '/_authenticated/salaries'
+      path: '/salaries'
+      fullPath: '/salaries'
+      preLoaderRoute: typeof AuthenticatedSalariesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/reports': {
       id: '/_authenticated/reports'
       path: '/reports'
@@ -702,25 +552,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedReportsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/raw-materials': {
-      id: '/_authenticated/raw-materials'
-      path: '/raw-materials'
-      fullPath: '/raw-materials'
-      preLoaderRoute: typeof AuthenticatedRawMaterialsRouteImport
+    '/_authenticated/purchases': {
+      id: '/_authenticated/purchases'
+      path: '/purchases'
+      fullPath: '/purchases'
+      preLoaderRoute: typeof AuthenticatedPurchasesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/production': {
-      id: '/_authenticated/production'
-      path: '/production'
-      fullPath: '/production'
-      preLoaderRoute: typeof AuthenticatedProductionRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/orders': {
-      id: '/_authenticated/orders'
-      path: '/orders'
-      fullPath: '/orders'
-      preLoaderRoute: typeof AuthenticatedOrdersRouteImport
+    '/_authenticated/owners': {
+      id: '/_authenticated/owners'
+      path: '/owners'
+      fullPath: '/owners'
+      preLoaderRoute: typeof AuthenticatedOwnersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/opening-balances': {
@@ -730,25 +573,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOpeningBalancesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/ledger-heads': {
-      id: '/_authenticated/ledger-heads'
-      path: '/ledger-heads'
-      fullPath: '/ledger-heads'
-      preLoaderRoute: typeof AuthenticatedLedgerHeadsRouteImport
+    '/_authenticated/loans': {
+      id: '/_authenticated/loans'
+      path: '/loans'
+      fullPath: '/loans'
+      preLoaderRoute: typeof AuthenticatedLoansRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/kacha-bricks': {
-      id: '/_authenticated/kacha-bricks'
-      path: '/kacha-bricks'
-      fullPath: '/kacha-bricks'
-      preLoaderRoute: typeof AuthenticatedKachaBricksRouteImport
+    '/_authenticated/income-expense': {
+      id: '/_authenticated/income-expense'
+      path: '/income-expense'
+      fullPath: '/income-expense'
+      preLoaderRoute: typeof AuthenticatedIncomeExpenseRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/inventory': {
-      id: '/_authenticated/inventory'
-      path: '/inventory'
-      fullPath: '/inventory'
-      preLoaderRoute: typeof AuthenticatedInventoryRouteImport
+    '/_authenticated/daily-workers': {
+      id: '/_authenticated/daily-workers'
+      path: '/daily-workers'
+      fullPath: '/daily-workers'
+      preLoaderRoute: typeof AuthenticatedDailyWorkersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/customers': {
@@ -756,13 +599,6 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/customers'
       preLoaderRoute: typeof AuthenticatedCustomersRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/contracts': {
-      id: '/_authenticated/contracts'
-      path: '/contracts'
-      fullPath: '/contracts'
-      preLoaderRoute: typeof AuthenticatedContractsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/challans': {
@@ -779,13 +615,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCashBookRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/bank': {
-      id: '/_authenticated/bank'
-      path: '/bank'
-      fullPath: '/bank'
-      preLoaderRoute: typeof AuthenticatedBankRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/approvals': {
       id: '/_authenticated/approvals'
       path: '/approvals'
@@ -793,11 +622,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedApprovalsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/accounts': {
-      id: '/_authenticated/accounts'
-      path: '/accounts'
-      fullPath: '/accounts'
-      preLoaderRoute: typeof AuthenticatedAccountsRouteImport
+    '/_authenticated/advance-sales': {
+      id: '/_authenticated/advance-sales'
+      path: '/advance-sales'
+      fullPath: '/advance-sales'
+      preLoaderRoute: typeof AuthenticatedAdvanceSalesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/customers/': {
@@ -806,13 +635,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/customers/'
       preLoaderRoute: typeof AuthenticatedCustomersIndexRouteImport
       parentRoute: typeof AuthenticatedCustomersRoute
-    }
-    '/_authenticated/contracts/': {
-      id: '/_authenticated/contracts/'
-      path: '/'
-      fullPath: '/contracts/'
-      preLoaderRoute: typeof AuthenticatedContractsIndexRouteImport
-      parentRoute: typeof AuthenticatedContractsRoute
     }
     '/_authenticated/collections/': {
       id: '/_authenticated/collections/'
@@ -827,13 +649,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/challans/'
       preLoaderRoute: typeof AuthenticatedChallansIndexRouteImport
       parentRoute: typeof AuthenticatedChallansRoute
-    }
-    '/_authenticated/reports/production-cost': {
-      id: '/_authenticated/reports/production-cost'
-      path: '/production-cost'
-      fullPath: '/reports/production-cost'
-      preLoaderRoute: typeof AuthenticatedReportsProductionCostRouteImport
-      parentRoute: typeof AuthenticatedReportsRoute
     }
     '/_authenticated/production-steps/unload': {
       id: '/_authenticated/production-steps/unload'
@@ -863,13 +678,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProductionStepsBurnRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/inventory/raw-materials': {
-      id: '/_authenticated/inventory/raw-materials'
-      path: '/raw-materials'
-      fullPath: '/inventory/raw-materials'
-      preLoaderRoute: typeof AuthenticatedInventoryRawMaterialsRouteImport
-      parentRoute: typeof AuthenticatedInventoryRoute
-    }
     '/_authenticated/entries/new': {
       id: '/_authenticated/entries/new'
       path: '/entries/new'
@@ -884,33 +692,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCustomersIdRouteImport
       parentRoute: typeof AuthenticatedCustomersRoute
     }
-    '/_authenticated/contracts/new': {
-      id: '/_authenticated/contracts/new'
-      path: '/new'
-      fullPath: '/contracts/new'
-      preLoaderRoute: typeof AuthenticatedContractsNewRouteImport
-      parentRoute: typeof AuthenticatedContractsRoute
-    }
-    '/_authenticated/contracts/$id': {
-      id: '/_authenticated/contracts/$id'
-      path: '/$id'
-      fullPath: '/contracts/$id'
-      preLoaderRoute: typeof AuthenticatedContractsIdRouteImport
-      parentRoute: typeof AuthenticatedContractsRoute
-    }
     '/_authenticated/challans/$id': {
       id: '/_authenticated/challans/$id'
       path: '/$id'
       fullPath: '/challans/$id'
       preLoaderRoute: typeof AuthenticatedChallansIdRouteImport
       parentRoute: typeof AuthenticatedChallansRoute
-    }
-    '/_authenticated/accounts/closing': {
-      id: '/_authenticated/accounts/closing'
-      path: '/closing'
-      fullPath: '/accounts/closing'
-      preLoaderRoute: typeof AuthenticatedAccountsClosingRouteImport
-      parentRoute: typeof AuthenticatedAccountsRoute
     }
     '/_authenticated/entries/$id/edit': {
       id: '/_authenticated/entries/$id/edit'
@@ -921,19 +708,6 @@ declare module '@tanstack/react-router' {
     }
   }
 }
-
-interface AuthenticatedAccountsRouteChildren {
-  AuthenticatedAccountsClosingRoute: typeof AuthenticatedAccountsClosingRoute
-}
-
-const AuthenticatedAccountsRouteChildren: AuthenticatedAccountsRouteChildren = {
-  AuthenticatedAccountsClosingRoute: AuthenticatedAccountsClosingRoute,
-}
-
-const AuthenticatedAccountsRouteWithChildren =
-  AuthenticatedAccountsRoute._addFileChildren(
-    AuthenticatedAccountsRouteChildren,
-  )
 
 interface AuthenticatedChallansRouteChildren {
   AuthenticatedChallansIdRoute: typeof AuthenticatedChallansIdRoute
@@ -948,24 +722,6 @@ const AuthenticatedChallansRouteChildren: AuthenticatedChallansRouteChildren = {
 const AuthenticatedChallansRouteWithChildren =
   AuthenticatedChallansRoute._addFileChildren(
     AuthenticatedChallansRouteChildren,
-  )
-
-interface AuthenticatedContractsRouteChildren {
-  AuthenticatedContractsIdRoute: typeof AuthenticatedContractsIdRoute
-  AuthenticatedContractsNewRoute: typeof AuthenticatedContractsNewRoute
-  AuthenticatedContractsIndexRoute: typeof AuthenticatedContractsIndexRoute
-}
-
-const AuthenticatedContractsRouteChildren: AuthenticatedContractsRouteChildren =
-  {
-    AuthenticatedContractsIdRoute: AuthenticatedContractsIdRoute,
-    AuthenticatedContractsNewRoute: AuthenticatedContractsNewRoute,
-    AuthenticatedContractsIndexRoute: AuthenticatedContractsIndexRoute,
-  }
-
-const AuthenticatedContractsRouteWithChildren =
-  AuthenticatedContractsRoute._addFileChildren(
-    AuthenticatedContractsRouteChildren,
   )
 
 interface AuthenticatedCustomersRouteChildren {
@@ -984,58 +740,26 @@ const AuthenticatedCustomersRouteWithChildren =
     AuthenticatedCustomersRouteChildren,
   )
 
-interface AuthenticatedInventoryRouteChildren {
-  AuthenticatedInventoryRawMaterialsRoute: typeof AuthenticatedInventoryRawMaterialsRoute
-}
-
-const AuthenticatedInventoryRouteChildren: AuthenticatedInventoryRouteChildren =
-  {
-    AuthenticatedInventoryRawMaterialsRoute:
-      AuthenticatedInventoryRawMaterialsRoute,
-  }
-
-const AuthenticatedInventoryRouteWithChildren =
-  AuthenticatedInventoryRoute._addFileChildren(
-    AuthenticatedInventoryRouteChildren,
-  )
-
-interface AuthenticatedReportsRouteChildren {
-  AuthenticatedReportsProductionCostRoute: typeof AuthenticatedReportsProductionCostRoute
-}
-
-const AuthenticatedReportsRouteChildren: AuthenticatedReportsRouteChildren = {
-  AuthenticatedReportsProductionCostRoute:
-    AuthenticatedReportsProductionCostRoute,
-}
-
-const AuthenticatedReportsRouteWithChildren =
-  AuthenticatedReportsRoute._addFileChildren(AuthenticatedReportsRouteChildren)
-
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRouteWithChildren
+  AuthenticatedAdvanceSalesRoute: typeof AuthenticatedAdvanceSalesRoute
   AuthenticatedApprovalsRoute: typeof AuthenticatedApprovalsRoute
-  AuthenticatedBankRoute: typeof AuthenticatedBankRoute
   AuthenticatedCashBookRoute: typeof AuthenticatedCashBookRoute
   AuthenticatedChallansRoute: typeof AuthenticatedChallansRouteWithChildren
-  AuthenticatedContractsRoute: typeof AuthenticatedContractsRouteWithChildren
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRouteWithChildren
-  AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRouteWithChildren
-  AuthenticatedKachaBricksRoute: typeof AuthenticatedKachaBricksRoute
-  AuthenticatedLedgerHeadsRoute: typeof AuthenticatedLedgerHeadsRoute
+  AuthenticatedDailyWorkersRoute: typeof AuthenticatedDailyWorkersRoute
+  AuthenticatedIncomeExpenseRoute: typeof AuthenticatedIncomeExpenseRoute
+  AuthenticatedLoansRoute: typeof AuthenticatedLoansRoute
   AuthenticatedOpeningBalancesRoute: typeof AuthenticatedOpeningBalancesRoute
-  AuthenticatedOrdersRoute: typeof AuthenticatedOrdersRoute
-  AuthenticatedProductionRoute: typeof AuthenticatedProductionRoute
-  AuthenticatedRawMaterialsRoute: typeof AuthenticatedRawMaterialsRoute
-  AuthenticatedReportsRoute: typeof AuthenticatedReportsRouteWithChildren
+  AuthenticatedOwnersRoute: typeof AuthenticatedOwnersRoute
+  AuthenticatedPurchasesRoute: typeof AuthenticatedPurchasesRoute
+  AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
+  AuthenticatedSalariesRoute: typeof AuthenticatedSalariesRoute
   AuthenticatedSardarLedgerRoute: typeof AuthenticatedSardarLedgerRoute
   AuthenticatedSardarsRoute: typeof AuthenticatedSardarsRoute
   AuthenticatedSeasonsRoute: typeof AuthenticatedSeasonsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedStaffSetupRoute: typeof AuthenticatedStaffSetupRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
-  AuthenticatedVehiclesRoute: typeof AuthenticatedVehiclesRoute
-  AuthenticatedWorkersRoute: typeof AuthenticatedWorkersRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedEntriesNewRoute: typeof AuthenticatedEntriesNewRoute
   AuthenticatedProductionStepsBurnRoute: typeof AuthenticatedProductionStepsBurnRoute
@@ -1047,30 +771,25 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAccountsRoute: AuthenticatedAccountsRouteWithChildren,
+  AuthenticatedAdvanceSalesRoute: AuthenticatedAdvanceSalesRoute,
   AuthenticatedApprovalsRoute: AuthenticatedApprovalsRoute,
-  AuthenticatedBankRoute: AuthenticatedBankRoute,
   AuthenticatedCashBookRoute: AuthenticatedCashBookRoute,
   AuthenticatedChallansRoute: AuthenticatedChallansRouteWithChildren,
-  AuthenticatedContractsRoute: AuthenticatedContractsRouteWithChildren,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRouteWithChildren,
-  AuthenticatedInventoryRoute: AuthenticatedInventoryRouteWithChildren,
-  AuthenticatedKachaBricksRoute: AuthenticatedKachaBricksRoute,
-  AuthenticatedLedgerHeadsRoute: AuthenticatedLedgerHeadsRoute,
+  AuthenticatedDailyWorkersRoute: AuthenticatedDailyWorkersRoute,
+  AuthenticatedIncomeExpenseRoute: AuthenticatedIncomeExpenseRoute,
+  AuthenticatedLoansRoute: AuthenticatedLoansRoute,
   AuthenticatedOpeningBalancesRoute: AuthenticatedOpeningBalancesRoute,
-  AuthenticatedOrdersRoute: AuthenticatedOrdersRoute,
-  AuthenticatedProductionRoute: AuthenticatedProductionRoute,
-  AuthenticatedRawMaterialsRoute: AuthenticatedRawMaterialsRoute,
-  AuthenticatedReportsRoute: AuthenticatedReportsRouteWithChildren,
+  AuthenticatedOwnersRoute: AuthenticatedOwnersRoute,
+  AuthenticatedPurchasesRoute: AuthenticatedPurchasesRoute,
+  AuthenticatedReportsRoute: AuthenticatedReportsRoute,
+  AuthenticatedSalariesRoute: AuthenticatedSalariesRoute,
   AuthenticatedSardarLedgerRoute: AuthenticatedSardarLedgerRoute,
   AuthenticatedSardarsRoute: AuthenticatedSardarsRoute,
   AuthenticatedSeasonsRoute: AuthenticatedSeasonsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedStaffSetupRoute: AuthenticatedStaffSetupRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,
-  AuthenticatedVehiclesRoute: AuthenticatedVehiclesRoute,
-  AuthenticatedWorkersRoute: AuthenticatedWorkersRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedEntriesNewRoute: AuthenticatedEntriesNewRoute,
   AuthenticatedProductionStepsBurnRoute: AuthenticatedProductionStepsBurnRoute,

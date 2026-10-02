@@ -1,4 +1,5 @@
-import { createFileRoute, redirect, Outlet, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { usePageAccess } from "@/lib/page-permissions";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -46,6 +47,17 @@ export const Route = createFileRoute("/_authenticated")({
     );
   },
 });
+
+function GuardedOutlet() {
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const { can, loading, isAdmin } = usePageAccess();
+  if (loading) return <Skeleton className="h-32 w-full rounded-xl" />;
+  const adminOnly = path.startsWith("/users") || path.startsWith("/settings");
+  if (adminOnly ? !isAdmin : !can(path)) {
+    return <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">এই পাতা দেখার অনুমতি নেই। এডমিনের সাথে যোগাযোগ করুন।</div>;
+  }
+  return <Outlet />;
+}
 
 function AuthedLayout() {
   const navigate = useNavigate();
@@ -111,7 +123,7 @@ function AuthedLayout() {
           <SidebarInset className="flex min-w-0 flex-1 flex-col">
             <AppHeader />
             <main className="flex-1 p-3 pb-20 md:p-6 md:pb-6">
-              <Outlet />
+              <GuardedOutlet />
             </main>
           </SidebarInset>
         </div>

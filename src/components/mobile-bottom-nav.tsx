@@ -7,7 +7,7 @@ import { OPEN_AI_CHAT_EVENT } from "@/components/ai-assistant-fab";
 const ALL = [
   { title: "হোম", url: "/", icon: LayoutDashboard, roles: ["admin", "manager"] as const },
   { title: "চালান", url: "/challans", icon: FileText, roles: ["admin", "manager"] as const },
-  { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck, roles: ["admin"] as const },
+  { title: "আয়-ব্যয়", url: "/income-expense", icon: ClipboardCheck, roles: ["admin"] as const },
   { title: "গ্রাহক", url: "/customers", icon: Users, roles: ["admin", "manager"] as const },
   { title: "রিপোর্ট", url: "/reports", icon: BarChart3, roles: ["admin", "manager"] as const },
 ];
