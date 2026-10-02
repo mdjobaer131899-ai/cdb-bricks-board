@@ -32,7 +32,6 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
-  const roles = mode === "daily" ? ["daily"] : ["mestri", "manager"];
   const today = isoDate(new Date());
 
   const workersQ = useQuery({
@@ -85,7 +84,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       const f = wDlg!;
       if (!f.name.trim()) throw new Error("নাম দিন");
       const payload: any = {
-        name: f.name.trim(), phone: f.phone || null, role: f.role,
+        name: f.name.trim(), phone: f.phone || null, role: (f.role || "").trim() || (mode === "daily" ? "daily" : "ম্যানেজার"),
         daily_wage: mode === "daily" ? Number(f.wage || 0) : 0,
         monthly_salary: mode === "salary" ? Number(f.wage || 0) : 0,
         join_date: f.join_date || null,
@@ -265,10 +264,8 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
             <div><Label>ফোন</Label><Input value={wDlg.phone} onChange={(e) => setWDlg({ ...wDlg, phone: e.target.value })} /></div>
             {mode === "salary" && (
               <div><Label>পদ</Label>
-                <Select value={wDlg.role} onValueChange={(v) => setWDlg({ ...wDlg, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="mestri">পুড়াই মেস্তুরি</SelectItem><SelectItem value="manager">ম্যানেজার</SelectItem></SelectContent>
-                </Select>
+                <Input list="staff-role-suggest" placeholder="যেমন: ইঞ্জিন মেস্তুরি" value={ROLE_LABEL[wDlg.role] && wDlg.role !== "daily" ? ROLE_LABEL[wDlg.role] : wDlg.role} onChange={(e) => setWDlg({ ...wDlg, role: e.target.value })} />
+                <datalist id="staff-role-suggest">{ROLE_SUGGEST.map((r) => <option key={r} value={r} />)}</datalist>
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
