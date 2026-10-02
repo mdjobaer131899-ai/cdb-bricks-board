@@ -24,6 +24,7 @@ import {
 } from "@/lib/cash-book.functions";
 import { toast } from "sonner";
 import { fetchCashHistory } from "@/lib/cash-queries";
+import { AddExpenseDialog, EXPENSE_HEADS } from "@/components/cash-box-panel";
 
 export const Route = createFileRoute("/_authenticated/cash-book")({
   head: () => ({
@@ -40,15 +41,7 @@ export const Route = createFileRoute("/_authenticated/cash-book")({
   component: CashBookPage,
 });
 
-const EXPENSE_CATEGORIES = [
-  "ইঞ্জিন খরচ", "কারেন্ট বিল", "ফুয়েল / ডিজেল", "কয়লা / লাকড়ি",
-  "সরদার পেমেন্ট", "পুড়াই মেস্তুরি বেতন", "ইঞ্জিন মেস্তুরি বেতন", "ম্যানেজার বেতন", "ডেলি শ্রমিক মজুরি",
-  "মালামাল ক্রয়", "মালিকের উত্তোলন", "ঋণ পরিশোধ", "পূর্বের বকেয়া পরিশোধ",
-  "লোড খরচ", "আনলোড খরচ", "ইট বহন / ভাড়া", "মাটি কাটা মজুরি", "ইট সাজানো / বের করা",
-  "শ্রমিক বেতন", "শ্রমিক মজুরি", "কাঁচামাল কেনা", "জ্বালানি / কয়লা", "মাটি ক্রয়",
-  "যন্ত্রপাতি / মেরামত", "গাড়ি ভাড়া / জ্বালানি", "অফিস খরচ", "বিদ্যুৎ / পানি",
-  "খাবার / আপ্যায়ন", "ট্যাক্স / ফি", "অন্যান্য",
-];
+const EXPENSE_CATEGORIES = EXPENSE_HEADS;
 
 const METHODS = ["cash", "bkash", "nagad", "bank"];
 
@@ -127,7 +120,7 @@ function CashBookPage() {
         </div>
         <div className="flex gap-2">
           <IncomeDialog customers={customers.data ?? []} onDone={invalidate} />
-          <ExpenseDialog onDone={invalidate} />
+          <AddExpenseDialog onDone={invalidate} />
         </div>
       </div>
 
@@ -375,7 +368,7 @@ function ExpenseDialog({ row, onDone }: { row?: ExpenseRow; onDone: () => void }
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger><SelectValue placeholder="খাত নির্বাচন করুন" /></SelectTrigger>
               <SelectContent>
-                {EXPENSE_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {Array.from(new Set([...(category ? [category] : []), ...EXPENSE_CATEGORIES])).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
