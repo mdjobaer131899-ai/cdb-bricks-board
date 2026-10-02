@@ -307,7 +307,21 @@ function OpeningBalancesPage() {
       },
     });
 
-  const list = rows.filter((r) => r.kind === tab);
+  type TabKey = "payable" | "customer_receivable" | "customer_brick_due";
+  const tabKey: TabKey = tab === "sardar_payable" || tab === "other_payable" ? "payable" : (tab as TabKey);
+  const inTab = (r: Row, k: TabKey) => (k === "payable" ? r.kind === "sardar_payable" || r.kind === "other_payable" : r.kind === k);
+  const sum3 = (k: TabKey) => {
+    const l = rows.filter((r) => inTab(r, k));
+    return {
+      total: l.reduce((a, b) => a + b.amount, 0),
+      paid: l.reduce((a, b) => a + b.paid_amount, 0),
+      left: l.reduce((a, b) => a + b.remaining_amount, 0),
+    };
+  };
+  const pay = sum3("payable");
+  const recv = sum3("customer_receivable");
+  const adv = sum3("customer_brick_due");
+  void totals;
   const f = dialog.form;
 
   return (
@@ -317,40 +331,56 @@ function OpeningBalancesPage() {
           <History className="h-5 w-5 text-primary" />
           <h1 className="text-2xl font-bold">পূর্বের বকেয়া ও জের</h1>
         </div>
-        <Button onClick={() => openNew(tab)}>
+        <Button onClick={() => openNew(tabKey === "payable" ? "sardar_payable" : tab)}>
           <Plus className="mr-1 h-4 w-4" /> নতুন এন্ট্রি
         </Button>
       </div>
 
-      <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
-        নিয়ম: পুরোনো দেনা পরিশোধ করলে ক্যাশ কমবে, পুরোনো পাওনা আদায় হলে ক্যাশ বাড়বে — কিন্তু কোনোটাই এ সিজনের লাভ-ক্ষতিতে যোগ হবে না।
-        গ্রাহকের অগ্রিম জমার বিপরীতে নতুন চালানে ইট দিলে শুধু জমা কমবে, ক্যাশে কোনো প্রভাব নেই।
-      </p>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <Summary label="গ্রাহক ইট পাবে (বাকি)" value={totals.customer} icon={Users} tone="info" />
-        <Summary label="ভাটার পাওনা আদায় বাকি" value={totals.receivable} icon={HandCoins} tone="success" />
-        <Summary label="সরদার/মেস্তুরি পাওনা" value={totals.sardar} icon={Users2} tone="warning" />
-        <Summary label="অন্যান্য দেনা" value={totals.other} icon={Building2} tone="warning" />
-        <Summary label="মোট দেনা পরিশোধ বাকি" value={totals.payable} icon={FileText} tone="destructive" />
-        <Summary label="নিট (পাওনা − দেনা)" value={totals.receivable - totals.payable} icon={Wallet} tone="primary" />
+      <div className="grid gap-3 md:grid-cols-2">
+        <Card className="border-destructive/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base"><FileText className="h-4 w-4 text-destructive" /> ভাটার মোট দেনা ও ঋণ (ভাটা দেবে)</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-3 gap-2 text-center">
+            <div><div className="text-xs text-muted-foreground">মোট দেনা</div><div className="text-lg font-bold">৳ {bn(pay.total)}</div></div>
+            <div><div className="text-xs text-muted-foreground">পরিশোধ হয়েছে</div><div className="text-lg font-bold text-emerald-600">৳ {bn(pay.paid)}</div></div>
+            <div><div className="text-xs text-muted-foreground">এখনও বাকি</div><div className="text-xl font-extrabold text-destructive">৳ {bn(pay.left)}</div></div>
+          </CardContent>
+        </Card>
+        <Card className="border-emerald-500/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base"><Wallet className="h-4 w-4 text-emerald-600" /> ভাটার পাওনা ও গ্রাহকের অগ্রিম</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex flex-wrap justify-between gap-1 rounded-md bg-muted/50 p-2">
+              <span className="font-medium">নগদ পাওনা</span>
+              <span>মোট ৳ {bn(recv.total)} • আদায় <span className="text-emerald-600">৳ {bn(recv.paid)}</span> • <b className="text-destructive">বাকি ৳ {bn(recv.left)}</b></span>
+            </div>
+            <div className="flex flex-wrap justify-between gap-1 rounded-md bg-muted/50 p-2">
+              <span className="font-medium">গ্রাহক ইট পাবে</span>
+              <span>মোট ৳ {bn(adv.total)} • দেওয়া <span className="text-emerald-600">৳ {bn(adv.paid)}</span> • <b className="text-destructive">বাকি ৳ {bn(adv.left)}</b></span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as Kind)}>
+      <p className="text-xs text-muted-foreground">
+        পুরোনো দেনা দিলে ক্যাশ কমবে, পাওনা আদায়ে ক্যাশ বাড়বে — কিন্তু এ সিজনের লাভ-ক্ষতিতে যোগ হবে না।
+      </p>
+
+      <Tabs value={tabKey} onValueChange={(v) => setTab(v === "payable" ? "sardar_payable" : (v as Kind))}>
         <TabsList className="flex-wrap">
-          <TabsTrigger value="customer_brick_due">গ্রাহক ইট পাবে</TabsTrigger>
+          <TabsTrigger value="payable">ভাটার দেনা ও ঋণ</TabsTrigger>
           <TabsTrigger value="customer_receivable">ভাটার পাওনা</TabsTrigger>
-          <TabsTrigger value="sardar_payable">সরদার/মেস্তুরি</TabsTrigger>
-          <TabsTrigger value="other_payable">অন্যান্য</TabsTrigger>
+          <TabsTrigger value="customer_brick_due">গ্রাহক ইট পাবে</TabsTrigger>
         </TabsList>
 
-        {(["customer_brick_due", "customer_receivable", "sardar_payable", "other_payable"] as Kind[]).map((k) => (
+        {(["payable", "customer_receivable", "customer_brick_due"] as TabKey[]).map((k) => {
+          const list = rows.filter((r) => inTab(r, k));
+          return (
           <TabsContent key={k} value={k}>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{KIND_LABEL[k]}</CardTitle>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4">
                 {rowsQ.isLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
@@ -359,14 +389,15 @@ function OpeningBalancesPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>নাম</TableHead>
-                          <TableHead>{isCust(k) ? "বছর" : "ক্যাটেগরি"}</TableHead>
-                          <TableHead className="text-right">{k === "customer_brick_due" ? "গত বছরের অগ্রিম" : k === "customer_receivable" ? "গত বছরের বাকি" : "ওপেনিং"}</TableHead>
-                          <TableHead className="text-right">{k === "customer_brick_due" ? "সমন্বয় হয়েছে" : k === "customer_receivable" ? "আদায়" : "পরিশোধ"}</TableHead>
-                          <TableHead className="text-right">{k === "customer_brick_due" ? "ইট দেওয়া বাকি" : k === "customer_receivable" ? "আদায় বাকি" : "বাকি"}</TableHead>
+                          <TableHead>{k === "payable" ? "খাত" : "বছর"}</TableHead>
+                          <TableHead className="text-right">মোট</TableHead>
+                          <TableHead className="text-right">{k === "customer_brick_due" ? "ইট দেওয়া" : k === "customer_receivable" ? "আদায়" : "পরিশোধ"}</TableHead>
+                          <TableHead className="text-right">বাকি</TableHead>
                           <TableHead className="text-right">অ্যাকশন</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
+
                         {list.map((r) => (
                           <TableRow key={r.id}>
                             <TableCell>
@@ -376,16 +407,16 @@ function OpeningBalancesPage() {
                               {r.note && <div className="text-[11px] text-muted-foreground">{r.note}</div>}
                             </TableCell>
                             <TableCell>
-                              {isCust(k) ? (
+                              {k !== "payable" ? (
                                 <Badge variant="outline">{bn(r.fiscal_year)}</Badge>
                               ) : (
-                                <Badge variant="secondary">{r.category || "—"}</Badge>
+                                <Badge variant="secondary">{r.category || (r.kind === "sardar_payable" ? "সরদার" : "অন্যান্য")}</Badge>
                               )}
                             </TableCell>
                             <TableCell className="text-right">৳ {bn(r.amount)}</TableCell>
                             <TableCell className="text-right text-emerald-600">৳ {bn(r.paid_amount)}</TableCell>
                             <TableCell className={`text-right font-semibold ${r.remaining_amount > 0 ? "text-destructive" : "text-emerald-600"}`}>
-                              ৳ {bn(r.remaining_amount)}
+                              {r.remaining_amount > 0 ? `৳ ${bn(r.remaining_amount)}` : "✓ পরিশোধিত"}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
@@ -440,7 +471,8 @@ function OpeningBalancesPage() {
               </CardContent>
             </Card>
           </TabsContent>
-        ))}
+          );
+        })}
       </Tabs>
 
       {/* নতুন / সম্পাদনা */}
