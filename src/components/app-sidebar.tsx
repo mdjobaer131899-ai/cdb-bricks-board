@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck } from "lucide-react";
 import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from "@/components/ui/sidebar";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { usePageAccess } from "@/lib/page-permissions";
@@ -63,6 +63,11 @@ export function AppSidebar() {
   const { data } = useCurrentUser();
   const { can, isAdmin } = usePageAccess();
   const role = data?.role;
+  const { isMobile, setOpenMobile, setOpen } = useSidebar();
+  const closeMenu = () => {
+    if (isMobile) setOpenMobile(false);
+    else if (typeof window !== "undefined" && window.innerWidth < 1280) setOpen(false);
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -90,7 +95,7 @@ export function AppSidebar() {
                     {items.map((it) => (
                       <SidebarMenuItem key={it.url}>
                         <SidebarMenuButton asChild isActive={path === it.url} tooltip={it.title}>
-                          <Link to={it.url}>
+                          <Link to={it.url} onClick={closeMenu}>
                             <it.icon className="h-4 w-4" />
                             <span>{it.title}</span>
                           </Link>
