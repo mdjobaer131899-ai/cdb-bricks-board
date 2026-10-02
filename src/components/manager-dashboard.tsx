@@ -11,6 +11,7 @@ import { fetchSales } from "@/lib/sales-queries";
 import { bn, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { BrandLogo } from "@/components/brand-logo";
+import { DashboardToday } from "@/components/dashboard-today";
 
 
 const actions = [
@@ -58,6 +59,8 @@ export function ManagerDashboard() {
         </div>
       </div>
 
+
+      <DashboardToday showCash={false} />
 
       <Card>
         <CardHeader className="pb-2">
