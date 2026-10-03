@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Check } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2, Wallet } from "lucide-react";
@@ -122,7 +124,49 @@ function CashBookPage() {
     for (const r of history.data ?? []) { const c = m.get(r.head) ?? { dir: r.dir, total: 0 }; c.total += r.amount; m.set(r.head, c); }
     return [...m.entries()];
   }, [history.data]);
-  const hRows = useMemo(() => (history.data ?? []).filter((r) => hHead === "__all__" || r.head === hHead), [history.data, hHead]);
+  const marks = useQuery({
+    queryKey: ["book-marks"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("book_marks").select("entry_key, page, checked");
+      if (error) throw error;
+      const m: Record<string, { page: number | null; checked: boolean }> = {};
+      for (const r of (data ?? []) as any[]) m[r.entry_key] = { page: r.page, checked: r.checked };
+      return m;
+    },
+  });
+  const [lastPage, setLastPage] = useState<number | null>(null);
+  useEffect(() => {
+    const v = Number(localStorage.getItem("cdb-last-book-page"));
+    if (v > 0) setLastPage(v);
+  }, []);
+  const saveMark = useMutation({
+    mutationFn: async (v: { key: string; page: number | null; checked: boolean }) => {
+      const { error } = await (supabase as any).from("book_marks").upsert({ entry_key: v.key, page: v.page, checked: v.checked });
+      if (error) throw error;
+      return v;
+    },
+    onMutate: (v) => {
+      qc.setQueryData(["book-marks"], (old: any) => ({ ...(old ?? {}), [v.key]: { page: v.page, checked: v.checked } }));
+      if (v.page) { setLastPage(v.page); localStorage.setItem("cdb-last-book-page", String(v.page)); }
+    },
+    onError: (e: any) => { toast.error(e.message ?? "সেভ হয়নি"); qc.invalidateQueries({ queryKey: ["book-marks"] }); },
+  });
+  const [bookFilter, setBookFilter] = useState<"all" | "pending" | "done">("all");
+  const hRows = useMemo(() => (history.data ?? []).filter((r) => {
+    if (hHead !== "__all__" && r.head !== hHead) return false;
+    if (bookFilter === "all") return true;
+    if (r.dir !== "out") return false;
+    const c = !!marks.data?.[r.id]?.checked;
+    return bookFilter === "done" ? c : !c;
+  }), [history.data, hHead, bookFilter, marks.data]);
+  const pageTotals = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const r of history.data ?? []) {
+      const mk = marks.data?.[r.id];
+      if (r.dir === "out" && mk?.checked && mk.page) m.set(mk.page, (m.get(mk.page) ?? 0) + r.amount);
+    }
+    return [...m.entries()].sort((a, b) => b[0] - a[0]);
+  }, [history.data, marks.data]);
   const totals = useMemo(() => {
     const inc = hRows.filter((r) => r.dir === "in").reduce((a, b) => a + b.amount, 0);
     const exp = hRows.filter((r) => r.dir === "out").reduce((a, b) => a + b.amount, 0);
@@ -225,15 +269,28 @@ function CashBookPage() {
                           </div>
                         </div>
                         <div className="divide-y">
-                          {rows.map((r) => (
-                            <div key={r.id} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
-                              <div className="min-w-0">
+                          {rows.map((r) => {
+                            const mk = marks.data?.[r.id];
+                            const done = r.dir === "out" && !!mk?.checked;
+                            return (
+                            <div key={r.id} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm transition-opacity ${done ? "bg-muted/60 opacity-45" : ""}`}>
+                              <div className="min-w-0 flex-1">
                                 <div className="text-base font-semibold">{r.detail && r.detail !== "—" ? r.detail : r.head}</div>
                                 {r.detail && r.detail !== "—" && <div className="text-xs text-muted-foreground">{r.head}</div>}
                               </div>
                               <b className={`shrink-0 tabular-nums ${r.dir === "in" ? "text-success" : "text-destructive"}`}>{r.dir === "in" ? "+" : "−"} ৳ {bn(r.amount)}</b>
+                              {r.dir === "out" && (
+                                <BookMarkCell
+                                  key={`${r.id}-${mk?.page ?? ""}`}
+                                  initialPage={mk?.page ?? null}
+                                  checked={!!mk?.checked}
+                                  lastPage={lastPage}
+                                  onSave={(page, checked) => saveMark.mutate({ key: r.id, page, checked })}
+                                />
+                              )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     );
