@@ -19,7 +19,7 @@ const actions = [
   { to: "/challans" as const, label: "চালান তালিকা", icon: FileText, tone: "from-info/15 to-info/5 text-info" },
 ];
 
-export function ManagerDashboard() {
+export function ManagerDashboard({ navGrid }: { navGrid?: React.ReactNode }) {
   const { data: me } = useCurrentUser();
   const today = useMemo(() => new Date(), []);
   const [range, setRange] = useState<DateRange>({ from: today, to: today });
@@ -59,32 +59,9 @@ export function ManagerDashboard() {
         </div>
       </div>
 
+      {navGrid}
 
       <DashboardToday showCash={false} />
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Zap className="h-4 w-4 text-warning" /> দ্রুত অ্যাকশন
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="-mx-2 flex gap-4 overflow-x-auto px-2 pb-2 [scrollbar-width:thin]">
-            {actions.map((a) => (
-              <Link
-                key={a.label}
-                to={a.to}
-                className="group flex shrink-0 flex-col items-center gap-2 transition-all hover:-translate-y-0.5"
-              >
-                <div className={`flex h-16 w-16 items-center justify-center rounded-full border bg-gradient-to-br ${a.tone} shadow-sm ring-1 ring-border/40 group-hover:shadow-md`}>
-                  <a.icon className="h-6 w-6" />
-                </div>
-                <span className="w-20 truncate text-center text-[11px] font-semibold text-foreground">{a.label}</span>
-              </Link>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {loading ? (

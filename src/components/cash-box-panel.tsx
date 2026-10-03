@@ -31,8 +31,14 @@ export const EXPENSE_HEADS = [
   "সরদার", "ডেলি", "মেস্তুরি ও ম্যানেজার", "ভেকু",
   "কাঁচামাল", "যন্ত্রাংশ / মালামাল", "বিদ্যুৎ বিল", "আনুষাঙ্গিক",
 ];
-const RAW_ITEMS = ["কয়লা", "মাটি", "লাকড়ি", "তুষ"];
-const PART_ITEMS = ["ডিজেল", "মবিল", "কেরোসিন", "ইঞ্জিনের মালামাল"];
+const RAW_KINDS = [
+  { name: "কয়লা", unit: "টন" },
+  { name: "মাটি", unit: "হাজার ফুট" },
+  { name: "লাকড়ি", unit: "মন" },
+  { name: "ডিজেল", unit: "লিটার" },
+  { name: "তুষ", unit: "মন" },
+  { name: "অন্য", unit: "" },
+];
 
 // আজকের নগদ আয় ও সব ধরনের নগদ ব্যয় (সাধারণ ব্যয় + সরদার/শ্রমিক/সরবরাহকারী/গাড়ি)
 // একটিই হিসাব থেকে আসে — src/lib/cash-queries.ts
@@ -434,10 +440,33 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     },
   });
 
+  const [rawKind, setRawKind] = useState("");
+  const [matRate, setMatRate] = useState("");
+  const [matDueOn, setMatDueOn] = useState(false);
+  const [matDue, setMatDue] = useState("");
+  const rawUnit = RAW_KINDS.find((k) => k.name === rawKind)?.unit ?? "";
+  const rawBill = (Number(matQty) || 0) * (Number(matRate) || 0);
+  const matSel = (suppliersQ.data ?? []).find((s) => s.name === matSupplier.trim());
+  const matStatusQ = useQuery({
+    queryKey: ["veku-status", matSel?.id],
+    enabled: open && isMat && !!matSel,
+    queryFn: async () => {
+      const [p, pay] = await Promise.all([
+        supabase.from("purchases").select("total_amount").eq("supplier_id", matSel!.id),
+        supabase.from("supplier_payments").select("amount").eq("supplier_id", matSel!.id),
+      ]);
+      const bill = (p.data ?? []).reduce((a, b: any) => a + Number(b.total_amount || 0), 0);
+      const paid = (pay.data ?? []).reduce((a, b: any) => a + Number(b.amount || 0), 0);
+      return { bill, paid, due: bill - paid };
+    },
+  });
+  const matStatus = matSel ? matStatusQ.data : undefined;
+
   function reset() {
     setHead(""); setItem(""); setAmount(""); setNote(""); setPersonId("");
     setSardarType("payment"); setHours(""); setRate(""); setVekuOwner(""); setVekuMode("pay");
     setMatSupplier(""); setMatQty(""); setMatUnit(""); setMatBill("");
+    setRawKind(""); setMatRate(""); setMatDueOn(false); setMatDue("");
   }
 
   const createFn = useServerFn(createExpense);
@@ -492,29 +521,38 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
         qc.invalidateQueries({ queryKey: ["veku-status"] });
       } else if (isMat) {
         const name = matSupplier.trim();
-        const itemName = item.trim();
-        if (!itemName) throw new Error("কী কেনা হলো লিখুন");
-        if (!name) throw new Error("সাপ্লায়ার / দোকানের নাম লিখুন");
-        const bill = Number(matBill) > 0 ? Number(matBill) : amt;
-        if (!(bill > 0)) throw new Error("বিল বা টাকা লিখুন");
-        const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
-        let supId = ex?.id as string | undefined;
-        if (!supId) {
-          const { data, error } = await supabase.from("suppliers").insert({ name, material_type: itemName }).select("id").single();
-          if (error) throw error;
-          supId = data.id;
-        }
-        const qty = Number(matQty) > 0 ? Number(matQty) : 1;
-        const { error } = await supabase.from("purchases").insert({
-          purchase_date: date, supplier_id: supId, item_name: itemName, quantity: qty, unit: matUnit.trim() || null,
-          unit_price: bill / qty, total_amount: bill, note: n, created_by: me!.user.id,
-        });
-        if (error) throw error;
-        if (amt > 0) {
-          const { error: e2 } = await supabase.from("supplier_payments").insert({
-            supplier_id: supId, amount: amt, payment_date: date, note: `${itemName} — পরিশোধ${n ? ` (${n})` : ""}`, created_by: me!.user.id,
-          });
-          if (e2) throw e2;
+        const isRaw = head === "কাঁচামাল";
+        const itemName = isRaw ? (rawKind === "অন্য" ? item.trim() : rawKind) : item.trim();
+        if (!itemName) throw new Error(isRaw ? "কাঁচামাল বাছাই করুন" : "কী কেনা হলো লিখুন");
+        const qty = isRaw ? Number(matQty) || 0 : 1;
+        const bill = isRaw ? rawBill : amt + (matDueOn ? Number(matDue) || 0 : 0);
+        if (!(bill > 0) && !(amt > 0)) throw new Error("পরিমাণ/রেট বা টাকা লিখুন");
+        if (!isRaw && !name && !matDueOn) {
+          await createFn({ data: { category: `${head} — ${itemName}`, amount: amt, expense_date: date, note: n } });
+        } else {
+          if (!name) throw new Error(isRaw && rawKind === "মাটি" ? "সাইটের নাম লিখুন" : "সাপ্লায়ার / দোকানের নাম লিখুন");
+          const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
+          let supId = ex?.id as string | undefined;
+          if (!supId) {
+            const { data, error } = await supabase.from("suppliers").insert({ name, material_type: itemName }).select("id").single();
+            if (error) throw error;
+            supId = data.id;
+          }
+          if (bill > 0) {
+            const q = qty > 0 ? qty : 1;
+            const { error } = await supabase.from("purchases").insert({
+              purchase_date: date, supplier_id: supId, item_name: itemName, quantity: q, unit: isRaw ? rawUnit : null,
+              unit_price: bill / q, total_amount: bill, note: n, created_by: me!.user.id,
+            });
+            if (error) throw error;
+          }
+          if (amt > 0) {
+            const { error: e2 } = await supabase.from("supplier_payments").insert({
+              supplier_id: supId, amount: amt, payment_date: date,
+              note: `${itemName} — ${bill > 0 ? "পরিশোধ" : "অগ্রিম/বকেয়া পরিশোধ"}${n ? ` (${n})` : ""}`, created_by: me!.user.id,
+            });
+            if (e2) throw e2;
+          }
         }
         qc.invalidateQueries({ queryKey: ["purchases"] });
         qc.invalidateQueries({ queryKey: ["supplier-payments"] });
@@ -535,7 +573,6 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     }
   };
 
-  const suggestions = head === "কাঁচামাল" ? RAW_ITEMS : head === "যন্ত্রাংশ / মালামাল" ? PART_ITEMS : [];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -576,8 +613,8 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
                 <Select value={sardarType} onValueChange={(v) => setSardarType(v as "payment" | "advance")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="payment">পরিশোধ (পাওনা থেকে বাদ)</SelectItem>
-                    <SelectItem value="advance">অগ্রিম</SelectItem>
+                    <SelectItem value="payment">পরিশোধ — পাওনা থেকে</SelectItem>
+                    <SelectItem value="advance">অগ্রিম — বর্তমান কাজের মজুরি</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -627,30 +664,73 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
             </div>
           )}
 
-          {!(isSardar || isDaily || isStaff || isVeku) && head && head !== "বিদ্যুৎ বিল" && (
-            <div className="space-y-1">
-              <Label>{head === "আনুষাঙ্গিক" ? "খরচের বিবরণ *" : "কী কেনা হলো (নিজে লিখুন বা বেছে নিন)"}</Label>
-              <Input list="exp-items" value={item} onChange={(e) => setItem(e.target.value)} placeholder="যেমন: কয়লা / ডিজেল / চা-নাস্তা" />
-              <datalist id="exp-items">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
-              {isMat && (
-                <div className="mt-2 space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
-                  <Label>সাপ্লায়ার / দোকানের নাম *</Label>
-                  <Input list="mat-sups" value={matSupplier} onChange={(e) => setMatSupplier(e.target.value)} placeholder="নাম লিখুন বা বেছে নিন" />
-                  <datalist id="mat-sups">{(suppliersQ.data ?? []).map((s) => <option key={s.id} value={s.name} />)}</datalist>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div><Label className="text-xs">পরিমাণ</Label><Input type="number" value={matQty} onChange={(e) => setMatQty(e.target.value)} placeholder="১" /></div>
-                    <div><Label className="text-xs">একক</Label><Input value={matUnit} onChange={(e) => setMatUnit(e.target.value)} placeholder="টন/গাড়ি" /></div>
-                    <div><Label className="text-xs">মোট বিল</Label><Input type="number" value={matBill} onChange={(e) => setMatBill(e.target.value)} placeholder="= দেওয়া টাকা" /></div>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">এটি সরাসরি "মালামাল ও সাপ্লায়ার" পাতায় উঠবে। বিল বেশি আর টাকা কম দিলে বাকিটা সাপ্লায়ারের নামে বাকি থাকবে।</p>
-                </div>
+          {head === "কাঁচামাল" && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+              <Label>কোন কাঁচামাল *</Label>
+              <Select value={rawKind} onValueChange={(v) => { setRawKind(v); setMatSupplier(""); }}>
+                <SelectTrigger><SelectValue placeholder="বাছাই করুন" /></SelectTrigger>
+                <SelectContent>
+                  {RAW_KINDS.map((k) => <SelectItem key={k.name} value={k.name}>{k.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {rawKind === "অন্য" && (
+                <div className="space-y-1"><Label>নতুন কাঁচামালের নাম *</Label><Input value={item} onChange={(e) => setItem(e.target.value)} /></div>
               )}
+              {rawKind && (<>
+                <div className="space-y-1">
+                  <Label>{rawKind === "মাটি" ? "মাটির সাইটের নাম * (নতুন হলে লিখুন)" : rawKind === "ডিজেল" ? "পাম্প / সাপ্লায়ারের নাম *" : "কার কাছ থেকে আনা হলো *"}</Label>
+                  <Input list="mat-sups" value={matSupplier} onChange={(e) => setMatSupplier(e.target.value)} />
+                  <datalist id="mat-sups">{(suppliersQ.data ?? []).map((s) => <option key={s.id} value={s.name} />)}</datalist>
+                  {matStatus && (
+                    <p className={`text-xs font-semibold ${matStatus.due > 0 ? "text-destructive" : "text-success"}`}>
+                      এখন পর্যন্ত: মোট বিল ৳ {bn(matStatus.bill)}, দেওয়া ৳ {bn(matStatus.paid)} — {matStatus.due > 0 ? `বাকি ৳ ${bn(matStatus.due)}` : matStatus.due < 0 ? `অগ্রিম দেওয়া আছে ৳ ${bn(-matStatus.due)}` : "পরিশোধিত"}
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1"><Label>কত {rawUnit || "পরিমাণ"}</Label><Input type="number" min="0" step="0.01" value={matQty} onChange={(e) => setMatQty(e.target.value)} /></div>
+                  <div className="space-y-1"><Label>{rawUnit ? `${rawUnit} প্রতি রেট` : "রেট"}</Label><Input type="number" min="0" step="0.01" value={matRate} onChange={(e) => setMatRate(e.target.value)} /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-md bg-background p-2">মোট বিল<br /><b>৳ {bn(rawBill)}</b></div>
+                  <div className="rounded-md bg-background p-2">বাকি থাকবে<br /><b className={rawBill - (Number(amount) || 0) > 0 ? "text-destructive" : "text-success"}>৳ {bn(Math.max(rawBill - (Number(amount) || 0), 0))}</b></div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {rawKind === "মাটি" ? "শুধু টাকা দিলে পরিমাণ/রেট খালি রাখুন — টাকা সাইটের নামে জমা হবে। মাটি মাপা হলে পরিমাণ ও রেট দিয়ে বিল এন্ট্রি দিন, বাকি আপনিই হিসাব হবে।" : "সব হিসাব সরবরাহকারী পাতায় নিজে থেকে উঠবে। কাজ/মাল ছাড়া শুধু বকেয়া দিলে পরিমাণ খালি রাখুন।"}
+                </p>
+              </>)}
+            </div>
+          )}
+
+          {head === "যন্ত্রাংশ / মালামাল" && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+              <div className="space-y-1"><Label>কী কী কিনলেন *</Label><Input value={item} onChange={(e) => setItem(e.target.value)} /></div>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" className="h-4 w-4" checked={matDueOn} onChange={(e) => setMatDueOn(e.target.checked)} />
+                বাকি আছে
+              </label>
+              {matDueOn && (
+                <div className="space-y-1"><Label>কত টাকা বাকি *</Label><Input type="number" min="0" value={matDue} onChange={(e) => setMatDue(e.target.value)} /></div>
+              )}
+              <div className="space-y-1">
+                <Label>দোকান / সাপ্লায়ারের নাম {matDueOn ? "*" : ""}</Label>
+                <Input list="mat-sups2" value={matSupplier} onChange={(e) => setMatSupplier(e.target.value)} />
+                <datalist id="mat-sups2">{(suppliersQ.data ?? []).map((s) => <option key={s.id} value={s.name} />)}</datalist>
+              </div>
+              <p className="text-[11px] text-muted-foreground">দোকানের নাম দিলে সরবরাহকারী পাতায় নিজে থেকে যোগ হবে।</p>
+            </div>
+          )}
+
+          {head === "আনুষাঙ্গিক" && (
+            <div className="space-y-1">
+              <Label>খরচের নাম *</Label>
+              <Input value={item} onChange={(e) => setItem(e.target.value)} />
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : isMat ? "আজ নগদ দিলেন" : "টাকা *"}</Label>
+              <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : isMat ? "কত টাকা দিলাম" : "টাকা *"}</Label>
               <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
             </div>
             <div className="space-y-1">
