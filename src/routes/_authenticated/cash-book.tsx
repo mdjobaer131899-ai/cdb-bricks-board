@@ -22,7 +22,7 @@ import { bn, bnDate, isoDate } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
 import { createExpense } from "@/lib/expenses.functions";
 import {
-  deleteExpenseWithPassword, deleteIncomeWithPassword, updateExpenseEntry, updateIncomeEntry,
+  deleteExpenseWithPassword, deleteIncomeWithPassword, updateExpenseEntry, updateIncomeEntry, updateCashRow, deleteCashRow,
 } from "@/lib/cash-book.functions";
 import { toast } from "sonner";
 import { fetchCashHistory } from "@/lib/cash-queries";
@@ -194,27 +194,21 @@ function CashBookPage() {
         <Stat tone={totals.net >= 0 ? "primary" : "destructive"} icon={Wallet} label="নিট" value={totals.net} />
       </div>
 
-      <Card>
-        <CardContent className="space-y-2 pt-4">
-          <div className="flex flex-wrap gap-2">
-            {quickRanges.map((q) => (
-              <Button key={q.label} size="sm" variant={hFrom === q.from && hTo === q.to ? "default" : "outline"} onClick={() => { setHFrom(q.from); setHTo(q.to); }}>{q.label}</Button>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div><Label className="text-xs">থেকে</Label><Input type="date" value={hFrom} onChange={(e) => setHFrom(e.target.value)} /></div>
-            <div><Label className="text-xs">পর্যন্ত</Label><Input type="date" value={hTo} onChange={(e) => setHTo(e.target.value)} /></div>
-          </div>
-          <p className="text-xs text-muted-foreground">এই তারিখ বাছাই হিস্টোরি, ব্যয় তালিকা ও আয় তালিকা — তিনটিতেই কাজ করবে।</p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-center gap-1 rounded-lg border bg-card px-2 py-1.5">
+        {quickRanges.map((q) => (
+          <Button key={q.label} size="sm" className="h-7 px-2 text-xs" variant={hFrom === q.from && hTo === q.to ? "default" : "outline"} onClick={() => { setHFrom(q.from); setHTo(q.to); }}>{q.label}</Button>
+        ))}
+        <div className="flex items-center gap-1">
+          <Input type="date" className="h-7 w-[8.5rem] px-1 text-xs" value={hFrom} onChange={(e) => setHFrom(e.target.value)} aria-label="থেকে" />
+          <span className="text-xs text-muted-foreground">থেকে</span>
+          <Input type="date" className="h-7 w-[8.5rem] px-1 text-xs" value={hTo} onChange={(e) => setHTo(e.target.value)} aria-label="পর্যন্ত" />
+        </div>
+      </div>
 
-      <Tabs defaultValue="history">
+      <Tabs defaultValue="allexp">
         <TabsList>
+          <TabsTrigger value="allexp">ব্যয় তালিকা</TabsTrigger>
           <TabsTrigger value="history">সব আয়-ব্যয় হিস্টোরি</TabsTrigger>
-          <TabsTrigger value="expense">ব্যয় তালিকা</TabsTrigger>
-          <TabsTrigger value="income">আয় তালিকা</TabsTrigger>
-          <TabsTrigger value="allexp">সব ব্যয় (তারিখ ক্রমে)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="history">
@@ -317,107 +311,15 @@ function CashBookPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="expense">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">ব্যয় এন্ট্রি</CardTitle>
-              <CardDescription>ওপরে বাছাই করা তারিখের সব ব্যয়</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>তারিখ</TableHead>
-                      <TableHead>খাত</TableHead>
-                      <TableHead>নোট</TableHead>
-                      <TableHead className="text-right">টাকা</TableHead>
-                      <TableHead className="text-right">অ্যাকশন</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {expenses.isLoading ? (
-                      <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
-                    ) : (expenses.data ?? []).length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">কোনো ব্যয় এন্ট্রি নেই</TableCell></TableRow>
-                    ) : (
-                      expenses.data!.map((e) => (
-                        <TableRow key={e.id}>
-                          <TableCell className="whitespace-nowrap">{bnDate(e.expense_date)}</TableCell>
-                          <TableCell className="font-medium">{e.category}</TableCell>
-                          <TableCell className="max-w-[200px] truncate text-muted-foreground">{e.note ?? "—"}</TableCell>
-                          <TableCell className="text-right font-bold text-destructive whitespace-nowrap">৳ {bn(e.amount)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <ExpenseDialog row={e} onDone={invalidate} />
-                              <DeleteDialog kind="expense" id={e.id} label={`${e.category} — ৳ ${bn(e.amount)}`} onDone={invalidate} />
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="income">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">আয় এন্ট্রি</CardTitle>
-              <CardDescription>নগদ আয় (চুক্তি বহির্ভূত)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>তারিখ</TableHead>
-                      <TableHead>গ্রাহক</TableHead>
-                      <TableHead>মাধ্যম</TableHead>
-                      <TableHead className="text-right">টাকা</TableHead>
-                      <TableHead className="text-right">অ্যাকশন</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {incomes.isLoading ? (
-                      <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
-                    ) : (incomes.data ?? []).length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">কোনো আয় এন্ট্রি নেই</TableCell></TableRow>
-                    ) : (
-                      incomes.data!.map((i) => (
-                        <TableRow key={i.id}>
-                          <TableCell className="whitespace-nowrap">{bnDate(i.payment_date)}</TableCell>
-                          <TableCell className="font-medium">{i.customer?.name ?? "—"}</TableCell>
-                          <TableCell className="text-muted-foreground">{i.method ?? "—"}</TableCell>
-                          <TableCell className="text-right font-bold text-success whitespace-nowrap">৳ {bn(i.amount)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <IncomeDialog row={i} customers={customers.data ?? []} onDone={invalidate} />
-                              <DeleteDialog kind="income" id={i.id} label={`${i.customer?.name ?? ""} — ৳ ${bn(i.amount)}`} onDone={invalidate} />
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="allexp">
-          <AllExpenseList rows={(history.data ?? []).filter((r) => r.dir === "out")} loading={history.isLoading} />
+          <AllExpenseList rows={(history.data ?? []).filter((r) => r.dir === "out")} loading={history.isLoading} onDone={invalidate} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function AllExpenseList({ rows, loading }: { rows: Array<{ id: string; date: string; head: string; detail: string; amount: number }>; loading: boolean }) {
+function AllExpenseList({ rows, loading, onDone }: { rows: Array<{ id: string; date: string; head: string; detail: string; amount: number }>; loading: boolean; onDone: () => void }) {
   const [asc, setAsc] = useState(true);
   const [onlyOld, setOnlyOld] = useState(false);
   const list = useMemo(() => {
@@ -434,17 +336,16 @@ function AllExpenseList({ rows, loading }: { rows: Array<{ id: string; date: str
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">সব ব্যয়ের তালিকা — তারিখের সিরিয়াল অনুযায়ী</CardTitle>
-        <CardDescription>পুরোনো বকেয়া পরিশোধ, সরদার, শ্রমিক, বেতন, মালামাল, ঋণ, মালিক উত্তোলন ও সব খরচ</CardDescription>
-        <div className="flex flex-wrap gap-2 pt-2 text-sm">
+        <CardTitle className="text-base">ব্যয় তালিকা — তারিখের সিরিয়াল অনুযায়ী</CardTitle>
+        <div className="flex flex-wrap gap-2 pt-1 text-xs">
           <span className="rounded-md border px-2 py-1">পুরোনো বকেয়া পরিশোধ: <b>৳ {bn(oldTotal)}</b></span>
           <span className="rounded-md border px-2 py-1">চলতি খরচ: <b>৳ {bn(all - oldTotal)}</b></span>
           <span className="rounded-md border px-2 py-1">মোট ব্যয়: <b>৳ {bn(all)}</b></span>
         </div>
-        <div className="flex flex-wrap gap-2 pt-2 print:hidden">
-          <Button size="sm" variant="outline" onClick={() => setAsc((s) => !s)}>{asc ? "পুরনো থেকে নতুন" : "নতুন থেকে পুরনো"}</Button>
-          <Button size="sm" variant={onlyOld ? "default" : "outline"} onClick={() => setOnlyOld((s) => !s)}>শুধু পুরোনো বকেয়া পরিশোধ</Button>
-          <Button size="sm" variant="outline" onClick={() => window.print()}>প্রিন্ট</Button>
+        <div className="flex flex-wrap gap-1 pt-1 print:hidden">
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAsc((s) => !s)}>{asc ? "পুরনো থেকে নতুন" : "নতুন থেকে পুরনো"}</Button>
+          <Button size="sm" variant={onlyOld ? "default" : "outline"} className="h-7 text-xs" onClick={() => setOnlyOld((s) => !s)}>শুধু পুরোনো বকেয়া</Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.print()}>প্রিন্ট</Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -458,23 +359,31 @@ function AllExpenseList({ rows, loading }: { rows: Array<{ id: string; date: str
                 <TableHead>খাত</TableHead>
                 <TableHead className="text-right">টাকা</TableHead>
                 <TableHead className="text-right">মোট (চলমান)</TableHead>
+                <TableHead className="text-right print:hidden">ইডিট / ডিলেট</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={7}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
               ) : list.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">কোনো ব্যয় নেই</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">কোনো ব্যয় নেই</TableCell></TableRow>
               ) : list.map((r, i) => {
                 run += r.amount;
+                const name = r.detail && r.detail !== "—" ? r.detail : "—";
                 return (
                   <TableRow key={r.id} className={r.head === "পূর্বের দায় পরিশোধ" ? "bg-warning/10" : ""}>
                     <TableCell>{bn(i + 1)}</TableCell>
                     <TableCell className="whitespace-nowrap">{bnDate(r.date)}</TableCell>
-                    <TableCell className="font-semibold">{r.detail && r.detail !== "—" ? r.detail : "—"}</TableCell>
+                    <TableCell className="font-semibold">{name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.head}</TableCell>
                     <TableCell className="text-right font-bold text-destructive whitespace-nowrap">৳ {bn(r.amount)}</TableCell>
                     <TableCell className="text-right tabular-nums whitespace-nowrap">৳ {bn(run)}</TableCell>
+                    <TableCell className="text-right print:hidden">
+                      <div className="flex justify-end gap-1">
+                        <RowEditDialog row={r} onDone={onDone} />
+                        <RowDeleteDialog rowKey={r.id} label={`${name} — ${r.head} — ৳ ${bn(r.amount)}`} onDone={onDone} />
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -483,6 +392,78 @@ function AllExpenseList({ rows, loading }: { rows: Array<{ id: string; date: str
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function RowEditDialog({ row, onDone }: { row: { id: string; date: string; head: string; detail: string; amount: number }; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(String(row.amount));
+  const [date, setDate] = useState(row.date?.slice(0, 10) ?? "");
+  const [note, setNote] = useState("");
+  const fn = useServerFn(updateCashRow);
+  const mut = useMutation({
+    mutationFn: async () => {
+      const amt = Number(amount);
+      if (!Number.isFinite(amt) || amt <= 0) throw new Error("টাকার পরিমাণ সঠিক নয়");
+      return fn({ data: { key: row.id, amount: amt, date, note: note || null } });
+    },
+    onSuccess: () => { toast.success("হালনাগাদ হয়েছে"); setOpen(false); onDone(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-7 w-7"><Pencil className="h-3.5 w-3.5" /></Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>ব্যয় সম্পাদনা</DialogTitle>
+          <DialogDescription>{row.detail !== "—" ? row.detail : ""} — {row.head}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1"><Label>টাকা *</Label><Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+            <div className="space-y-1"><Label>তারিখ *</Label><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          </div>
+          <div className="space-y-1"><Label>নোট (খালি রাখলে আগেরটাই থাকবে)</Label><Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} /></div>
+          <DialogFooter><Button type="submit" disabled={mut.isPending}>হালনাগাদ</Button></DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RowDeleteDialog({ rowKey, label, onDone }: { rowKey: string; label: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const fn = useServerFn(deleteCashRow);
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!password) throw new Error("এডমিন পাসওয়ার্ড দিন");
+      return fn({ data: { key: rowKey, password } });
+    },
+    onSuccess: () => { toast.success("এন্ট্রি মুছে ফেলা হয়েছে"); setOpen(false); setPassword(""); onDone(); },
+    onError: (e: Error) => toast.error(e.message || "মুছে ফেলা যায়নি"),
+  });
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setPassword(""); }}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Lock className="h-4 w-4 text-destructive" />এডমিন পাসওয়ার্ড দিন</DialogTitle>
+          <DialogDescription>{label} — এন্ট্রি স্থায়ীভাবে মুছে যাবে।</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
+          <Input type="password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} placeholder="এডমিন পাসওয়ার্ড" />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>বাতিল</Button>
+            <Button type="submit" variant="destructive" disabled={mut.isPending}>মুছুন</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
