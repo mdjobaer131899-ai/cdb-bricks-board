@@ -114,3 +114,53 @@ export const deleteIncomeWithPassword = createServerFn({ method: "POST" })
     });
     return { success: true };
   });
+
+const ROW_TABLES: Array<[string, string, string]> = [
+  ["op", "opening_payments", "payment_date"],
+  ["lp", "loan_payments", "payment_date"],
+  ["e", "expenses", "expense_date"],
+  ["s", "sardar_payments", "payment_date"],
+  ["w", "worker_payments", "payment_date"],
+  ["p", "supplier_payments", "payment_date"],
+  ["o", "owner_transactions", "txn_date"],
+  ["l", "loans", "loan_date"],
+];
+function resolveKey(key: string) {
+  for (const [p, table, dateCol] of ROW_TABLES) {
+    if (key.startsWith(p)) {
+      const id = key.slice(p.length);
+      if (z.string().uuid().safeParse(id).success) return { table, dateCol, id };
+    }
+  }
+  throw new Error("অজানা এন্ট্রি");
+}
+
+export const updateCashRow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({
+    key: z.string().min(2).max(60),
+    amount: z.number().positive(),
+    date: z.string().min(1),
+    note: z.string().max(500).nullable().optional(),
+  }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { table, dateCol, id } = resolveKey(data.key);
+    const patch: Record<string, unknown> = { amount: data.amount, [dateCol]: data.date };
+    if (data.note) patch.note = data.note;
+    const { error } = await (context.supabase as any).from(table).update(patch).eq("id", id);
+    if (error) throw new Error(error.message);
+    return { success: true };
+  });
+
+export const deleteCashRow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input) => z.object({ key: z.string().min(2).max(60), password: z.string().min(1).max(200) }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { verifyCurrentAdminPassword } = await import("./cash-book.server");
+    const ok = await verifyCurrentAdminPassword(context.userId, data.password);
+    if (!ok) throw new Error("অননুমোদিত অথবা এডমিন পাসওয়ার্ড সঠিক নয়");
+    const { table, id } = resolveKey(data.key);
+    const { error } = await (context.supabase as any).from(table).delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    return { success: true };
+  });
