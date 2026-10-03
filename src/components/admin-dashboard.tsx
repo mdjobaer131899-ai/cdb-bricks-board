@@ -7,15 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { fetchSales } from "@/lib/sales-queries";
 import { bn, isoDate } from "@/lib/format";
 import { AiAssistantFab } from "@/components/ai-assistant-fab";
-import { QuickActions } from "@/components/quick-actions";
 import { StockSummaryCard } from "@/components/stock-summary-card";
 import { DashboardToday } from "@/components/dashboard-today";
 import { BrandLogo } from "@/components/brand-logo";
 import { CashBalanceChip } from "@/components/cash-balance-chip";
 
-
-
-export function AdminDashboard() {
+export function AdminDashboard({ navGrid }: { navGrid?: React.ReactNode }) {
   const today = useMemo(() => new Date(), []);
   const [range, setRange] = useState<DateRange>({ from: today, to: today });
   const from = isoDate(range.from);
@@ -47,8 +44,7 @@ export function AdminDashboard() {
         </div>
       </div>
 
-
-      <QuickActions />
+      {navGrid}
 
       <DashboardToday />
 

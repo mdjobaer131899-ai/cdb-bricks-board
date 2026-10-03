@@ -33,8 +33,8 @@ function Index() {
       </div>
     );
   }
-  if (data.role === "admin") return <div className="space-y-4"><NavGrid /><AdminDashboard /></div>;
-  if (data.role === "manager") return <div className="space-y-4"><NavGrid /><ManagerDashboard /></div>;
+  if (data.role === "admin") return <AdminDashboard navGrid={<NavGrid />} />;
+  if (data.role === "manager") return <ManagerDashboard navGrid={<NavGrid />} />;
   return <PendingRoleState onRetry={refetch} />;
 }
 
