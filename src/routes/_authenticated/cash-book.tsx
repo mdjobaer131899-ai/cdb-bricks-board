@@ -231,7 +231,22 @@ function CashBookPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label className="text-xs">খাতায় তোলা</Label>
+                  <div className="flex gap-1">
+                    {([["all", "সব"], ["pending", "খাতায় তোলা বাকি"], ["done", "খাতায় তোলা শেষ"]] as const).map(([k, l]) => (
+                      <Button key={k} size="sm" variant={bookFilter === k ? "default" : "outline"} onClick={() => setBookFilter(k)}>{l}</Button>
+                    ))}
+                  </div>
+                </div>
               </div>
+              {pageTotals.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2 text-xs">
+                  {pageTotals.map(([p, t]) => (
+                    <span key={p} className="rounded-full border px-2 py-1">পৃষ্ঠা {bn(p)}: <b>৳ {bn(t)}</b></span>
+                  ))}
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               {heads.length > 0 && (
