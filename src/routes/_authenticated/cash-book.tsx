@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowDownCircle, ArrowUpCircle, Lock, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -53,23 +53,25 @@ type ExpenseRow = {
   id: string; amount: number; expense_date: string; category: string; note: string | null;
 };
 
-async function fetchIncomes(): Promise<IncomeRow[]> {
-  const { data, error } = await sdb
+type Range = { from: string; to: string };
+
+async function fetchIncomes({ from, to }: Range): Promise<IncomeRow[]> {
+  let q = sdb
     .from("collections")
     .select("id, amount, payment_date, method, note, customer_id, customer:customers(name)")
-    .is("contract_id", null)
-    .order("payment_date", { ascending: false })
-    .limit(300);
+    .is("contract_id", null);
+  if (from) q = q.gte("payment_date", from);
+  if (to) q = q.lte("payment_date", to);
+  const { data, error } = await q.order("payment_date", { ascending: false }).limit(2000);
   if (error) throw error;
   return (data ?? []) as unknown as IncomeRow[];
 }
 
-async function fetchExpenses(): Promise<ExpenseRow[]> {
-  const { data, error } = await sdb
-    .from("expenses")
-    .select("id, amount, expense_date, category, note")
-    .order("expense_date", { ascending: false })
-    .limit(300);
+async function fetchExpenses({ from, to }: Range): Promise<ExpenseRow[]> {
+  let q = sdb.from("expenses").select("id, amount, expense_date, category, note");
+  if (from) q = q.gte("expense_date", from);
+  if (to) q = q.lte("expense_date", to);
+  const { data, error } = await q.order("expense_date", { ascending: false }).limit(2000);
   if (error) throw error;
   return (data ?? []) as unknown as ExpenseRow[];
 }
@@ -80,11 +82,32 @@ async function fetchCustomers() {
   return (data ?? []) as Array<{ id: string; name: string }>;
 }
 
+function monthRange(offset: number): Range {
+  const d = new Date();
+  const s = new Date(d.getFullYear(), d.getMonth() + offset, 1);
+  const e = new Date(d.getFullYear(), d.getMonth() + offset + 1, 0);
+  return { from: isoDate(s), to: isoDate(e) };
+}
+
 function CashBookPage() {
   const qc = useQueryClient();
-  const incomes = useQuery({ queryKey: ["cash-book", "incomes"], queryFn: fetchIncomes });
-  const expenses = useQuery({ queryKey: ["cash-book", "expenses"], queryFn: fetchExpenses });
+  const [hFrom, setHFrom] = useState("");
+  const [hTo, setHTo] = useState("");
+  const [hHead, setHHead] = useState("__all__");
+  const [showHeads, setShowHeads] = useState(false);
+  const incomes = useQuery({ queryKey: ["cash-book", "incomes", hFrom, hTo], queryFn: () => fetchIncomes({ from: hFrom, to: hTo }) });
+  const expenses = useQuery({ queryKey: ["cash-book", "expenses", hFrom, hTo], queryFn: () => fetchExpenses({ from: hFrom, to: hTo }) });
   const customers = useQuery({ queryKey: ["customers-min"], queryFn: fetchCustomers });
+  const quickRanges = useMemo(() => {
+    const t = isoDate(new Date());
+    return [
+      { label: "পুরো সিজন", from: "", to: "" },
+      { label: "আজ", from: t, to: t },
+      { label: "এই মাস", ...monthRange(0) },
+      { label: "গত মাস", ...monthRange(-1) },
+      { label: "আগের মাস", ...monthRange(-2) },
+    ];
+  }, []);
 
   const invalidate = () => {
     for (const key of [
@@ -93,9 +116,6 @@ function CashBookPage() {
     ]) qc.invalidateQueries({ queryKey: key });
   };
 
-  const [hFrom, setHFrom] = useState("");
-  const [hTo, setHTo] = useState("");
-  const [hHead, setHHead] = useState("__all__");
   const history = useQuery({ queryKey: ["cash-book", "history", hFrom, hTo], queryFn: () => fetchCashHistory({ from: hFrom || undefined, to: hTo || undefined }) });
   const heads = useMemo(() => {
     const m = new Map<string, { dir: "in" | "out"; total: number }>();
@@ -130,6 +150,21 @@ function CashBookPage() {
         <Stat tone={totals.net >= 0 ? "primary" : "destructive"} icon={Wallet} label="নিট" value={totals.net} />
       </div>
 
+      <Card>
+        <CardContent className="space-y-2 pt-4">
+          <div className="flex flex-wrap gap-2">
+            {quickRanges.map((q) => (
+              <Button key={q.label} size="sm" variant={hFrom === q.from && hTo === q.to ? "default" : "outline"} onClick={() => { setHFrom(q.from); setHTo(q.to); }}>{q.label}</Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div><Label className="text-xs">থেকে</Label><Input type="date" value={hFrom} onChange={(e) => setHFrom(e.target.value)} /></div>
+            <div><Label className="text-xs">পর্যন্ত</Label><Input type="date" value={hTo} onChange={(e) => setHTo(e.target.value)} /></div>
+          </div>
+          <p className="text-xs text-muted-foreground">এই তারিখ বাছাই হিস্টোরি, ব্যয় তালিকা ও আয় তালিকা — তিনটিতেই কাজ করবে।</p>
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="history">
         <TabsList>
           <TabsTrigger value="history">সব আয়-ব্যয় হিস্টোরি</TabsTrigger>
@@ -143,8 +178,6 @@ function CashBookPage() {
               <CardTitle className="text-base">মূল ক্যাশের সব লেনদেন</CardTitle>
               <CardDescription>সব পাতার আয় ও ব্যয় — খাত ও তারিখ বেছে হিসাব করুন</CardDescription>
               <div className="flex flex-wrap items-end gap-2 pt-2">
-                <div><Label className="text-xs">থেকে</Label><Input type="date" value={hFrom} onChange={(e) => setHFrom(e.target.value)} /></div>
-                <div><Label className="text-xs">পর্যন্ত</Label><Input type="date" value={hTo} onChange={(e) => setHTo(e.target.value)} /></div>
                 <div className="min-w-48"><Label className="text-xs">খাত</Label>
                   <Select value={hHead} onValueChange={setHHead}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -158,12 +191,20 @@ function CashBookPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {heads.length > 0 && (
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {heads.map(([h, v]) => (
-                    <button key={h} type="button" onClick={() => setHHead(h)} className="flex justify-between rounded-md border p-2 text-left text-sm hover:bg-muted">
-                      <span>{h}</span><b className={v.dir === "in" ? "text-success" : "text-destructive"}>৳ {bn(v.total)}</b>
-                    </button>
-                  ))}
+                <div>
+                  <Button variant="outline" size="sm" className="w-full justify-between" onClick={() => setShowHeads((s) => !s)}>
+                    <span>খাতভিত্তিক মোট হিসাব দেখুন ({bn(heads.length)}টি)</span>
+                    {showHeads ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                  {showHeads && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {heads.map(([h, v]) => (
+                        <button key={h} type="button" onClick={() => { setHHead(h); setShowHeads(false); }} className="flex justify-between rounded-md border p-2 text-left text-sm hover:bg-muted">
+                          <span>{h}</span><b className={v.dir === "in" ? "text-success" : "text-destructive"}>৳ {bn(v.total)}</b>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {history.isLoading ? <Skeleton className="h-32" /> : hRows.length === 0 ? (
@@ -187,8 +228,8 @@ function CashBookPage() {
                           {rows.map((r) => (
                             <div key={r.id} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
                               <div className="min-w-0">
-                                <div className="font-medium">{r.head}</div>
-                                <div className="text-xs text-muted-foreground">{r.detail || "—"}</div>
+                                <div className="text-base font-semibold">{r.detail && r.detail !== "—" ? r.detail : r.head}</div>
+                                {r.detail && r.detail !== "—" && <div className="text-xs text-muted-foreground">{r.head}</div>}
                               </div>
                               <b className={`shrink-0 tabular-nums ${r.dir === "in" ? "text-success" : "text-destructive"}`}>{r.dir === "in" ? "+" : "−"} ৳ {bn(r.amount)}</b>
                             </div>
@@ -207,7 +248,7 @@ function CashBookPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">ব্যয় এন্ট্রি</CardTitle>
-              <CardDescription>সর্বশেষ ৩০০টি এন্ট্রি (চলতি মৌসুম)</CardDescription>
+              <CardDescription>ওপরে বাছাই করা তারিখের সব ব্যয়</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
