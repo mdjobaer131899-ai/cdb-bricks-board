@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppHeader } from "@/components/app-header";
+import { TopMenubar } from "@/components/top-menubar";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { SeasonProvider } from "@/lib/season-context";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -117,11 +118,12 @@ function AuthedLayout() {
     <SeasonProvider>
       <SidebarProvider>
         <div className="flex min-h-screen w-full bg-background">
-          <div className="hidden md:block">
+          <div className="hidden md:block lg:hidden">
             <AppSidebar />
           </div>
           <SidebarInset className="flex min-w-0 flex-1 flex-col">
             <AppHeader />
+            <TopMenubar />
             <main className="flex-1 p-3 pb-20 md:p-6 md:pb-6">
               <GuardedOutlet />
             </main>
