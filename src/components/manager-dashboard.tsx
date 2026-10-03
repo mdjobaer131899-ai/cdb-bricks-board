@@ -19,7 +19,7 @@ const actions = [
   { to: "/challans" as const, label: "চালান তালিকা", icon: FileText, tone: "from-info/15 to-info/5 text-info" },
 ];
 
-export function ManagerDashboard() {
+export function ManagerDashboard({ navGrid }: { navGrid?: React.ReactNode }) {
   const { data: me } = useCurrentUser();
   const today = useMemo(() => new Date(), []);
   const [range, setRange] = useState<DateRange>({ from: today, to: today });
