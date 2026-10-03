@@ -22,7 +22,7 @@ import { bn, bnDate, isoDate } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
 import { createExpense } from "@/lib/expenses.functions";
 import {
-  deleteExpenseWithPassword, deleteIncomeWithPassword, updateExpenseEntry, updateIncomeEntry,
+  deleteExpenseWithPassword, deleteIncomeWithPassword, updateExpenseEntry, updateIncomeEntry, updateCashRow, deleteCashRow,
 } from "@/lib/cash-book.functions";
 import { toast } from "sonner";
 import { fetchCashHistory } from "@/lib/cash-queries";
@@ -307,98 +307,6 @@ function CashBookPage() {
                   })}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="expense">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">ব্যয় এন্ট্রি</CardTitle>
-              <CardDescription>ওপরে বাছাই করা তারিখের সব ব্যয়</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>তারিখ</TableHead>
-                      <TableHead>খাত</TableHead>
-                      <TableHead>নোট</TableHead>
-                      <TableHead className="text-right">টাকা</TableHead>
-                      <TableHead className="text-right">অ্যাকশন</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {expenses.isLoading ? (
-                      <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
-                    ) : (expenses.data ?? []).length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">কোনো ব্যয় এন্ট্রি নেই</TableCell></TableRow>
-                    ) : (
-                      expenses.data!.map((e) => (
-                        <TableRow key={e.id}>
-                          <TableCell className="whitespace-nowrap">{bnDate(e.expense_date)}</TableCell>
-                          <TableCell className="font-medium">{e.category}</TableCell>
-                          <TableCell className="max-w-[200px] truncate text-muted-foreground">{e.note ?? "—"}</TableCell>
-                          <TableCell className="text-right font-bold text-destructive whitespace-nowrap">৳ {bn(e.amount)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <ExpenseDialog row={e} onDone={invalidate} />
-                              <DeleteDialog kind="expense" id={e.id} label={`${e.category} — ৳ ${bn(e.amount)}`} onDone={invalidate} />
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="income">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">আয় এন্ট্রি</CardTitle>
-              <CardDescription>নগদ আয় (চুক্তি বহির্ভূত)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>তারিখ</TableHead>
-                      <TableHead>গ্রাহক</TableHead>
-                      <TableHead>মাধ্যম</TableHead>
-                      <TableHead className="text-right">টাকা</TableHead>
-                      <TableHead className="text-right">অ্যাকশন</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {incomes.isLoading ? (
-                      <TableRow><TableCell colSpan={5}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
-                    ) : (incomes.data ?? []).length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">কোনো আয় এন্ট্রি নেই</TableCell></TableRow>
-                    ) : (
-                      incomes.data!.map((i) => (
-                        <TableRow key={i.id}>
-                          <TableCell className="whitespace-nowrap">{bnDate(i.payment_date)}</TableCell>
-                          <TableCell className="font-medium">{i.customer?.name ?? "—"}</TableCell>
-                          <TableCell className="text-muted-foreground">{i.method ?? "—"}</TableCell>
-                          <TableCell className="text-right font-bold text-success whitespace-nowrap">৳ {bn(i.amount)}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <IncomeDialog row={i} customers={customers.data ?? []} onDone={invalidate} />
-                              <DeleteDialog kind="income" id={i.id} label={`${i.customer?.name ?? ""} — ৳ ${bn(i.amount)}`} onDone={invalidate} />
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
