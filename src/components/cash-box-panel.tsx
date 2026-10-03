@@ -357,14 +357,40 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   const [hours, setHours] = useState("");
   const [rate, setRate] = useState("");
   const [vekuOwner, setVekuOwner] = useState("");
+  const [vekuMode, setVekuMode] = useState<"pay" | "work">("pay");
   const [busy, setBusy] = useState(false);
+  const qc = useQueryClient();
 
   const isSardar = head === "সরদার";
   const isDaily = head === "ডেলি";
   const isStaff = head === "মেস্তুরি ও ম্যানেজার";
   const isVeku = head === "ভেকু";
-  const vekuTotal = (Number(hours) || 0) * (Number(rate) || 0);
+  const vekuTotal = vekuMode === "work" ? (Number(hours) || 0) * (Number(rate) || 0) : 0;
   const vekuDue = vekuTotal - (Number(amount) || 0);
+
+  const vekuOwnersQ = useQuery({
+    queryKey: ["veku-owners"],
+    enabled: open && isVeku,
+    queryFn: async () => {
+      const { data } = await supabase.from("suppliers").select("id, name").eq("material_type", "ভেকু").order("name");
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+  const vekuSel = (vekuOwnersQ.data ?? []).find((s) => s.name === vekuOwner.trim());
+  const vekuStatusQ = useQuery({
+    queryKey: ["veku-status", vekuSel?.id],
+    enabled: open && isVeku && !!vekuSel,
+    queryFn: async () => {
+      const [p, pay] = await Promise.all([
+        supabase.from("purchases").select("total_amount").eq("supplier_id", vekuSel!.id),
+        supabase.from("supplier_payments").select("amount").eq("supplier_id", vekuSel!.id),
+      ]);
+      const bill = (p.data ?? []).reduce((a, b: any) => a + Number(b.total_amount || 0), 0);
+      const paid = (pay.data ?? []).reduce((a, b: any) => a + Number(b.amount || 0), 0);
+      return { bill, paid, due: bill - paid };
+    },
+  });
+  const vekuStatus = vekuSel ? vekuStatusQ.data : undefined;
 
   const sardarsQ = useQuery({
     queryKey: ["sardars-active-select"],
@@ -397,7 +423,7 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
   function reset() {
     setHead(""); setItem(""); setAmount(""); setNote(""); setPersonId("");
-    setSardarType("payment"); setHours(""); setRate(""); setVekuOwner("");
+    setSardarType("payment"); setHours(""); setRate(""); setVekuOwner(""); setVekuMode("pay");
   }
 
   const createFn = useServerFn(createExpense);
@@ -422,7 +448,8 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
         if (error) throw error;
       } else if (isVeku) {
         if (!vekuOwner.trim()) throw new Error("ভেকু মালিক/ড্রাইভারের নাম লিখুন");
-        if (vekuTotal <= 0) throw new Error("ঘণ্টা ও রেট দিন");
+        if (vekuMode === "work" && vekuTotal <= 0) throw new Error("ঘণ্টা ও রেট দিন");
+        if (vekuMode === "pay" && !(amt > 0)) throw new Error("কত টাকা দিলেন লিখুন");
         const name = vekuOwner.trim();
         const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
         let supId = ex?.id as string | undefined;
@@ -431,17 +458,24 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
           if (error) throw error;
           supId = data.id;
         }
-        const { error } = await supabase.from("purchases").insert({
-          purchase_date: date, supplier_id: supId, item_name: "ভেকু", quantity: Number(hours), unit: "ঘণ্টা",
-          unit_price: Number(rate), total_amount: vekuTotal, note: n, created_by: me!.user.id,
-        });
-        if (error) throw error;
+        if (vekuMode === "work") {
+          const { error } = await supabase.from("purchases").insert({
+            purchase_date: date, supplier_id: supId, item_name: "ভেকু", quantity: Number(hours), unit: "ঘণ্টা",
+            unit_price: Number(rate), total_amount: vekuTotal, note: n, created_by: me!.user.id,
+          });
+          if (error) throw error;
+        }
         if (amt > 0) {
           const { error: e2 } = await supabase.from("supplier_payments").insert({
-            supplier_id: supId, amount: amt, payment_date: date, note: `ভেকু ${bn(Number(hours))} ঘণ্টা — পরিশোধ`, created_by: me!.user.id,
+            supplier_id: supId, amount: amt, payment_date: date,
+            note: vekuMode === "work" ? `ভেকু ${bn(Number(hours))} ঘণ্টা — পরিশোধ${n ? ` (${n})` : ""}` : `ভেকু — অগ্রিম/বকেয়া পরিশোধ (কাজ ছাড়া)${n ? ` (${n})` : ""}`,
+            created_by: me!.user.id,
           });
           if (e2) throw e2;
         }
+        qc.invalidateQueries({ queryKey: ["purchases"] });
+        qc.invalidateQueries({ queryKey: ["supplier-payments"] });
+        qc.invalidateQueries({ queryKey: ["veku-status"] });
       } else {
         const sub = item.trim();
         if (head === "আনুষাঙ্গিক" && !sub) throw new Error("খরচের বিবরণ লিখুন");
@@ -514,10 +548,22 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
           {isVeku && (
             <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" size="sm" variant={vekuMode === "pay" ? "default" : "outline"} onClick={() => setVekuMode("pay")}>শুধু টাকা দেওয়া<br />(অগ্রিম / বকেয়া)</Button>
+                <Button type="button" size="sm" variant={vekuMode === "work" ? "default" : "outline"} onClick={() => setVekuMode("work")}>আজ কাজ হয়েছে<br />(ঘণ্টার বিল)</Button>
+              </div>
               <div className="space-y-1">
                 <Label>ভেকু মালিক / ড্রাইভার *</Label>
-                <Input value={vekuOwner} onChange={(e) => setVekuOwner(e.target.value)} placeholder="নাম লিখুন" />
+                <Input list="veku-owners" value={vekuOwner} onChange={(e) => setVekuOwner(e.target.value)} placeholder="নাম লিখুন বা বেছে নিন" />
+                <datalist id="veku-owners">{(vekuOwnersQ.data ?? []).map((s) => <option key={s.id} value={s.name} />)}</datalist>
+                {vekuStatus && (
+                  <p className={`text-xs font-semibold ${vekuStatus.due > 0 ? "text-destructive" : vekuStatus.due < 0 ? "text-success" : "text-muted-foreground"}`}>
+                    এখন পর্যন্ত: মোট বিল ৳ {bn(vekuStatus.bill)}, দেওয়া ৳ {bn(vekuStatus.paid)} —{" "}
+                    {vekuStatus.due > 0 ? `বাকি ৳ ${bn(vekuStatus.due)}` : vekuStatus.due < 0 ? `অগ্রিম দেওয়া আছে ৳ ${bn(-vekuStatus.due)}` : "পরিশোধিত"}
+                  </p>
+                )}
               </div>
+              {vekuMode === "work" && (<>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label>কত ঘণ্টা *</Label>
@@ -529,10 +575,11 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-md bg-background p-2">মোট বিল<br /><b>৳ {bn(vekuTotal)}</b></div>
-                <div className="rounded-md bg-background p-2">বাকি<br /><b className={vekuDue > 0 ? "text-destructive" : "text-success"}>৳ {bn(Math.max(vekuDue, 0))}</b></div>
+                <div className="rounded-md bg-background p-2">আজকের বিল<br /><b>৳ {bn(vekuTotal)}</b></div>
+                <div className="rounded-md bg-background p-2">আজকের বাকি<br /><b className={vekuDue > 0 ? "text-destructive" : "text-success"}>৳ {bn(Math.max(vekuDue, 0))}</b></div>
               </div>
-              <p className="text-[11px] text-muted-foreground">বাকি টাকা "মালামাল ক্রয় ও বাকি" পাতায় ভেকু মালিকের নামে জমা থাকবে।</p>
+              </>)}
+              <p className="text-[11px] text-muted-foreground">{vekuMode === "pay" ? "কাজ ছাড়া টাকা দিলে তা ভেকু মালিকের হিসাবে জমা হবে — আগের বকেয়া থেকে কাটবে, না থাকলে অগ্রিম হিসেবে থাকবে।" : "বাকি টাকা ভেকু মালিকের নামে জমা থাকবে; আগের অগ্রিম থাকলে তা থেকে সমন্বয় হবে।"}</p>
             </div>
           )}
 
@@ -546,7 +593,7 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label>{isVeku ? "আজ পরিশোধ" : "টাকা *"}</Label>
+              <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : "টাকা *"}</Label>
               <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
             </div>
             <div className="space-y-1">
