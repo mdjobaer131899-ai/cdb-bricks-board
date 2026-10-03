@@ -644,3 +644,40 @@ function DeleteDialog({ kind, id, label, onDone }: {
     </Dialog>
   );
 }
+
+function BookMarkCell({ initialPage, checked, lastPage, onSave }: {
+  initialPage: number | null; checked: boolean; lastPage: number | null;
+  onSave: (page: number | null, checked: boolean) => void;
+}) {
+  const [val, setVal] = useState(initialPage ? String(initialPage) : "");
+  const shown = val || (!checked && lastPage ? String(lastPage) : "");
+  const toggle = () => {
+    if (checked) { onSave(val ? Number(val) : null, false); return; }
+    const p = Number(shown);
+    if (!p) { toast.error("আগে খাতার পৃষ্ঠা নম্বর লিখুন"); return; }
+    setVal(String(p));
+    onSave(p, true);
+  };
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      <Input
+        inputMode="numeric"
+        aria-label="খাতার পৃষ্ঠা"
+        placeholder="পৃষ্ঠা"
+        className="h-9 w-16 px-2 text-center"
+        value={shown}
+        onChange={(e) => setVal(e.target.value.replace(/[^0-9]/g, ""))}
+      />
+      <Button
+        type="button"
+        size="icon"
+        aria-label="খাতায় তোলা হয়েছে"
+        variant={checked ? "default" : "outline"}
+        className={`h-9 w-9 ${checked ? "bg-success text-success-foreground hover:bg-success/90" : ""}`}
+        onClick={toggle}
+      >
+        <Check className="h-5 w-5" />
+      </Button>
+    </div>
+  );
+}
