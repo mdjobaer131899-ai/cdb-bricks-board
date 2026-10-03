@@ -190,6 +190,33 @@ export type Database = {
           },
         ]
       }
+      book_marks: {
+        Row: {
+          checked: boolean
+          created_at: string
+          entry_key: string
+          page: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          checked?: boolean
+          created_at?: string
+          entry_key: string
+          page?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          checked?: boolean
+          created_at?: string
+          entry_key?: string
+          page?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       brick_types: {
         Row: {
           created_at: string
