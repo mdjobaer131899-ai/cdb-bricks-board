@@ -214,6 +214,7 @@ function CashBookPage() {
           <TabsTrigger value="history">সব আয়-ব্যয় হিস্টোরি</TabsTrigger>
           <TabsTrigger value="expense">ব্যয় তালিকা</TabsTrigger>
           <TabsTrigger value="income">আয় তালিকা</TabsTrigger>
+          <TabsTrigger value="allexp">সব ব্যয় (তারিখ ক্রমে)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="history">
@@ -407,8 +408,81 @@ function CashBookPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="allexp">
+          <AllExpenseList rows={(history.data ?? []).filter((r) => r.dir === "out")} loading={history.isLoading} />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function AllExpenseList({ rows, loading }: { rows: Array<{ id: string; date: string; head: string; detail: string; amount: number }>; loading: boolean }) {
+  const [asc, setAsc] = useState(true);
+  const [onlyOld, setOnlyOld] = useState(false);
+  const list = useMemo(() => {
+    const f = onlyOld ? rows.filter((r) => r.head === "পূর্বের দায় পরিশোধ") : rows;
+    return [...f].sort((a, b) => {
+      const pa = a.head === "পূর্বের দায় পরিশোধ" ? 0 : 1, pb = b.head === "পূর্বের দায় পরিশোধ" ? 0 : 1;
+      const d = a.date < b.date ? -1 : a.date > b.date ? 1 : pa - pb;
+      return asc ? d : -d;
+    });
+  }, [rows, asc, onlyOld]);
+  const oldTotal = rows.filter((r) => r.head === "পূর্বের দায় পরিশোধ").reduce((a, b) => a + b.amount, 0);
+  const all = rows.reduce((a, b) => a + b.amount, 0);
+  let run = 0;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">সব ব্যয়ের তালিকা — তারিখের সিরিয়াল অনুযায়ী</CardTitle>
+        <CardDescription>পুরোনো বকেয়া পরিশোধ, সরদার, শ্রমিক, বেতন, মালামাল, ঋণ, মালিক উত্তোলন ও সব খরচ</CardDescription>
+        <div className="flex flex-wrap gap-2 pt-2 text-sm">
+          <span className="rounded-md border px-2 py-1">পুরোনো বকেয়া পরিশোধ: <b>৳ {bn(oldTotal)}</b></span>
+          <span className="rounded-md border px-2 py-1">চলতি খরচ: <b>৳ {bn(all - oldTotal)}</b></span>
+          <span className="rounded-md border px-2 py-1">মোট ব্যয়: <b>৳ {bn(all)}</b></span>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-2 print:hidden">
+          <Button size="sm" variant="outline" onClick={() => setAsc((s) => !s)}>{asc ? "পুরনো থেকে নতুন" : "নতুন থেকে পুরনো"}</Button>
+          <Button size="sm" variant={onlyOld ? "default" : "outline"} onClick={() => setOnlyOld((s) => !s)}>শুধু পুরোনো বকেয়া পরিশোধ</Button>
+          <Button size="sm" variant="outline" onClick={() => window.print()}>প্রিন্ট</Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ক্রম</TableHead>
+                <TableHead>তারিখ</TableHead>
+                <TableHead>নাম</TableHead>
+                <TableHead>খাত</TableHead>
+                <TableHead className="text-right">টাকা</TableHead>
+                <TableHead className="text-right">মোট (চলমান)</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={6}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+              ) : list.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">কোনো ব্যয় নেই</TableCell></TableRow>
+              ) : list.map((r, i) => {
+                run += r.amount;
+                return (
+                  <TableRow key={r.id} className={r.head === "পূর্বের দায় পরিশোধ" ? "bg-warning/10" : ""}>
+                    <TableCell>{bn(i + 1)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{bnDate(r.date)}</TableCell>
+                    <TableCell className="font-semibold">{r.detail && r.detail !== "—" ? r.detail : "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{r.head}</TableCell>
+                    <TableCell className="text-right font-bold text-destructive whitespace-nowrap">৳ {bn(r.amount)}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">৳ {bn(run)}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
