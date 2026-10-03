@@ -492,29 +492,38 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
         qc.invalidateQueries({ queryKey: ["veku-status"] });
       } else if (isMat) {
         const name = matSupplier.trim();
-        const itemName = item.trim();
-        if (!itemName) throw new Error("কী কেনা হলো লিখুন");
-        if (!name) throw new Error("সাপ্লায়ার / দোকানের নাম লিখুন");
-        const bill = Number(matBill) > 0 ? Number(matBill) : amt;
-        if (!(bill > 0)) throw new Error("বিল বা টাকা লিখুন");
-        const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
-        let supId = ex?.id as string | undefined;
-        if (!supId) {
-          const { data, error } = await supabase.from("suppliers").insert({ name, material_type: itemName }).select("id").single();
-          if (error) throw error;
-          supId = data.id;
-        }
-        const qty = Number(matQty) > 0 ? Number(matQty) : 1;
-        const { error } = await supabase.from("purchases").insert({
-          purchase_date: date, supplier_id: supId, item_name: itemName, quantity: qty, unit: matUnit.trim() || null,
-          unit_price: bill / qty, total_amount: bill, note: n, created_by: me!.user.id,
-        });
-        if (error) throw error;
-        if (amt > 0) {
-          const { error: e2 } = await supabase.from("supplier_payments").insert({
-            supplier_id: supId, amount: amt, payment_date: date, note: `${itemName} — পরিশোধ${n ? ` (${n})` : ""}`, created_by: me!.user.id,
-          });
-          if (e2) throw e2;
+        const isRaw = head === "কাঁচামাল";
+        const itemName = isRaw ? (rawKind === "অন্য" ? item.trim() : rawKind) : item.trim();
+        if (!itemName) throw new Error(isRaw ? "কাঁচামাল বাছাই করুন" : "কী কেনা হলো লিখুন");
+        const qty = isRaw ? Number(matQty) || 0 : 1;
+        const bill = isRaw ? rawBill : amt + (matDueOn ? Number(matDue) || 0 : 0);
+        if (!(bill > 0) && !(amt > 0)) throw new Error("পরিমাণ/রেট বা টাকা লিখুন");
+        if (!isRaw && !name && !matDueOn) {
+          await createFn({ data: { category: `${head} — ${itemName}`, amount: amt, expense_date: date, note: n } });
+        } else {
+          if (!name) throw new Error(isRaw && rawKind === "মাটি" ? "সাইটের নাম লিখুন" : "সাপ্লায়ার / দোকানের নাম লিখুন");
+          const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
+          let supId = ex?.id as string | undefined;
+          if (!supId) {
+            const { data, error } = await supabase.from("suppliers").insert({ name, material_type: itemName }).select("id").single();
+            if (error) throw error;
+            supId = data.id;
+          }
+          if (bill > 0) {
+            const q = qty > 0 ? qty : 1;
+            const { error } = await supabase.from("purchases").insert({
+              purchase_date: date, supplier_id: supId, item_name: itemName, quantity: q, unit: isRaw ? rawUnit : null,
+              unit_price: bill / q, total_amount: bill, note: n, created_by: me!.user.id,
+            });
+            if (error) throw error;
+          }
+          if (amt > 0) {
+            const { error: e2 } = await supabase.from("supplier_payments").insert({
+              supplier_id: supId, amount: amt, payment_date: date,
+              note: `${itemName} — ${bill > 0 ? "পরিশোধ" : "অগ্রিম/বকেয়া পরিশোধ"}${n ? ` (${n})` : ""}`, created_by: me!.user.id,
+            });
+            if (e2) throw e2;
+          }
         }
         qc.invalidateQueries({ queryKey: ["purchases"] });
         qc.invalidateQueries({ queryKey: ["supplier-payments"] });
