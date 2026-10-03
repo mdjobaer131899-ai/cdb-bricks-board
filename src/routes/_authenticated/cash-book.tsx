@@ -248,7 +248,7 @@ function CashBookPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">ব্যয় এন্ট্রি</CardTitle>
-              <CardDescription>সর্বশেষ ৩০০টি এন্ট্রি (চলতি মৌসুম)</CardDescription>
+              <CardDescription>ওপরে বাছাই করা তারিখের সব ব্যয়</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
