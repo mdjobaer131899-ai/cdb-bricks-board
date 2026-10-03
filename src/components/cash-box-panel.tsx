@@ -365,6 +365,19 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   const isDaily = head === "ডেলি";
   const isStaff = head === "মেস্তুরি ও ম্যানেজার";
   const isVeku = head === "ভেকু";
+  const isMat = head === "কাঁচামাল" || head === "যন্ত্রাংশ / মালামাল";
+  const [matSupplier, setMatSupplier] = useState("");
+  const [matQty, setMatQty] = useState("");
+  const [matUnit, setMatUnit] = useState("");
+  const [matBill, setMatBill] = useState("");
+  const suppliersQ = useQuery({
+    queryKey: ["suppliers-min"],
+    enabled: open && isMat,
+    queryFn: async () => {
+      const { data } = await supabase.from("suppliers").select("id, name").order("name");
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
   const vekuTotal = vekuMode === "work" ? (Number(hours) || 0) * (Number(rate) || 0) : 0;
   const vekuDue = vekuTotal - (Number(amount) || 0);
 
@@ -424,6 +437,7 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   function reset() {
     setHead(""); setItem(""); setAmount(""); setNote(""); setPersonId("");
     setSardarType("payment"); setHours(""); setRate(""); setVekuOwner(""); setVekuMode("pay");
+    setMatSupplier(""); setMatQty(""); setMatUnit(""); setMatBill("");
   }
 
   const createFn = useServerFn(createExpense);
@@ -433,7 +447,7 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     e.preventDefault();
     const amt = Number(amount || 0);
     if (!head) return toast.error("খাত নির্বাচন করুন");
-    if (!isVeku && (!Number.isFinite(amt) || amt <= 0)) return toast.error("টাকার পরিমাণ সঠিক নয়");
+    if (!isVeku && !isMat && (!Number.isFinite(amt) || amt <= 0)) return toast.error("টাকার পরিমাণ সঠিক নয়");
     setBusy(true);
     try {
       const n = note.trim() || null;
@@ -476,12 +490,42 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
         qc.invalidateQueries({ queryKey: ["purchases"] });
         qc.invalidateQueries({ queryKey: ["supplier-payments"] });
         qc.invalidateQueries({ queryKey: ["veku-status"] });
+      } else if (isMat) {
+        const name = matSupplier.trim();
+        const itemName = item.trim();
+        if (!itemName) throw new Error("কী কেনা হলো লিখুন");
+        if (!name) throw new Error("সাপ্লায়ার / দোকানের নাম লিখুন");
+        const bill = Number(matBill) > 0 ? Number(matBill) : amt;
+        if (!(bill > 0)) throw new Error("বিল বা টাকা লিখুন");
+        const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
+        let supId = ex?.id as string | undefined;
+        if (!supId) {
+          const { data, error } = await supabase.from("suppliers").insert({ name, material_type: itemName }).select("id").single();
+          if (error) throw error;
+          supId = data.id;
+        }
+        const qty = Number(matQty) > 0 ? Number(matQty) : 1;
+        const { error } = await supabase.from("purchases").insert({
+          purchase_date: date, supplier_id: supId, item_name: itemName, quantity: qty, unit: matUnit.trim() || null,
+          unit_price: bill / qty, total_amount: bill, note: n, created_by: me!.user.id,
+        });
+        if (error) throw error;
+        if (amt > 0) {
+          const { error: e2 } = await supabase.from("supplier_payments").insert({
+            supplier_id: supId, amount: amt, payment_date: date, note: `${itemName} — পরিশোধ${n ? ` (${n})` : ""}`, created_by: me!.user.id,
+          });
+          if (e2) throw e2;
+        }
+        qc.invalidateQueries({ queryKey: ["purchases"] });
+        qc.invalidateQueries({ queryKey: ["supplier-payments"] });
+        qc.invalidateQueries({ queryKey: ["suppliers"] });
       } else {
         const sub = item.trim();
         if (head === "আনুষাঙ্গিক" && !sub) throw new Error("খরচের বিবরণ লিখুন");
         const category = sub ? `${head} — ${sub}` : head;
         await createFn({ data: { category, amount: amt, expense_date: date, note: n } });
       }
+      qc.invalidateQueries();
       toast.success("ব্যয় যোগ হয়েছে");
       setOpen(false); reset(); onDone();
     } catch (err) {
@@ -588,12 +632,25 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
               <Label>{head === "আনুষাঙ্গিক" ? "খরচের বিবরণ *" : "কী কেনা হলো (নিজে লিখুন বা বেছে নিন)"}</Label>
               <Input list="exp-items" value={item} onChange={(e) => setItem(e.target.value)} placeholder="যেমন: কয়লা / ডিজেল / চা-নাস্তা" />
               <datalist id="exp-items">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
+              {isMat && (
+                <div className="mt-2 space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+                  <Label>সাপ্লায়ার / দোকানের নাম *</Label>
+                  <Input list="mat-sups" value={matSupplier} onChange={(e) => setMatSupplier(e.target.value)} placeholder="নাম লিখুন বা বেছে নিন" />
+                  <datalist id="mat-sups">{(suppliersQ.data ?? []).map((s) => <option key={s.id} value={s.name} />)}</datalist>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-xs">পরিমাণ</Label><Input type="number" value={matQty} onChange={(e) => setMatQty(e.target.value)} placeholder="১" /></div>
+                    <div><Label className="text-xs">একক</Label><Input value={matUnit} onChange={(e) => setMatUnit(e.target.value)} placeholder="টন/গাড়ি" /></div>
+                    <div><Label className="text-xs">মোট বিল</Label><Input type="number" value={matBill} onChange={(e) => setMatBill(e.target.value)} placeholder="= দেওয়া টাকা" /></div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">এটি সরাসরি "মালামাল ও সাপ্লায়ার" পাতায় উঠবে। বিল বেশি আর টাকা কম দিলে বাকিটা সাপ্লায়ারের নামে বাকি থাকবে।</p>
+                </div>
+              )}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : "টাকা *"}</Label>
+              <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : isMat ? "আজ নগদ দিলেন" : "টাকা *"}</Label>
               <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
             </div>
             <div className="space-y-1">

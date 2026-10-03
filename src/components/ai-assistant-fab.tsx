@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Bot, Send, Sparkles, X, Loader2 } from "lucide-react";
+import { Bot, Send, Sparkles, X, Loader2, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,6 +30,10 @@ function activeToolLabel(m: UIMessage): string | null {
         searchCustomers: "গ্রাহক খুঁজছি…",
         listBrickTypes: "ইটের তালিকা দেখছি…",
         listAvailableData: "তথ্য খুঁজছি…",
+        findPeople: "নাম খুঁজছি…",
+        recordPayment: "টাকা দেওয়ার এন্ট্রি করছি…",
+        recordMaterialPurchase: "মালামাল এন্ট্রি করছি…",
+        recordCollection: "টাকা পাওয়ার এন্ট্রি করছি…",
       };
       return map[name] ?? `${name}…`;
     }
@@ -89,6 +93,25 @@ export function AiAssistantFab() {
     if (open) setTimeout(() => taRef.current?.focus(), 50);
   }, [open]);
 
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<any>(null);
+  const toggleMic = () => {
+    if (listening) { recRef.current?.stop(); return; }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert("এই ব্রাউজারে ভয়েস চলে না — Chrome ব্যবহার করুন।"); return; }
+    const rec = new SR();
+    rec.lang = "bn-BD"; rec.interimResults = true; rec.continuous = false;
+    const base = input ? input.trim() + " " : "";
+    rec.onresult = (e: any) => {
+      let t = "";
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      setInput(base + t);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec; setListening(true); rec.start();
+  };
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || busy) return;
@@ -145,6 +168,7 @@ export function AiAssistantFab() {
                     "আজকের মোট বিক্রি কত?",
                     "এই সপ্তাহে সবচেয়ে বেশি বিক্রি কোন ইট?",
                     "রহিম ট্রেডার্স এর বকেয়া কত?",
+                    "আজ হাতে নগদ কত?",
                   ].map((s) => (
                     <button
                       key={s}
@@ -213,11 +237,14 @@ export function AiAssistantFab() {
                     void handleSend();
                   }
                 }}
-                placeholder="আপনার প্রশ্ন লিখুন…"
+                placeholder={listening ? "বলুন… শুনছি" : "লিখুন বা মাইকে বলুন — যেমন: করিম সরদারকে ৫০০০ টাকা দিলাম"}
                 rows={1}
                 className="min-h-[40px] max-h-[120px] resize-none text-sm"
                 disabled={!token}
               />
+              <Button type="button" size="icon" variant={listening ? "destructive" : "outline"} onClick={toggleMic} className="h-10 w-10 shrink-0" aria-label="বাংলায় বলুন">
+                {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </Button>
               {busy ? (
                 <Button size="icon" variant="outline" onClick={() => stop()} className="h-10 w-10 shrink-0">
                   <X className="h-4 w-4" />

@@ -62,13 +62,33 @@ function IncomeExpensePage() {
           <Button variant="outline" onClick={print}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button>
         </div>
       </div>
-      {q.isLoading ? <Skeleton className="h-24" /> : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <StatCard label="মোট আয়" value={`৳ ${bn(d?.income ?? 0)}`} icon={TrendingUp} tone="success" />
-          <StatCard label="মোট ব্যয়" value={`৳ ${bn(d?.expense ?? 0)}`} icon={TrendingDown} tone="destructive" />
-          <StatCard label="হাতে নগদ" value={`৳ ${bn(d?.net ?? 0)}`} icon={Wallet} tone="primary" />
-        </div>
-      )}
+      {q.isLoading ? <Skeleton className="h-24" /> : (() => {
+        const b = (d?.breakdown ?? {}) as Record<string, number>;
+        const running = ["expenses", "sardar", "worker", "supplier", "vehicle"].reduce((a, k) => a + Number(b[k] ?? 0), 0);
+        const old = Number(b.openingPaid ?? 0);
+        const other = Number(d?.expense ?? 0) - running - old;
+        const sales = Number((d?.incomeBreakdown as any)?.sales ?? 0);
+        return (
+          <>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <StatCard label="মোট আয়" value={`৳ ${bn(d?.income ?? 0)}`} icon={TrendingUp} tone="success" />
+              <StatCard label="মোট ব্যয়" value={`৳ ${bn(d?.expense ?? 0)}`} icon={TrendingDown} tone="destructive" />
+              <StatCard label="হাতে নগদ" value={`৳ ${bn(d?.net ?? 0)}`} icon={Wallet} tone="primary" />
+            </div>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">খরচ কোথায় গেল — সহজ হিসাব</CardTitle></CardHeader>
+              <CardContent className="grid gap-2 text-sm sm:grid-cols-3">
+                <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">এই সিজনের চলতি খরচ</div><b className="text-lg">৳ {bn(running)}</b></div>
+                <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">পুরোনো বকেয়া পরিশোধ (লাভ-ক্ষতির বাইরে)</div><b className="text-lg">৳ {bn(old)}</b></div>
+                <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">মালিক উত্তোলন / ঋণ</div><b className="text-lg">৳ {bn(Math.max(other, 0))}</b></div>
+                <div className="rounded-lg border bg-muted p-3 sm:col-span-3">
+                  এই সিজনের লাভ-ক্ষতি (ইট বিক্রি − চলতি খরচ): <b className={sales - running >= 0 ? "text-success" : "text-destructive"}>৳ {bn(Math.abs(sales - running))} {sales - running >= 0 ? "লাভ" : "ক্ষতি"}</b>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        );
+      })()}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base text-success">আয়</CardTitle></CardHeader>

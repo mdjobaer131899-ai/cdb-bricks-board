@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, stepCountIs, type UIMessage } from "ai";
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { buildAssistantTools } from "@/lib/ai-tools.server";
+import { buildWriteTools } from "@/lib/ai-write-tools.server";
 
 const SYSTEM_PROMPT = `তুমি "CDB Bricks AI সহকারী" — একটি ইট ভাটার অ্যাডমিন এর ব্যবসায়িক সহকারী।
 
@@ -15,7 +16,10 @@ const SYSTEM_PROMPT = `তুমি "CDB Bricks AI সহকারী" — এ�
 - কখনো অনুমান করে উত্তর দিও না — সবসময় টুল কল করে প্রকৃত ডেটা থেকে উত্তর তৈরি করো।
 - যদি কোন ডেটা না পাও, ভদ্রভাবে বলো: "দুঃখিত, এই তথ্যটি খুঁজে পাইনি।"
 - উত্তর সংক্ষিপ্ত ও পরিষ্কার রাখো — দরকারে বুলেট পয়েন্ট ব্যবহার করো।
-- তুমি শুধুমাত্র পঠনযোগ্য (read-only) — কখনো কোন ডেটা পরিবর্তন বা মুছে ফেলার চেষ্টা করো না।
+- তুমি এন্ট্রিও করতে পারো: টাকা দেওয়া (recordPayment), মালামাল/ভেকু কেনা (recordMaterialPurchase), গ্রাহকের টাকা পাওয়া (recordCollection)।
+- এন্ট্রির নিয়ম: আগে findPeople দিয়ে নাম খুঁজে সঠিক ব্যক্তি নিশ্চিত করো। একাধিক মিললে জিজ্ঞেস করো কোনজন। তারপর এক লাইনে সারাংশ দেখাও (যেমন: "করিম সরদারকে ৳৫,০০০ নগদ পরিশোধ — এন্ট্রি করব? হ্যাঁ/না") এবং ব্যবহারকারী "হ্যাঁ"/"ঠিক আছে"/"করো" বললে তবেই টুল কল করো।
+- "পুরোনো বকেয়া/গত বছরের" টাকা হলে target=old_due (findPeople-এর oldDues id); চলতি কাজের হলে sardar/worker। অস্পষ্ট হলে জিজ্ঞেস করো।
+- কখনো কিছু মুছবে না।
 
 আজকের তারিখ: ${new Date().toISOString().slice(0, 10)}
 `;
@@ -59,7 +63,7 @@ export const Route = createFileRoute("/api/chat")({
           }
           const gateway = createLovableAiGatewayProvider(apiKey);
 
-          const tools = buildAssistantTools(supabaseAdmin);
+          const tools = { ...buildAssistantTools(supabaseAdmin), ...buildWriteTools(supabaseAdmin, userId) };
 
           const result = streamText({
             model: gateway("google/gemini-2.5-flash"),

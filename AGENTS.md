@@ -2,3 +2,6 @@
 - Hand-cash/income-expense totals all come from fetchCashSummary in src/lib/cash-queries.ts; any new money table must be added there. Why: one consistent account across dashboard and reports.
 - Staff (daily workers, mestri, managers) share the workers table by role; daily pay = present days × daily_wage, salaried pay = months since join × monthly_salary. Why: reuse one payment ledger.
 - Global React Query defaults (staleTime 60s, no refetch on focus) and router preload 'intent' live in src/router.tsx; mutations must invalidateQueries to refresh. Why: instant page switching.
+- AI assistant write tools live in src/lib/ai-write-tools.server.ts and must only run after the user confirms in chat; they insert into the same tables the pages use. Why: AI entries must appear everywhere like manual ones.
+- Material/parts expenses go to purchases + supplier_payments (not expenses). Why: they must show on the supplier/material page.
+- Navigation: sidebar on tablet (md), top dropdown menubar on desktop (lg+), big NavGrid on dashboard for phone/tablet; all read NAV_GROUPS. Why: one menu source.
