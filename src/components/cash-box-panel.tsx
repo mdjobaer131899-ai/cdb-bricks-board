@@ -632,12 +632,25 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
               <Label>{head === "আনুষাঙ্গিক" ? "খরচের বিবরণ *" : "কী কেনা হলো (নিজে লিখুন বা বেছে নিন)"}</Label>
               <Input list="exp-items" value={item} onChange={(e) => setItem(e.target.value)} placeholder="যেমন: কয়লা / ডিজেল / চা-নাস্তা" />
               <datalist id="exp-items">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
+              {isMat && (
+                <div className="mt-2 space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+                  <Label>সাপ্লায়ার / দোকানের নাম *</Label>
+                  <Input list="mat-sups" value={matSupplier} onChange={(e) => setMatSupplier(e.target.value)} placeholder="নাম লিখুন বা বেছে নিন" />
+                  <datalist id="mat-sups">{(suppliersQ.data ?? []).map((s) => <option key={s.id} value={s.name} />)}</datalist>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div><Label className="text-xs">পরিমাণ</Label><Input type="number" value={matQty} onChange={(e) => setMatQty(e.target.value)} placeholder="১" /></div>
+                    <div><Label className="text-xs">একক</Label><Input value={matUnit} onChange={(e) => setMatUnit(e.target.value)} placeholder="টন/গাড়ি" /></div>
+                    <div><Label className="text-xs">মোট বিল</Label><Input type="number" value={matBill} onChange={(e) => setMatBill(e.target.value)} placeholder="= দেওয়া টাকা" /></div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">এটি সরাসরি "মালামাল ও সাপ্লায়ার" পাতায় উঠবে। বিল বেশি আর টাকা কম দিলে বাকিটা সাপ্লায়ারের নামে বাকি থাকবে।</p>
+                </div>
+              )}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : "টাকা *"}</Label>
+              <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : isMat ? "আজ নগদ দিলেন" : "টাকা *"}</Label>
               <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
             </div>
             <div className="space-y-1">
