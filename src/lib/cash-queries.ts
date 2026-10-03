@@ -204,7 +204,7 @@ export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHis
     applyRange(sdb.from("owner_transactions").select("id, amount, txn_date, txn_type, note, owner:owners(name)"), "txn_date", filter),
     applyRange(sdb.from("loans").select("id, amount, loan_date, direction, party_name"), "loan_date", filter),
     applyRange(sdb.from("loan_payments").select("id, amount, payment_date, loan:loans(direction, party_name)"), "payment_date", filter),
-    applyRange(sdb.from("opening_payments").select("id, amount, payment_date, ob:opening_balances(kind, party_name)"), "payment_date", filter),
+    applyRange(sdb.from("opening_payments").select("id, amount, payment_date, ob:opening_balances(kind, party_name, sardar:sardars(name), worker:workers(name), customer:customers(name))"), "payment_date", filter),
   ]);
   for (const r of [col, exp, sar, wrk, sup, own, loans, lpay, opay]) if (r.error) throw r.error;
   const A = (x: any) => (x.data ?? []) as any[];
@@ -219,7 +219,7 @@ export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHis
     ...A(lpay).map((r) => ({ id: `lp${r.id}`, date: r.payment_date, dir: r.loan?.direction === "given" ? ("in" as const) : ("out" as const), head: r.loan?.direction === "given" ? "দেওয়া ঋণ ফেরত" : "নেওয়া ঋণ পরিশোধ", detail: r.loan?.party_name ?? "—", amount: Number(r.amount) })),
     ...A(opay).filter((r) => r.ob?.kind !== "customer_brick_due").map((r) => {
       const isIn = r.ob?.kind === "customer_receivable";
-      return { id: `op${r.id}`, date: r.payment_date, dir: isIn ? ("in" as const) : ("out" as const), head: isIn ? "গত বছরের পাওনা আদায়" : "পূর্বের দায় পরিশোধ", detail: r.ob?.party_name ?? "—", amount: Number(r.amount) };
+      return { id: `op${r.id}`, date: r.payment_date, dir: isIn ? ("in" as const) : ("out" as const), head: isIn ? "গত বছরের পাওনা আদায়" : "পূর্বের দায় পরিশোধ", detail: (r.ob as any)?.sardar?.name ?? (r.ob as any)?.worker?.name ?? (r.ob as any)?.customer?.name ?? r.ob?.party_name ?? "—", amount: Number(r.amount) };
     }),
   ];
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
