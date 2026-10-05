@@ -179,7 +179,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       rightCols: [2, 3, 4, 5],
       rows: (workersQ.data ?? []).map((w) => {
         const s = stats.get(w.id)!;
-        return [w.name, ROLE_LABEL[w.role] ?? w.role, bn(mode === "daily" ? s.days : monthsSince(w.join_date)), `৳ ${bn(s.earned)}`, `৳ ${bn(s.paid)}`, `৳ ${bn(s.due)}`];
+        return [w.name, ROLE_LABEL[w.role] ?? w.role, mode === "daily" ? fmtDays(s) : `${bn(s.days)} দিন${s.absent ? ` (অনুপস্থিত ${bn(s.absent)})` : ""}`, `৳ ${bn(s.earned)}`, `৳ ${bn(s.paid)}`, `৳ ${bn(s.due)}`];
       }),
       totals: [["মোট পাওনা", `৳ ${bn(tot.earned)}`], ["মোট পরিশোধ", `৳ ${bn(tot.paid)}`], ["মোট বাকি", `৳ ${bn(tot.due)}`]],
     });
@@ -202,7 +202,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold md:text-2xl">{mode === "daily" ? "ডেলি শ্রমিক" : "মেস্তুরি ও ম্যানেজার বেতন"}</h1>
-          <p className="text-sm text-muted-foreground">{mode === "daily" ? "দৈনিক হাজিরা × মজুরি = পাওনা; কত নিল ও কত বাকি" : "নির্দিষ্ট মাসিক টাকা; কত নিল ও কত বাকি"}</p>
+          <p className="text-sm text-muted-foreground">{mode === "daily" ? "দৈনিক হাজিরা × মজুরি = পাওনা (হাফ দিন = অর্ধেক মজুরি)" : "প্রতিদিন মাসিক বেতন ÷ ৩০ টাকা যোগ হয়; অনুপস্থিত দিনের টাকা বাদ"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={printAll}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button>
@@ -239,12 +239,13 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                       <button className="font-medium text-primary hover:underline" onClick={() => setDetail(w)}>{w.name}</button>
                       <div className="text-xs text-muted-foreground">{ROLE_LABEL[w.role] ?? w.role} • {mode === "daily" ? `দৈনিক ৳ ${bn(w.daily_wage)}` : `মাসিক ৳ ${bn(w.monthly_salary)}`}</div>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{mode === "daily" ? `${bn(s.days)} দিন` : `${bn(monthsSince(w.join_date))} মাস`}</TableCell>
+                    <TableCell className="text-right tabular-nums">{mode === "daily" ? fmtDays(s) : <>{bn(s.days)} দিন{s.absent > 0 && <div className="text-xs text-destructive">অনুপস্থিত {bn(s.absent)} দিন</div>}</>}</TableCell>
                     <TableCell className="text-right tabular-nums">৳ {bn(s.earned)}</TableCell>
                     <TableCell className="text-right tabular-nums text-success">৳ {bn(s.paid)}</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums text-warning">৳ {bn(s.due)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <Button size="sm" variant="outline" onClick={() => setPDlg({ worker_id: w.id, amount: "", date: today, note: "" })}>টাকা দিন</Button>
+                      {mode === "salary" && <Button size="sm" variant="ghost" className="ml-1" onClick={() => setAbsDlg({ worker_id: w.id, date: today, half: false, note: "" })}>ছুটি/অনুপস্থিত</Button>}
                       {isAdmin && <>
                         <Button size="sm" variant="ghost" onClick={() => setWDlg({ id: w.id, name: w.name, phone: w.phone ?? "", role: w.role, wage: String(mode === "daily" ? w.daily_wage : w.monthly_salary), join_date: w.join_date ?? today })}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => confirm(`"${w.name}" মুছবেন?`) && delW.mutate(w.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
@@ -327,11 +328,14 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                 <label key={w.id} className="flex items-center gap-3 rounded-lg border p-2">
                   <Checkbox checked={present.has(w.id)} onCheckedChange={(c) => { const n = new Set(present); c ? n.add(w.id) : n.delete(w.id); setPresent(n); }} />
                   <span className="flex-1">{w.name}</span>
-                  <span className="text-xs text-muted-foreground">৳ {bn(w.daily_wage)}</span>
+                  <span onClick={(e) => e.preventDefault()} className="flex items-center gap-1 text-xs">
+                    <Checkbox checked={half.has(w.id)} onCheckedChange={(c) => { const n = new Set(half); c ? n.add(w.id) : n.delete(w.id); setHalf(n); if (c) setPresent(new Set(present).add(w.id)); }} /> হাফ
+                  </span>
+                  <span className="text-xs text-muted-foreground">৳ {bn(present.has(w.id) && half.has(w.id) ? Number(w.daily_wage || 0) / 2 : w.daily_wage)}</span>
                 </label>
               ))}
             </div>
-            <p className="text-sm">উপস্থিত {bn(present.size)} জন • আজকের মজুরি ৳ {bn((workersQ.data ?? []).filter((w) => present.has(w.id)).reduce((a, w) => a + Number(w.daily_wage || 0), 0))}</p>
+            <p className="text-sm">উপস্থিত {bn(present.size)} জন{half.size ? ` (হাফ ${bn([...half].filter((id) => present.has(id)).length)})` : ""} • আজকের মজুরি ৳ {bn((workersQ.data ?? []).filter((w) => present.has(w.id)).reduce((a, w) => a + Number(w.daily_wage || 0) * (half.has(w.id) ? 0.5 : 1), 0))}</p>
           </div>
           <DialogFooter><Button onClick={() => saveAtt.mutate()} disabled={saveAtt.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
