@@ -36,7 +36,7 @@ type SardarForm = { id?: string; name: string; phone: string; address: string; g
 const NO_GROUP = "__none__";
 const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "", monthly_salary: "", join_date: new Date().toISOString().slice(0, 10) };
 const KINDS: Record<string, string> = { mill: "মিল (কাঁচা ইট)", load: "লোড (ঢোকানো)", unload: "আনলোড (বের করা)", burn: "পুড়াই মেস্তুরি (মাসিক বেতন)" };
-const monthsSince = (d?: string | null) => { if (!d) return 0; const a = new Date(d), b = new Date(); const m = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + (b.getDate() >= a.getDate() ? 1 : 0); return Math.max(0, m); };
+const monthsSince = (d?: string | null) => accruedMonths(d);
 type GroupForm = { id?: string; name: string; note: string };
 const emptyGroup: GroupForm = { name: "", note: "" };
 
