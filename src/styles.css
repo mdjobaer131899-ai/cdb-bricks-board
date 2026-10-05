@@ -189,3 +189,136 @@ html {
     font-size: 0.9rem;
   }
 }
+/* =========================================================
+   CDB BRICKS - INDUSTRIAL COMMERCIAL ERP THEME OVERRIDES
+   ========================================================= */
+
+:root {
+  /* Deep Kiln Terracotta & Industrial Slate Palette */
+  --primary: 16 78% 38% !important;          /* গাঢ় পোড়া ইটের রঙ (#ae3a15) */
+  --primary-foreground: 0 0% 100% !important;
+  --background: 210 20% 97% !important;      /* করপোরেট স্টিল-হোয়াইট ব্যাকগ্রাউন্ড */
+  --card: 0 0% 100% !important;
+  --border: 214 22% 84% !important;          /* স্পষ্ট ও শার্প ইন্ডাস্ট্রিয়াল বর্ডার */
+  --radius: 0.5rem !important;               /* প্রফেশনাল শার্প এজ */
+}
+
+.dark {
+  --background: 222 47% 9% !important;
+  --card: 222 40% 13% !important;
+  --border: 217 25% 22% !important;
+}
+
+/* মেইন বডি ও ফন্ট শার্পনেস */
+body {
+  background-color: hsl(var(--background));
+  background-image: radial-gradient(#cbd5e1 0.6px, transparent 0.6px);
+  background-size: 18px 18px;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* সকল কার্ডকে ইন্ডাস্ট্রিয়াল স্টিল-ফ্রেম লুক দেওয়া */
+.rounded-xl, .rounded-2xl, [class*="Card"] {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  box-shadow: 0 2px 6px -1px rgba(15, 23, 42, 0.07), 0 1px 2px -1px rgba(15, 23, 42, 0.05) !important;
+}
+
+/* উপরের হেডার ও মেনুবারকে সলিড কমার্শিয়াল রূপ দেওয়া */
+header {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04) !important;
+}
+
+.dark header {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%) !important;
+  border-bottom: 2px solid #334155 !important;
+}
+
+/* টেবিল হেডারগুলোকে প্রফেশনাল একাউন্টিং লেজার লুক দেওয়া */
+thead tr, th {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* বাটনগুলোর কমার্শিয়াল গ্রেডিয়েন্ট */
+button.bg-orange-600, .bg-primary {
+  background: linear-gradient(135deg, #c2410c 0%, #9a3412 100%) !important;
+  border: 1px solid #7c2d12 !important;
+  box-shadow: 0 2px 4px rgba(154, 52, 18, 0.25) !important;
+  font-weight: 600 !important;
+}/* =========================================================
+   FIX CLIPPING & 50/50 INCOME-EXPENSE INDUSTRIAL CARDS
+   ========================================================= */
+
+/* ১. তারিখের বক্স (Date Input) যেন কখনো কেটে না যায় */
+input[type="date"] {
+  min-width: 0 !important;
+  width: 100% !important;
+  padding-right: 6px !important;
+  padding-left: 8px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  box-sizing: border-box !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  margin-left: 2px !important;
+  padding: 2px !important;
+  cursor: pointer;
+}
+
+/* ২. অ্যাক্টিভ বাটনে কালো লেখার বদলে উজ্জ্বল সাদা লেখা */
+.bg-primary, button.bg-primary, [class*="bg-orange-"] {
+  color: #ffffff !important;
+}
+
+/* ৩. মোট আয় ও মোট ব্যয় বক্স পাশাপাশি অর্ধেক (50% - 50%) এবং বড় করা */
+.grid.gap-3:has(> .bg-emerald-500\/10),
+.grid.gap-4:has(> .bg-emerald-500\/10),
+.grid:has(> [class*="emerald"]):has(> [class*="rose"]),
+.grid:has(> [class*="green"]):has(> [class*="red"]) {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+/* ৩য় বক্স (নিট ব্যালেন্স) যেন নিচে পুরো স্ক্রিন জুড়ে বড় থাকে */
+.grid:has(> [class*="emerald"]):has(> [class*="rose"]) > :nth-child(3),
+.grid:has(> [class*="green"]):has(> [class*="red"]) > :nth-child(3) {
+  grid-column: span 2 / span 2 !important;
+}/* =========================================================
+   TOP HEADER, HERO BANNER & BOTTOM NAV INDUSTRIAL POLISH
+   ========================================================= */
+
+/* ১. উপরের টপ বারের লোগো ও সিজন বাটনের মাঝখানে ফাঁকা জায়গা ও বর্ডার */
+header {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  gap: 8px !important;
+}
+
+/* ২. নিচের নেভিগেশন বারকে (Bottom Bar) সলিড ও স্পষ্ট করা */
+nav.fixed.bottom-0,
+footer.fixed.bottom-0,
+div.fixed.bottom-0 {
+  background: rgba(255, 255, 255, 0.96) !important;
+  backdrop-filter: blur(10px) !important;
+  border-top: 2px solid #cbd5e1 !important;
+  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.06) !important;
+}
+
+.dark nav.fixed.bottom-0,
+.dark div.fixed.bottom-0 {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border-top: 2px solid #334155 !important;
+}
+
+/* ৩. হোম পেজের মেইন ব্যানারে "সি ডি বি ব্রিকস" লেখা যেন ভেঙে না যায় */
+h1, h2 {
+  letter-spacing: -0.01em;
+}

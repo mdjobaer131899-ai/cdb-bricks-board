@@ -1,266 +1,385 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
-import { Bot, Send, Sparkles, X, Loader2, Mic, MicOff } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import React, { useState, useRef, useEffect } from "react";
+import { Mic, MicOff, Send, Sparkles, X, Printer, CheckCircle, Bot, User, Save, Loader2 } from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { processBrickFieldCommand, saveAiActionToDatabase } from "../services/gemini";
+import { toast } from "sonner";
 
-function getText(m: UIMessage): string {
-  return m.parts
-    .map((p) => (p.type === "text" ? p.text : ""))
-    .join("")
-    .trim();
+export const OPEN_AI_CHAT_EVENT = "open-ai-chat-drawer";
+
+interface Message {
+  role: "user" | "assistant";
+  text: string;
+  data?: any;
+  saved?: boolean;
+  challanNo?: string;
 }
-
-function activeToolLabel(m: UIMessage): string | null {
-  // Surface running tool name (Bengali label).
-  for (const p of [...m.parts].reverse()) {
-    const t = (p as { type?: string }).type ?? "";
-    if (t.startsWith("tool-") && !t.endsWith("-result")) {
-      const name = t.replace(/^tool-/, "").replace(/-result$/, "");
-      const map: Record<string, string> = {
-        resolveDateRange: "তারিখ নির্ধারণ করছি…",
-        getSalesSummary: "বিক্রির হিসাব দেখছি…",
-        getCustomerSummary: "গ্রাহকের তথ্য আনছি…",
-        getTopSellingBricks: "সবচেয়ে বেশি বিক্রি দেখছি…",
-        getCustomerDue: "বকেয়া হিসাব করছি…",
-        searchCustomers: "গ্রাহক খুঁজছি…",
-        listBrickTypes: "ইটের তালিকা দেখছি…",
-        listAvailableData: "তথ্য খুঁজছি…",
-        findPeople: "নাম খুঁজছি…",
-        recordPayment: "টাকা দেওয়ার এন্ট্রি করছি…",
-        recordMaterialPurchase: "মালামাল এন্ট্রি করছি…",
-        recordCollection: "টাকা পাওয়ার এন্ট্রি করছি…",
-      };
-      return map[name] ?? `${name}…`;
-    }
-  }
-  return null;
-}
-
-export const OPEN_AI_CHAT_EVENT = "cdb:open-ai-chat";
 
 export function AiAssistantFab() {
-  const [open, setOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
-  const [token, setToken] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [savingIdx, setSavingIdx] = useState<number | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "assistant",
+      text: "আসসালামু আলাইকুম! আমি CDB Bricks AI সহকারী। ভাটার যেকোনো হিসাব জানতে, নতুন চালান কাটতে বা জমা-খরচ খাতায় তুলতে আমাকে বাংলায় বলুন বা লিখুন।",
+    },
+  ]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
-    const handler = () => setOpen(true);
-    window.addEventListener(OPEN_AI_CHAT_EVENT, handler);
-    return () => window.removeEventListener(OPEN_AI_CHAT_EVENT, handler);
+    const handleOpenEvent = () => setIsOpen((prev) => !prev);
+    window.addEventListener(OPEN_AI_CHAT_EVENT, handleOpenEvent);
+    return () => window.removeEventListener(OPEN_AI_CHAT_EVENT, handleOpenEvent);
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setToken(data.session?.access_token ?? null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setToken(session?.access_token ?? null);
-    });
-    return () => sub.subscription.unsubscribe();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isOpen]);
+
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.lang = "bn-BD";
+      recognition.interimResults = false;
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+        setIsListening(false);
+        handleSend(transcript);
+      };
+
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+      recognitionRef.current = recognition;
+    }
   }, []);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        // Re-read session on every send so expired tokens auto-refresh.
-        headers: async (): Promise<Record<string, string>> => {
-          const { data } = await supabase.auth.getSession();
-          const t = data.session?.access_token;
-          return t ? { Authorization: `Bearer ${t}` } : {};
-        },
-      }),
-    [],
-  );
-
-  const { messages, sendMessage, status, error, stop } = useChat({
-    transport,
-    onError: (e) => console.error("AI chat error:", e),
-  });
-
-  const busy = status === "submitted" || status === "streaming";
-
-  useEffect(() => {
-    if (open) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, open, status]);
-
-  useEffect(() => {
-    if (open) setTimeout(() => taRef.current?.focus(), 50);
-  }, [open]);
-
-  const [listening, setListening] = useState(false);
-  const recRef = useRef<any>(null);
-  const toggleMic = () => {
-    if (listening) { recRef.current?.stop(); return; }
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { alert("এই ব্রাউজারে ভয়েস চলে না — Chrome ব্যবহার করুন।"); return; }
-    const rec = new SR();
-    rec.lang = "bn-BD"; rec.interimResults = true; rec.continuous = false;
-    const base = input ? input.trim() + " " : "";
-    rec.onresult = (e: any) => {
-      let t = "";
-      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
-      setInput(base + t);
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recRef.current = rec; setListening(true); rec.start();
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("ভয়েস টাইপিংয়ের জন্য আপনার মোবাইলের কিবোর্ডের মাইক বাটনটি ব্যবহার করুন।");
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      recognitionRef.current.start();
+    }
   };
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || busy) return;
+  const handleSend = async (customText?: string) => {
+    const textToSend = customText || input;
+    if (!textToSend.trim() || loading) return;
+
+    const userMsg: Message = { role: "user", text: textToSend };
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    await sendMessage({ text });
+    setLoading(true);
+
+    try {
+      const res = await processBrickFieldCommand(textToSend);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: res.reply || "তথ্য প্রক্রিয়া করা হয়েছে।",
+          data: res,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: "দুঃখিত, সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveEntry = async (idx: number, actionType: string, entryData: any) => {
+    setSavingIdx(idx);
+    try {
+      const res = await saveAiActionToDatabase(actionType, entryData);
+      toast.success("সফলভাবে খাতায় (Database-এ) সেভ হয়েছে!");
+      setMessages((prev) =>
+        prev.map((m, i) =>
+          i === idx ? { ...m, saved: true, challanNo: res.challanNo } : m
+        )
+      );
+    } catch (err: any) {
+      toast.error(`সেভ করতে সমস্যা: ${err.message}`);
+    } finally {
+      setSavingIdx(null);
+    }
+  };
+
+  const handlePrintChallan = (d: any, challanNo?: string) => {
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>চালান রসিদ - CDB Bricks</title>
+          <style>
+            body { font-family: sans-serif; padding: 30px; color: #111; }
+            .header { text-align: center; border-bottom: 2px solid #ea580c; padding-bottom: 12px; margin-bottom: 20px; }
+            .title { font-size: 26px; font-weight: bold; color: #ea580c; margin: 0; }
+            .sub { font-size: 14px; color: #555; margin-top: 4px; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+            th, td { border: 1px solid #ccc; padding: 10px; text-align: left; font-size: 15px; }
+            th { background: #fff7ed; }
+            .footer { margin-top: 50px; display: flex; justify-content: space-between; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 class="title">সি ডি বি ব্রিকস (CDB Bricks)</h1>
+            <div class="sub">কাপাসিয়া, গাজীপুর | ক্যাশ মেমো ও ডেলিভারি চালান</div>
+          </div>
+          <div class="row">
+            <div><b>চালান নং:</b> ${challanNo || "অটো"}</div>
+            <div><b>তারিখ:</b> ${new Date().toLocaleDateString("bn-BD")}</div>
+          </div>
+          <div class="row">
+            <div><b>ক্রেতার নাম:</b> ${d?.customerName || "নগদ ক্রেতা"}</div>
+            <div><b>গাড়ি নং:</b> ${d?.vehicleNumber || "N/A"}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>ইটের বিবরণ</th>
+                <th>পরিমাণ (পিস)</th>
+                <th>মোট টাকা</th>
+                <th>নগদ জমা</th>
+                <th>বাকি টাকা</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>${d?.brickType || "১ নম্বর ইট"}</td>
+                <td>${d?.quantity || 0} টি</td>
+                <td>৳${d?.totalAmount || 0}</td>
+                <td>৳${d?.paidAmount || 0}</td>
+                <td><b>৳${d?.dueAmount || 0}</b></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="footer">
+            <div>ক্রেতার স্বাক্ষর</div>
+            <div>ম্যানেজার / কর্তৃপক্ষের স্বাক্ষর</div>
+          </div>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   return (
     <>
-      {/* Floating Action Button */}
-      {!open && (
-        <button
-          aria-label="CDB Bricks AI Assistant"
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 hidden items-center gap-2 rounded-full bg-gradient-to-br from-primary to-primary/80 px-4 py-3 text-primary-foreground shadow-lg ring-1 ring-primary/30 transition-transform hover:scale-105 active:scale-95 md:flex"
-        >
-          <Sparkles className="h-4 w-4" />
-          <span className="text-sm font-medium">CDB AI সহকারী</span>
-        </button>
-      )}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="hidden md:flex fixed bottom-6 right-6 z-50 h-14 w-14 items-center justify-center rounded-full bg-orange-600 text-white shadow-xl hover:bg-orange-700 transition-all duration-300 focus:outline-none"
+        title="CDB AI সহকারী"
+      >
+        {isOpen ? <X className="h-6 w-6" /> : <Sparkles className="h-7 w-7 animate-pulse" />}
+      </button>
 
-      {/* Chat panel */}
-      {open && (
-        <div className="fixed inset-x-2 bottom-2 z-50 flex max-h-[85vh] flex-col rounded-2xl border bg-background shadow-2xl sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-[400px] sm:max-h-[600px]">
-          {/* Header */}
-          <div className="flex items-center justify-between gap-2 rounded-t-2xl border-b bg-gradient-to-r from-primary/10 to-primary/5 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <div className="grid h-8 w-8 place-items-center rounded-full bg-primary text-primary-foreground">
-                <Bot className="h-4 w-4" />
-              </div>
-              <div className="leading-tight">
-                <div className="text-sm font-semibold">CDB Bricks AI সহকারী</div>
-                <div className="text-[11px] text-muted-foreground">বাংলায় প্রশ্ন করুন</div>
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="h-8 w-8">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+      {isOpen && (
+        <>
+          <div
+            onClick={() => setIsOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[2px] transition-opacity"
+          />
 
-          {/* Messages */}
-          <ScrollArea className="flex-1 px-3 py-3">
-            {messages.length === 0 && (
-              <div className="space-y-3 px-1 py-6 text-center">
-                <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-primary/10">
-                  <Sparkles className="h-6 w-6 text-primary" />
+          <Card className="fixed bottom-20 md:bottom-24 right-3 left-3 md:left-auto md:right-6 z-50 md:w-[420px] h-[520px] flex flex-col shadow-2xl border-2 border-slate-800 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-5">
+            <CardHeader className="bg-gradient-to-r from-slate-900 via-[#3b150a] to-slate-900 text-white p-3.5 flex flex-row items-center justify-between space-y-0 border-b border-orange-500/30">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-orange-600/20 border border-orange-500/40 flex items-center justify-center">
+                  <Sparkles className="h-5 w-5 text-amber-400" />
                 </div>
-                <div className="text-sm font-medium">আসসালামু আলাইকুম! 👋</div>
-                <div className="text-xs text-muted-foreground">
-                  আমি আপনার ব্যবসার তথ্য নিয়ে সাহায্য করতে পারি। যেমন:
-                </div>
-                <div className="mx-auto flex max-w-[280px] flex-wrap gap-1.5">
-                  {[
-                    "আজকের মোট বিক্রি কত?",
-                    "এই সপ্তাহে সবচেয়ে বেশি বিক্রি কোন ইট?",
-                    "রহিম ট্রেডার্স এর বকেয়া কত?",
-                    "আজ হাতে নগদ কত?",
-                  ].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setInput(s)}
-                      className="rounded-full border bg-muted/40 px-2.5 py-1 text-[11px] text-foreground/80 hover:bg-muted"
-                    >
-                      {s}
-                    </button>
-                  ))}
+                <div>
+                  <CardTitle className="text-base font-extrabold text-white">CDB Bricks AI ব্রেন</CardTitle>
+                  <p className="text-[11px] text-amber-300/90 font-medium">হিসাব, অটো এন্ট্রি ও চালান সহকারী</p>
                 </div>
               </div>
-            )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/15 h-8 w-8 rounded-full"
+                onClick={() => setIsOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
 
-            <div className="space-y-3">
-              {messages.map((m) => {
-                const text = getText(m);
-                const isUser = m.role === "user";
-                if (!text && !isUser && status !== "streaming") return null;
-                return (
-                  <div key={m.id} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-                    <div
-                      className={cn(
-                        "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap leading-relaxed",
-                        isUser
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
-                          : "bg-muted text-foreground rounded-bl-sm",
-                      )}
-                    >
-                      {text || <span className="text-muted-foreground">…</span>}
+            <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 text-sm bg-slate-50 dark:bg-slate-950">
+              {messages.map((m, idx) => (
+                <div
+                  key={idx}
+                  className={`flex gap-2.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  {m.role === "assistant" && (
+                    <div className="h-7 w-7 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 border border-orange-300 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Bot className="h-4 w-4" />
                     </div>
-                  </div>
-                );
-              })}
+                  )}
+                  <div
+                    className={`rounded-2xl px-3.5 py-2.5 max-w-[84%] leading-relaxed shadow-xs ${
+                      m.role === "user"
+                        ? "bg-orange-700 text-white rounded-br-none font-medium"
+                        : "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <p className="whitespace-pre-line">{m.text}</p>
 
-              {busy && (
-                <div className="flex justify-start">
-                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-muted px-3 py-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>
-                      {activeToolLabel(messages[messages.length - 1] ?? ({} as UIMessage)) ?? "ভাবছি..."}
-                    </span>
+                    {/* ১. চালান কার্ড */}
+                    {m.data?.type === "SALE_CHALLAN" && (
+                      <div className="mt-3 p-3 bg-orange-50/70 dark:bg-slate-800 rounded-xl border border-orange-200 dark:border-slate-700 text-xs text-foreground space-y-1.5 shadow-xs">
+                        <div className="font-bold text-orange-700 dark:text-orange-400 flex items-center justify-between border-b border-orange-200 pb-1">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle className="h-3.5 w-3.5" /> চালান বিবরণী
+                          </span>
+                          {m.challanNo && <span className="text-[11px] bg-orange-200/70 px-1.5 py-0.5 rounded">#{m.challanNo}</span>}
+                        </div>
+                        <div>👤 <b>ক্রেতা:</b> {m.data.data?.customerName || "নগদ"}</div>
+                        <div>🧱 <b>ইট:</b> {m.data.data?.brickType || "১ নম্বর ইট"} ({m.data.data?.quantity || 0} পিস)</div>
+                        <div>💰 <b>মোট বিল:</b> ৳{m.data.data?.totalAmount || 0}</div>
+                        <div>💵 <b>জমা:</b> ৳{m.data.data?.paidAmount || 0} | <b>বাকি:</b> ৳{m.data.data?.dueAmount || 0}</div>
+
+                        <div className="flex gap-2 pt-2">
+                          {!m.saved ? (
+                            <Button
+                              size="sm"
+                              disabled={savingIdx === idx}
+                              onClick={() => handleSaveEntry(idx, "SALE_CHALLAN", m.data.data)}
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs font-bold"
+                            >
+                              {savingIdx === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                              খাতায় সেভ করুন
+                            </Button>
+                          ) : (
+                            <div className="flex-1 text-emerald-700 font-bold flex items-center justify-center text-xs bg-emerald-100 rounded border border-emerald-300">
+                              ✓ খাতায় সেভ হয়েছে
+                            </div>
+                          )}
+
+                          <Button
+                            size="sm"
+                            onClick={() => handlePrintChallan(m.data.data, m.challanNo)}
+                            className="bg-orange-600 hover:bg-orange-700 text-white h-8 text-xs px-3 font-bold"
+                          >
+                            <Printer className="h-3.5 w-3.5 mr-1" /> প্রিন্ট
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ২. খরচ, কালেকশন, সর্দার, কাঁচা ইট ও সাপ্লায়ার কার্ড */}
+                    {["EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "KACHA_BRICK", "SUPPLIER_PAYMENT"].includes(m.data?.type) && (
+                      <div className="mt-3 p-3 bg-orange-50/70 dark:bg-slate-800 rounded-xl border border-orange-200 text-xs text-foreground space-y-1.5 shadow-xs">
+                        <div className="font-bold text-orange-700 border-b border-orange-200 pb-1">
+                          {m.data.type === "EXPENSE" && "💸 খরচের ভাউচার"}
+                          {m.data.type === "COLLECTION" && "💵 নগদ জমা / কালেকশন"}
+                          {m.data.type === "SARDAR_PAYMENT" && "👷 সর্দার পেমেন্ট / দাদন"}
+                          {m.data.type === "KACHA_BRICK" && "🧱 কাঁচা ইট (মিল) এন্ট্রি"}
+                          {m.data.type === "SUPPLIER_PAYMENT" && "🚛 সাপ্লায়ার পেমেন্ট"}
+                        </div>
+                        {(m.data.data?.customerName || m.data.data?.sardarName || m.data.data?.supplierName) && (
+                          <div>👤 <b>নাম:</b> {m.data.data.customerName || m.data.data.sardarName || m.data.data.supplierName}</div>
+                        )}
+                        {m.data.data?.expenseCategory && <div>📂 <b>খাত:</b> {m.data.data.expenseCategory}</div>}
+                        {m.data.data?.quantity > 0 && <div>🧱 <b>পরিমাণ:</b> {m.data.data.quantity} পিস</div>}
+                        <div>💰 <b>টাকার পরিমাণ:</b> ৳{m.data.data?.amount || m.data.data?.paidAmount || m.data.data?.totalAmount || 0}</div>
+
+                        {!m.saved ? (
+                          <Button
+                            size="sm"
+                            disabled={savingIdx === idx}
+                            onClick={() => handleSaveEntry(idx, m.data.type, m.data.data)}
+                            className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs font-bold"
+                          >
+                            {savingIdx === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                            খাতায় সেভ নিশ্চিত করুন
+                          </Button>
+                        ) : (
+                          <div className="w-full py-1 text-emerald-700 font-bold text-center text-xs bg-emerald-100 rounded border border-emerald-300">
+                            ✓ খাতায় সেভ হয়েছে
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  {m.role === "user" && (
+                    <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <User className="h-4 w-4" />
+                    </div>
+                  )}
+                </div>
+              ))}
+              {loading && (
+                <div className="flex gap-2 items-center text-slate-600 dark:text-slate-400 text-xs font-medium italic">
+                  <Bot className="h-4 w-4 animate-spin text-orange-600" /> এআই খাতা দেখছে ও হিসাব মেলাচ্ছে...
                 </div>
               )}
+              <div ref={messagesEndRef} />
+            </CardContent>
 
-              {error && (
-                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  ত্রুটি: {error.message}
-                </div>
-              )}
+            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2">
+              <Button
+                type="button"
+                variant={isListening ? "destructive" : "outline"}
+                size="icon"
+                onClick={toggleListening}
+                className={`h-10 w-10 flex-shrink-0 rounded-full border-slate-300 transition-all ${
+                  isListening ? "animate-pulse ring-2 ring-red-400" : ""
+                }`}
+              >
+                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4 text-orange-600" />}
+              </Button>
 
-              <div ref={bottomRef} />
-            </div>
-          </ScrollArea>
-
-          {/* Composer */}
-          <div className="border-t p-2">
-            <div className="flex items-end gap-2">
-              <Textarea
-                ref={taRef}
+              <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    void handleSend();
-                  }
-                }}
-                placeholder={listening ? "বলুন… শুনছি" : "লিখুন বা মাইকে বলুন — যেমন: করিম সরদারকে ৫০০০ টাকা দিলাম"}
-                rows={1}
-                className="min-h-[40px] max-h-[120px] resize-none text-sm"
-                disabled={!token}
+                onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                placeholder="মুখে বলুন বা এখানে লিখুন..."
+                className="flex-1 h-10 text-sm bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 rounded-full px-4"
+                disabled={loading}
               />
-              <Button type="button" size="icon" variant={listening ? "destructive" : "outline"} onClick={toggleMic} className="h-10 w-10 shrink-0" aria-label="বাংলায় বলুন">
-                {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+
+              <Button
+                type="button"
+                size="icon"
+                onClick={() => handleSend()}
+                disabled={loading || !input.trim()}
+                className="h-10 w-10 flex-shrink-0 rounded-full bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <Send className="h-4 w-4" />
               </Button>
-              {busy ? (
-                <Button size="icon" variant="outline" onClick={() => stop()} className="h-10 w-10 shrink-0">
-                  <X className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button size="icon" onClick={handleSend} disabled={!input.trim() || !token} className="h-10 w-10 shrink-0">
-                  <Send className="h-4 w-4" />
-                </Button>
-              )}
             </div>
-            {!token && (
-              <div className="px-1 pt-1 text-[10px] text-muted-foreground">প্রমাণীকরণের জন্য অপেক্ষা…</div>
-            )}
-          </div>
-        </div>
+          </Card>
+        </>
       )}
     </>
   );
 }
+
+export const AIAssistantFab = AiAssistantFab;
+export default AiAssistantFab;

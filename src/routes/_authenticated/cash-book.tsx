@@ -1,13 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +20,7 @@ import { bn, bnDate, isoDate } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
 import { createExpense } from "@/lib/expenses.functions";
 import {
-  deleteExpenseWithPassword, deleteIncomeWithPassword, updateExpenseEntry, updateIncomeEntry, updateCashRow, deleteCashRow,
+  deleteExpenseWithPassword, deleteIncomeWithPassword, updateIncomeEntry, updateCashRow, deleteCashRow,
 } from "@/lib/cash-book.functions";
 import { toast } from "sonner";
 import { fetchCashHistory } from "@/lib/cash-queries";
@@ -33,17 +31,11 @@ export const Route = createFileRoute("/_authenticated/cash-book")({
     meta: [
       { title: "আয়-ব্যায় হিসাব — CDB Bricks" },
       { name: "description", content: "নগদ আয় ও ব্যয়ের এন্ট্রি, সম্পাদনা এবং এডমিন পাসওয়ার্ড দিয়ে মুছে ফেলা।" },
-      { property: "og:title", content: "আয়-ব্যায় হিসাব — CDB Bricks" },
-      { property: "og:description", content: "নগদ আয় ও ব্যয়ের সম্পূর্ণ হিসাব এক জায়গায়।" },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
     ],
     links: [{ rel: "canonical", href: "/cash-book" }],
   }),
   component: CashBookPage,
 });
-
-const EXPENSE_CATEGORIES = EXPENSE_HEADS;
 
 const METHODS = ["cash", "bkash", "nagad", "bank"];
 
@@ -54,8 +46,48 @@ type IncomeRow = {
 type ExpenseRow = {
   id: string; amount: number; expense_date: string; category: string; note: string | null;
 };
-
 type Range = { from: string; to: string };
+
+/**
+ * স্মার্ট নাম ও খাত বিভাজন:
+ * "আনুষাঙ্গিক — চেক বিল" থাকলে নামের ঘরে "চেক বিল" বড় করে দেখাবে এবং খাতে "আনুষাঙ্গিক" দেখাবে।
+ */
+function parseRowNameAndHead(head: string, detail?: string | null) {
+  const cleanDetail = detail && detail !== "—" ? detail.trim() : "";
+  const cleanHead = (head || "").trim();
+  const separatorMatch = cleanHead.match(/^(.+?)\s*[—\-:]\s*(.+)$/);
+
+  if (!cleanDetail && separatorMatch) {
+    return {
+      displayName: separatorMatch[2].trim(),
+      displayHead: separatorMatch[1].trim(),
+    };
+  }
+  if (cleanDetail && separatorMatch) {
+    return {
+      displayName: cleanDetail,
+      displayHead: separatorMatch[1].trim(),
+    };
+  }
+  if (!cleanDetail) {
+    return {
+      displayName: cleanHead,
+      displayHead: "সাধারণ",
+    };
+  }
+  return {
+    displayName: cleanDetail,
+    displayHead: cleanHead,
+  };
+}
+
+/**
+ * মোবাইলের জন্য সংক্ষিপ্ত তারিখ (যেমন: "২৬ আগ, ২০২৬" থেকে "২৬ আগ") যাতে ১ লাইনেই জায়গা হয়
+ */
+function shortBnDate(dateStr: string) {
+  const full = bnDate(dateStr);
+  return full.split(",")[0] || full;
+}
 
 async function fetchIncomes({ from, to }: Range): Promise<IncomeRow[]> {
   let q = sdb
@@ -97,8 +129,6 @@ function CashBookPage() {
   const [hTo, setHTo] = useState("");
   const [hHead, setHHead] = useState("__all__");
   const [showHeads, setShowHeads] = useState(false);
-  const incomes = useQuery({ queryKey: ["cash-book", "incomes", hFrom, hTo], queryFn: () => fetchIncomes({ from: hFrom, to: hTo }) });
-  const expenses = useQuery({ queryKey: ["cash-book", "expenses", hFrom, hTo], queryFn: () => fetchExpenses({ from: hFrom, to: hTo }) });
   const customers = useQuery({ queryKey: ["customers-min"], queryFn: fetchCustomers });
   const quickRanges = useMemo(() => {
     const t = isoDate(new Date());
@@ -175,40 +205,70 @@ function CashBookPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="space-y-3">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Wallet className="h-5 w-5 text-primary" /> আয়-ব্যায়
           </h1>
           <p className="text-sm text-muted-foreground">নগদ আয় ও ব্যয় এন্ট্রি — সম্পাদনা ও মুছে ফেলা (এডমিন পাসওয়ার্ড লাগবে)</p>
         </div>
-        <div className="flex gap-2">
+
+        <div className="grid grid-cols-2 gap-3 w-full [&>button]:w-full [&>button]:h-11 [&>button]:text-sm [&>button]:font-bold [&>button]:justify-center">
           <IncomeDialog customers={customers.data ?? []} onDone={invalidate} />
           <AddExpenseDialog onDone={invalidate} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <Stat tone="success" icon={ArrowUpCircle} label="মোট আয়" value={totals.inc} />
         <Stat tone="destructive" icon={ArrowDownCircle} label="মোট ব্যয়" value={totals.exp} />
-        <Stat tone={totals.net >= 0 ? "primary" : "destructive"} icon={Wallet} label="নিট" value={totals.net} />
+        <div className="col-span-2 md:col-span-1">
+          <Stat tone={totals.net >= 0 ? "primary" : "destructive"} icon={Wallet} label="নিট ব্যালেন্স" value={totals.net} />
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 rounded-lg border bg-card px-2 py-1.5">
-        {quickRanges.map((q) => (
-          <Button key={q.label} size="sm" className="h-7 px-2 text-xs" variant={hFrom === q.from && hTo === q.to ? "default" : "outline"} onClick={() => { setHFrom(q.from); setHTo(q.to); }}>{q.label}</Button>
-        ))}
-        <div className="flex items-center gap-1">
-          <Input type="date" className="h-7 w-[8.5rem] px-1 text-xs" value={hFrom} onChange={(e) => setHFrom(e.target.value)} aria-label="থেকে" />
-          <span className="text-xs text-muted-foreground">থেকে</span>
-          <Input type="date" className="h-7 w-[8.5rem] px-1 text-xs" value={hTo} onChange={(e) => setHTo(e.target.value)} aria-label="পর্যন্ত" />
+      <div className="rounded-xl border-2 bg-card p-3 space-y-2.5 shadow-sm">
+        <div className="grid grid-cols-5 gap-1.5">
+          {quickRanges.map((q) => {
+            const isActive = hFrom === q.from && hTo === q.to;
+            return (
+              <Button
+                key={q.label}
+                size="sm"
+                className={`h-8 px-1 text-xs font-bold w-full truncate ${
+                  isActive ? "bg-orange-700 text-white" : ""
+                }`}
+                variant={isActive ? "default" : "outline"}
+                onClick={() => { setHFrom(q.from); setHTo(q.to); }}
+              >
+                {q.label}
+              </Button>
+            );
+          })}
+        </div>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <Input
+            type="date"
+            className="h-9 w-full px-2 text-xs font-semibold"
+            value={hFrom}
+            onChange={(e) => setHFrom(e.target.value)}
+            aria-label="থেকে"
+          />
+          <span className="text-xs font-bold text-muted-foreground">থেকে</span>
+          <Input
+            type="date"
+            className="h-9 w-full px-2 text-xs font-semibold"
+            value={hTo}
+            onChange={(e) => setHTo(e.target.value)}
+            aria-label="পর্যন্ত"
+          />
         </div>
       </div>
 
       <Tabs defaultValue="allexp">
-        <TabsList>
-          <TabsTrigger value="allexp">ব্যয় তালিকা</TabsTrigger>
-          <TabsTrigger value="history">সব আয়-ব্যয় হিস্টোরি</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 h-10">
+          <TabsTrigger value="allexp" className="font-bold">ব্যয় তালিকা</TabsTrigger>
+          <TabsTrigger value="history" className="font-bold">সব আয়-ব্যয় হিস্টোরি</TabsTrigger>
         </TabsList>
 
         <TabsContent value="history">
@@ -282,11 +342,12 @@ function CashBookPage() {
                           {rows.map((r) => {
                             const mk = marks.data?.[r.id];
                             const done = r.dir === "out" && !!mk?.checked;
+                            const { displayName, displayHead } = parseRowNameAndHead(r.head, r.detail);
                             return (
                             <div key={r.id} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm transition-opacity ${done ? "bg-muted/60 opacity-45" : ""}`}>
-                              <div className="min-w-0 flex-1">
-                                <div className="text-base font-semibold">{r.detail && r.detail !== "—" ? r.detail : r.head}</div>
-                                {r.detail && r.detail !== "—" && <div className="text-xs text-muted-foreground">{r.head}</div>}
+                              <div className="min-w-0 flex-1 flex items-center gap-2 truncate">
+                                <span className="font-bold text-foreground truncate">{displayName}</span>
+                                <span className="text-[11px] text-muted-foreground shrink-0">({displayHead})</span>
                               </div>
                               <b className={`shrink-0 tabular-nums ${r.dir === "in" ? "text-success" : "text-destructive"}`}>{r.dir === "in" ? "+" : "−"} ৳ {bn(r.amount)}</b>
                               {r.dir === "out" && (
@@ -333,62 +394,85 @@ function AllExpenseList({ rows, loading, onDone }: { rows: Array<{ id: string; d
   const oldTotal = rows.filter((r) => r.head === "পূর্বের দায় পরিশোধ").reduce((a, b) => a + b.amount, 0);
   const all = rows.reduce((a, b) => a + b.amount, 0);
   let run = 0;
+
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-2 px-2.5 sm:px-6">
         <CardTitle className="text-base">ব্যয় তালিকা — তারিখের সিরিয়াল অনুযায়ী</CardTitle>
-        <div className="flex flex-wrap gap-2 pt-1 text-xs">
-          <span className="rounded-md border px-2 py-1">পুরোনো বকেয়া পরিশোধ: <b>৳ {bn(oldTotal)}</b></span>
-          <span className="rounded-md border px-2 py-1">চলতি খরচ: <b>৳ {bn(all - oldTotal)}</b></span>
-          <span className="rounded-md border px-2 py-1">মোট ব্যয়: <b>৳ {bn(all)}</b></span>
+        <div className="flex flex-wrap gap-1.5 pt-1 text-xs">
+          <span className="rounded-md border bg-muted/40 px-2 py-1">পুরোনো বকেয়া পরিশোধ: <b>৳ {bn(oldTotal)}</b></span>
+          <span className="rounded-md border bg-muted/40 px-2 py-1">চলতি খরচ: <b>৳ {bn(all - oldTotal)}</b></span>
+          <span className="rounded-md border bg-muted/40 px-2 py-1">মোট ব্যয়: <b>৳ {bn(all)}</b></span>
         </div>
-        <div className="flex flex-wrap gap-1 pt-1 print:hidden">
+        <div className="flex flex-wrap gap-1.5 pt-1.5 print:hidden">
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAsc((s) => !s)}>{asc ? "পুরনো থেকে নতুন" : "নতুন থেকে পুরনো"}</Button>
           <Button size="sm" variant={onlyOld ? "default" : "outline"} className="h-7 text-xs" onClick={() => setOnlyOld((s) => !s)}>শুধু পুরোনো বকেয়া</Button>
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.print()}>প্রিন্ট</Button>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ক্রম</TableHead>
-                <TableHead>তারিখ</TableHead>
-                <TableHead>নাম</TableHead>
-                <TableHead>খাত</TableHead>
-                <TableHead className="text-right">টাকা</TableHead>
-                <TableHead className="text-right">মোট (চলমান)</TableHead>
-                <TableHead className="text-right print:hidden">ইডিট / ডিলেট</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+
+      <CardContent className="px-1.5 sm:px-6 pb-4">
+        {/* ১-লাইনের ফিক্সড উইডথ টেবিল: ডানে-বামে স্ক্রলও লাগবে না, ডাবল লাইনও হবে না */}
+        <div className="w-full overflow-hidden rounded-lg border">
+          <table className="w-full table-fixed border-collapse text-[11px] sm:text-sm">
+            <thead>
+              <tr className="bg-slate-800 text-white">
+                <th className="w-[26px] sm:w-10 py-2 px-1 text-center font-bold">#</th>
+                <th className="w-[46px] sm:w-24 py-2 px-1 text-left font-bold">তারিখ</th>
+                <th className="py-2 px-1 text-left font-bold">নাম / বিবরণ</th>
+                <th className="w-[62px] sm:w-32 py-2 px-1 text-left font-bold">খাত</th>
+                <th className="w-[68px] sm:w-28 py-2 px-1 text-right font-bold">টাকা</th>
+                <th className="hidden sm:table-cell sm:w-28 py-2 px-1 text-right font-bold">চলমান মোট</th>
+                <th className="w-[44px] sm:w-20 py-2 px-0.5 text-center font-bold print:hidden">অ্যাকশন</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
               {loading ? (
-                <TableRow><TableCell colSpan={7}><Skeleton className="h-6 w-full" /></TableCell></TableRow>
+                <tr><td colSpan={7} className="p-3"><Skeleton className="h-6 w-full" /></td></tr>
               ) : list.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">কোনো ব্যয় নেই</TableCell></TableRow>
-              ) : list.map((r, i) => {
-                run += r.amount;
-                const name = r.detail && r.detail !== "—" ? r.detail : "—";
-                return (
-                  <TableRow key={r.id} className={r.head === "পূর্বের দায় পরিশোধ" ? "bg-warning/10" : ""}>
-                    <TableCell>{bn(i + 1)}</TableCell>
-                    <TableCell className="whitespace-nowrap">{bnDate(r.date)}</TableCell>
-                    <TableCell className="font-semibold">{name}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.head}</TableCell>
-                    <TableCell className="text-right font-bold text-destructive whitespace-nowrap">৳ {bn(r.amount)}</TableCell>
-                    <TableCell className="text-right tabular-nums whitespace-nowrap">৳ {bn(run)}</TableCell>
-                    <TableCell className="text-right print:hidden">
-                      <div className="flex justify-end gap-1">
-                        <RowEditDialog row={r} onDone={onDone} />
-                        <RowDeleteDialog rowKey={r.id} label={`${name} — ${r.head} — ৳ ${bn(r.amount)}`} onDone={onDone} />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                <tr><td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">কোনো ব্যয় নেই</td></tr>
+              ) : (
+                list.map((r, i) => {
+                  run += r.amount;
+                  const { displayName, displayHead } = parseRowNameAndHead(r.head, r.detail);
+                  const isOldDue = r.head === "পূর্বের দায় পরিশোধ";
+
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`h-9 ${isOldDue ? "bg-amber-500/10" : "bg-card hover:bg-muted/40"}`}
+                    >
+                      <td className="px-1 text-center font-medium text-muted-foreground whitespace-nowrap truncate">
+                        {bn(i + 1)}
+                      </td>
+                      <td className="px-1 whitespace-nowrap truncate text-muted-foreground">
+                        <span className="sm:hidden">{shortBnDate(r.date)}</span>
+                        <span className="hidden sm:inline">{bnDate(r.date)}</span>
+                      </td>
+                      <td className="px-1 font-extrabold text-[12px] sm:text-sm text-foreground whitespace-nowrap truncate" title={displayName}>
+                        {displayName}
+                      </td>
+                      <td className="px-1 text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap truncate" title={displayHead}>
+                        {displayHead}
+                      </td>
+                      <td className="px-1 text-right font-extrabold text-rose-600 dark:text-rose-400 whitespace-nowrap tabular-nums">
+                        ৳{bn(r.amount)}
+                      </td>
+                      <td className="hidden sm:table-cell px-1 text-right whitespace-nowrap tabular-nums text-muted-foreground">
+                        ৳{bn(run)}
+                      </td>
+                      <td className="px-0.5 text-center whitespace-nowrap print:hidden">
+                        <div className="inline-flex items-center justify-center">
+                          <RowEditDialog row={r} onDone={onDone} />
+                          <RowDeleteDialog rowKey={r.id} label={`${displayName} — ${displayHead} — ৳ ${bn(r.amount)}`} onDone={onDone} />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>
@@ -413,7 +497,7 @@ function RowEditDialog({ row, onDone }: { row: { id: string; date: string; head:
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7"><Pencil className="h-3.5 w-3.5" /></Button>
+        <Button variant="ghost" size="icon" className="h-6 w-5 sm:h-7 sm:w-7 p-0"><Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" /></Button>
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
@@ -448,7 +532,7 @@ function RowDeleteDialog({ rowKey, label, onDone }: { rowKey: string; label: str
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setPassword(""); }}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
+        <Button variant="ghost" size="icon" className="h-6 w-5 sm:h-7 sm:w-7 p-0 text-destructive"><Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" /></Button>
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
@@ -472,94 +556,17 @@ function Stat({ tone, icon: Icon, label, value }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string; value: number;
 }) {
-  const cls = tone === "success" ? "bg-success/10 text-success border-success/30"
-    : tone === "destructive" ? "bg-destructive/10 text-destructive border-destructive/30"
-    : "bg-primary/10 text-primary border-primary/30";
+  const cls = tone === "success" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+    : tone === "destructive" ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30"
+    : "bg-slate-900/5 dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700";
   return (
-    <div className={`rounded-lg border p-4 ${cls}`}>
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4" />
-        <span className="text-[11px] font-semibold uppercase tracking-wide">{label}</span>
+    <div className={`rounded-xl border-2 p-3.5 shadow-sm ${cls}`}>
+      <div className="flex items-center gap-1.5">
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className="text-xs font-bold uppercase tracking-wide">{label}</span>
       </div>
-      <p className="mt-1 text-2xl font-bold">৳ {bn(Math.abs(value))}</p>
+      <p className="mt-1.5 text-xl sm:text-2xl font-extrabold tracking-tight truncate">৳ {bn(Math.abs(value))}</p>
     </div>
-  );
-}
-
-function ExpenseDialog({ row, onDone }: { row?: ExpenseRow; onDone: () => void }) {
-  const editing = !!row;
-  const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState(row?.category ?? "");
-  const [amount, setAmount] = useState(row ? String(row.amount) : "");
-  const [date, setDate] = useState(row?.expense_date ?? isoDate(new Date()));
-  const [note, setNote] = useState(row?.note ?? "");
-
-  const create = useServerFn(createExpense);
-  const update = useServerFn(updateExpenseEntry);
-
-  const mut = useMutation({
-    mutationFn: async () => {
-      const amt = Number(amount);
-      if (!category) throw new Error("খাত নির্বাচন করুন");
-      if (!Number.isFinite(amt) || amt <= 0) throw new Error("টাকার পরিমাণ সঠিক নয়");
-      if (editing) {
-        return update({ data: { id: row!.id, category, amount: amt, expense_date: date, note: note || null } });
-      }
-      return create({ data: { category, amount: amt, expense_date: date, note: note || null } });
-    },
-    onSuccess: () => {
-      toast.success(editing ? "ব্যয় হালনাগাদ হয়েছে" : "ব্যয় যোগ হয়েছে");
-      setOpen(false);
-      if (!editing) { setCategory(""); setAmount(""); setNote(""); }
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {editing ? (
-          <Button variant="ghost" size="icon" className="h-7 w-7"><Pencil className="h-3.5 w-3.5" /></Button>
-        ) : (
-          <Button size="sm" variant="destructive" className="gap-1"><Plus className="h-3.5 w-3.5" />ব্যয় যোগ</Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{editing ? "ব্যয় সম্পাদনা" : "নতুন ব্যয় এন্ট্রি"}</DialogTitle>
-          <DialogDescription>নগদ ব্যয়ের হিসাব সাথে সাথে মূল ক্যাশে প্রভাব ফেলবে।</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
-          <div className="space-y-1">
-            <Label>খাত *</Label>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger><SelectValue placeholder="খাত নির্বাচন করুন" /></SelectTrigger>
-              <SelectContent>
-                {Array.from(new Set([...(category ? [category] : []), ...EXPENSE_CATEGORIES])).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label>টাকা *</Label>
-              <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
-            </div>
-            <div className="space-y-1">
-              <Label>তারিখ *</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label>নোট</Label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={mut.isPending}>{editing ? "হালনাগাদ" : "সংরক্ষণ"}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -602,7 +609,7 @@ function IncomeDialog({ row, customers, onDone }: {
         {editing ? (
           <Button variant="ghost" size="icon" className="h-7 w-7"><Pencil className="h-3.5 w-3.5" /></Button>
         ) : (
-          <Button size="sm" className="gap-1 bg-success text-success-foreground hover:bg-success/90"><Plus className="h-3.5 w-3.5" />আয় যোগ</Button>
+          <Button size="sm" className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 w-full h-11 text-sm font-bold shadow-sm"><Plus className="h-4 w-4" />আয় যোগ</Button>
         )}
       </DialogTrigger>
       <DialogContent className="max-w-md">
@@ -645,54 +652,6 @@ function IncomeDialog({ row, customers, onDone }: {
           </div>
           <DialogFooter>
             <Button type="submit" disabled={mut.isPending}>{editing ? "হালনাগাদ" : "সংরক্ষণ"}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DeleteDialog({ kind, id, label, onDone }: {
-  kind: "income" | "expense"; id: string; label: string; onDone: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [password, setPassword] = useState("");
-  const delExp = useServerFn(deleteExpenseWithPassword);
-  const delInc = useServerFn(deleteIncomeWithPassword);
-
-  const mut = useMutation({
-    mutationFn: async () => {
-      if (!password) throw new Error("এডমিন পাসওয়ার্ড দিন");
-      const fn = kind === "expense" ? delExp : delInc;
-      return fn({ data: { id, password } });
-    },
-    onSuccess: () => {
-      toast.success("এন্ট্রি মুছে ফেলা হয়েছে");
-      setOpen(false); setPassword("");
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message || "মুছে ফেলা যায়নি"),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setPassword(""); }}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Lock className="h-4 w-4 text-destructive" />এডমিন পাসওয়ার্ড দিন</DialogTitle>
-          <DialogDescription>{label} — এন্ট্রি স্থায়ীভাবে মুছে যাবে। মূল এডমিনের পাসওয়ার্ড ছাড়া মুছে ফেলা যাবে না।</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
-          <div className="space-y-1">
-            <Label>পাসওয়ার্ড *</Label>
-            <Input type="password" value={password} autoComplete="current-password"
-              onChange={(e) => setPassword(e.target.value)} placeholder="এডমিন পাসওয়ার্ড" />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>বাতিল</Button>
-            <Button type="submit" variant="destructive" disabled={mut.isPending}>মুছুন</Button>
           </DialogFooter>
         </form>
       </DialogContent>
