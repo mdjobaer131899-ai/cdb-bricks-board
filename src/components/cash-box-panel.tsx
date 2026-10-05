@@ -359,7 +359,7 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
   const [date, setDate] = useState(isoDate(new Date()));
   const [note, setNote] = useState("");
   const [personId, setPersonId] = useState<string>("");
-  const [sardarType, setSardarType] = useState<"payment" | "advance">("payment");
+  const [sardarType, setSardarType] = useState<"payment" | "opening">("payment");
   const [hours, setHours] = useState("");
   const [rate, setRate] = useState("");
   const [vekuOwner, setVekuOwner] = useState("");
@@ -439,6 +439,18 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
       return data as any;
     },
   });
+  const sardarOpenQ = useQuery({
+    queryKey: ["sardar-opening-one", personId],
+    enabled: open && isSardar && !!personId,
+    queryFn: async () => {
+      const { data } = await supabase.from("opening_balance_summary").select("id, amount, paid_amount, remaining_amount, as_of_date")
+        .eq("sardar_id", personId).eq("kind", "sardar_payable").order("as_of_date");
+      const rows = (data ?? []).map((r: any) => ({ id: r.id as string, remaining: Number(r.remaining_amount || 0) }));
+      const amount = (data ?? []).reduce((a, r: any) => a + Number(r.amount || 0), 0);
+      const paid = (data ?? []).reduce((a, r: any) => a + Number(r.paid_amount || 0), 0);
+      return { rows, amount, paid, remaining: rows.reduce((a, r) => a + r.remaining, 0) };
+    },
+  });
 
   const [rawKind, setRawKind] = useState("");
   const [matRate, setMatRate] = useState("");
@@ -480,9 +492,27 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
     setBusy(true);
     try {
       const n = note.trim() || null;
-      if (isSardar) {
+      if (isSardar && sardarType === "opening") {
         if (!personId) throw new Error("সরদারের নাম নির্বাচন করুন");
-        await createSardarPay({ data: { sardar_id: personId, amount: amt, payment_date: date, payment_type: sardarType, method: "cash", note: n } });
+        const rows = sardarOpenQ.data?.rows ?? [];
+        const remaining = sardarOpenQ.data?.remaining ?? 0;
+        if (!rows.length || remaining <= 0) throw new Error("এই সরদারের পূর্বের কোনো বাকি নেই");
+        if (amt > remaining + 0.001) throw new Error(`পূর্বের বাকি আছে মাত্র ৳ ${bn(remaining)}`);
+        let left = amt;
+        for (const r of rows) {
+          if (left <= 0) break;
+          const pay = Math.min(left, r.remaining);
+          if (pay <= 0) continue;
+          const { error } = await supabase.from("opening_payments").insert({
+            opening_balance_id: r.id, amount: pay, payment_date: date, method: "নগদ", note: n, created_by: me!.user.id,
+          });
+          if (error) throw error;
+          left -= pay;
+        }
+        qc.invalidateQueries();
+      } else if (isSardar) {
+        if (!personId) throw new Error("সরদারের নাম নির্বাচন করুন");
+        await createSardarPay({ data: { sardar_id: personId, amount: amt, payment_date: date, payment_type: "payment", method: "cash", note: n } });
       } else if (isDaily || isStaff) {
         if (!personId) throw new Error("নাম নির্বাচন করুন");
         const { error } = await supabase.from("worker_payments").insert({
@@ -610,18 +640,24 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
                 <p className="text-[11px] text-muted-foreground">কোনো নাম নেই — আগে সংশ্লিষ্ট পাতায় নাম যোগ করুন।</p>
               )}
               {isSardar && (
-                <Select value={sardarType} onValueChange={(v) => setSardarType(v as "payment" | "advance")}>
+                <Select value={sardarType} onValueChange={(v) => setSardarType(v as "payment" | "opening")}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="payment">পরিশোধ — পাওনা থেকে</SelectItem>
-                    <SelectItem value="advance">অগ্রিম — বর্তমান কাজের মজুরি</SelectItem>
+                    <SelectItem value="payment">১. চলতি কাজের মজুরি ও অগ্রিম পরিশোধ</SelectItem>
+                    <SelectItem value="opening">২. পূর্বের বাকি থেকে পরিশোধ</SelectItem>
                   </SelectContent>
                 </Select>
               )}
               {isSardar && personId && sardarBalQ.data && (
                 <p className="text-[11px] text-muted-foreground">
-                  পাওনা ৳ {bn(Number(sardarBalQ.data.total_due ?? 0))} • পরিশোধিত ৳ {bn(Number(sardarBalQ.data.total_paid ?? 0))} •{" "}
+                  চলতি কাজ: পাওনা ৳ {bn(Number(sardarBalQ.data.total_due ?? 0))} • পরিশোধিত ৳ {bn(Number(sardarBalQ.data.total_paid ?? 0))} •{" "}
                   <span className="font-semibold text-foreground">বাকি ৳ {bn(Number(sardarBalQ.data.balance ?? 0))}</span>
+                </p>
+              )}
+              {isSardar && personId && sardarOpenQ.data && (
+                <p className="text-[11px] text-muted-foreground">
+                  পূর্বের বকেয়া: মোট ৳ {bn(sardarOpenQ.data.amount)} • পরিশোধিত ৳ {bn(sardarOpenQ.data.paid)} •{" "}
+                  <span className="font-semibold text-warning">বাকি ৳ {bn(sardarOpenQ.data.remaining)}</span>
                 </p>
               )}
             </div>
