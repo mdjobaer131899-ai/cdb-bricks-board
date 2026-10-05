@@ -20,12 +20,7 @@ type Mode = "daily" | "salary";
 const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "মেস্তুরি", manager: "ম্যানেজার" };
 const ROLE_SUGGEST = ["ইঞ্জিন মেস্তুরি", "ম্যানেজার", "সহকারী ম্যানেজার", "হিসাবরক্ষক", "ক্যাশিয়ার", "পাহারাদার", "ড্রাইভার", "মেকানিক", "ইলেকট্রিশিয়ান", "বাবুর্চি"];
 
-function monthsSince(join: string | null) {
-  if (!join) return 1;
-  const j = new Date(join);
-  const n = new Date();
-  return Math.max(1, (n.getFullYear() - j.getFullYear()) * 12 + (n.getMonth() - j.getMonth()) + 1);
-}
+const dayVal = (a: { present: boolean; is_half_day?: boolean | null }) => (a.is_half_day ? 0.5 : 1);
 
 export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const qc = useQueryClient();
@@ -44,7 +39,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const ids = (workersQ.data ?? []).map((w) => w.id);
   const attQ = useQuery({
     queryKey: ["staff-att", mode, ids.join(",")],
-    enabled: mode === "daily" && ids.length > 0,
+    enabled: ids.length > 0,
     queryFn: async () => {
       const { data, error } = await sdb.from("worker_attendance").select("*").in("worker_id", ids);
       if (error) throw error;
@@ -62,12 +57,22 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   });
 
   const stats = useMemo(() => {
-    const m = new Map<string, { days: number; earned: number; paid: number; due: number }>();
+    const m = new Map<string, { days: number; halves: number; absent: number; earned: number; paid: number; due: number }>();
     for (const w of workersQ.data ?? []) {
-      const days = (attQ.data ?? []).filter((a) => a.worker_id === w.id && a.present).length;
-      const earned = mode === "daily" ? days * Number(w.daily_wage || 0) : monthsSince(w.join_date) * Number(w.monthly_salary || 0);
+      const rows = (attQ.data ?? []).filter((a) => a.worker_id === w.id);
+      let days = 0, halves = 0, absent = 0, earned = 0;
+      if (mode === "daily") {
+        for (const a of rows) if (a.present) { days += dayVal(a as any); if ((a as any).is_half_day) halves++; }
+        earned = days * Number(w.daily_wage || 0);
+      } else {
+        // salaried: rows are absence entries (full or half day)
+        for (const a of rows) absent += (a as any).is_half_day ? 0.5 : 1;
+        days = accruedDays(w.join_date);
+        const sal = Number(w.monthly_salary || 0);
+        earned = Math.max(0, Math.round(accruedMonths(w.join_date) * sal - absent * (sal / 30)));
+      }
       const paid = (payQ.data ?? []).filter((p) => p.worker_id === w.id).reduce((a, b) => a + Number(b.amount || 0), 0);
-      m.set(w.id, { days, earned, paid, due: earned - paid });
+      m.set(w.id, { days, halves, absent, earned, paid, due: earned - paid });
     }
     return m;
   }, [workersQ.data, attQ.data, payQ.data, mode]);
