@@ -124,7 +124,7 @@ function SardarsPage() {
       get(p.sardar_id).paid += Number(p.amount || 0);
     });
     for (const sd of (sardarsQ.data ?? []) as any[]) {
-      if (sd.kind === "burn") { const c = get(sd.id); c.kacha = 0; c.qty = 0; c.work = monthsSince(sd.join_date) * Number(sd.monthly_salary || 0); }
+      if (sd.kind === "burn") { const c = get(sd.id); c.kacha = 0; c.qty = 0; c.work = Math.round(monthsSince(sd.join_date) * Number(sd.monthly_salary || 0)); }
     }
     for (const v of m.values()) {
       v.earned = v.kacha + v.work;
