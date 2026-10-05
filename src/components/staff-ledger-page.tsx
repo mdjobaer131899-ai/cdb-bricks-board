@@ -15,6 +15,7 @@ import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
 import { toast } from "sonner";
+import { accruedDays, accruedMonths } from "@/lib/salary-accrual";
 
 type Mode = "daily" | "salary";
 const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "মেস্তুরি", manager: "ম্যানেজার" };
@@ -131,21 +132,42 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const [attDate, setAttDate] = useState(today);
   const [attOpen, setAttOpen] = useState(false);
   const [present, setPresent] = useState<Set<string>>(new Set());
+  const [half, setHalf] = useState<Set<string>>(new Set());
   const openAtt = (d: string) => {
     setAttDate(d);
-    setPresent(new Set((attQ.data ?? []).filter((a) => a.date === d && a.present).map((a) => a.worker_id)));
+    const day = (attQ.data ?? []).filter((a) => a.date === d && a.present);
+    setPresent(new Set(day.map((a) => a.worker_id)));
+    setHalf(new Set(day.filter((a: any) => a.is_half_day).map((a) => a.worker_id)));
     setAttOpen(true);
   };
   const saveAtt = useMutation({
     mutationFn: async () => {
       const { error: dErr } = await supabase.from("worker_attendance").delete().eq("date", attDate).in("worker_id", ids);
       if (dErr) throw dErr;
-      const rows = ids.map((id) => ({ worker_id: id, date: attDate, present: present.has(id), created_by: me!.user.id }));
-      if (rows.length) { const { error } = await supabase.from("worker_attendance").insert(rows); if (error) throw error; }
+      const rows = ids.map((id) => ({ worker_id: id, date: attDate, present: present.has(id), is_half_day: present.has(id) && half.has(id), created_by: me!.user.id }));
+      if (rows.length) { const { error } = await supabase.from("worker_attendance").insert(rows as any); if (error) throw error; }
     },
     onSuccess: () => { toast.success("হাজিরা সংরক্ষিত"); setAttOpen(false); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // ---- salaried absence (leave) entries
+  const [absDlg, setAbsDlg] = useState<null | { worker_id: string; date: string; half: boolean; note: string }>(null);
+  const saveAbs = useMutation({
+    mutationFn: async () => {
+      const f = absDlg!;
+      const { error } = await supabase.from("worker_attendance").insert({ worker_id: f.worker_id, date: f.date, present: false, is_half_day: f.half, note: f.note || null, created_by: me!.user.id } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("অনুপস্থিতি যোগ হয়েছে"); setAbsDlg(null); invalidate(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const delAbs = useMutation({
+    mutationFn: async (id: string) => { const { error } = await supabase.from("worker_attendance").delete().eq("id", id); if (error) throw error; },
+    onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); invalidate(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const fmtDays = (s: { days: number; halves: number }) => `${bn(s.days)} দিন${s.halves ? ` (${bn(s.halves)}টি হাফ)` : ""}`;
 
   const [detail, setDetail] = useState<any>(null);
   const nameOf = (id: string) => (workersQ.data ?? []).find((w) => w.id === id)?.name ?? "—";
