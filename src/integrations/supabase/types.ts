@@ -2394,6 +2394,7 @@ export type Database = {
           created_by: string | null
           date: string
           id: string
+          is_half_day: boolean
           note: string | null
           overtime_hours: number
           present: boolean
@@ -2405,6 +2406,7 @@ export type Database = {
           created_by?: string | null
           date?: string
           id?: string
+          is_half_day?: boolean
           note?: string | null
           overtime_hours?: number
           present?: boolean
@@ -2416,6 +2418,7 @@ export type Database = {
           created_by?: string | null
           date?: string
           id?: string
+          is_half_day?: boolean
           note?: string | null
           overtime_hours?: number
           present?: boolean

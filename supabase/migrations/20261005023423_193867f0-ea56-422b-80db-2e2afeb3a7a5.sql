@@ -1,0 +1,1 @@
+ALTER TABLE public.worker_attendance ADD COLUMN IF NOT EXISTS is_half_day boolean NOT NULL DEFAULT false;

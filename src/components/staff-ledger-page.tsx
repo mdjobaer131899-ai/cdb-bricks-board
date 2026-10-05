@@ -15,17 +15,13 @@ import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
 import { toast } from "sonner";
+import { accruedDays, accruedMonths } from "@/lib/salary-accrual";
 
 type Mode = "daily" | "salary";
 const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "মেস্তুরি", manager: "ম্যানেজার" };
 const ROLE_SUGGEST = ["ইঞ্জিন মেস্তুরি", "ম্যানেজার", "সহকারী ম্যানেজার", "হিসাবরক্ষক", "ক্যাশিয়ার", "পাহারাদার", "ড্রাইভার", "মেকানিক", "ইলেকট্রিশিয়ান", "বাবুর্চি"];
 
-function monthsSince(join: string | null) {
-  if (!join) return 1;
-  const j = new Date(join);
-  const n = new Date();
-  return Math.max(1, (n.getFullYear() - j.getFullYear()) * 12 + (n.getMonth() - j.getMonth()) + 1);
-}
+const dayVal = (a: { present: boolean; is_half_day?: boolean | null }) => (a.is_half_day ? 0.5 : 1);
 
 export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const qc = useQueryClient();
@@ -44,7 +40,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const ids = (workersQ.data ?? []).map((w) => w.id);
   const attQ = useQuery({
     queryKey: ["staff-att", mode, ids.join(",")],
-    enabled: mode === "daily" && ids.length > 0,
+    enabled: ids.length > 0,
     queryFn: async () => {
       const { data, error } = await sdb.from("worker_attendance").select("*").in("worker_id", ids);
       if (error) throw error;
@@ -62,12 +58,22 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   });
 
   const stats = useMemo(() => {
-    const m = new Map<string, { days: number; earned: number; paid: number; due: number }>();
+    const m = new Map<string, { days: number; halves: number; absent: number; earned: number; paid: number; due: number }>();
     for (const w of workersQ.data ?? []) {
-      const days = (attQ.data ?? []).filter((a) => a.worker_id === w.id && a.present).length;
-      const earned = mode === "daily" ? days * Number(w.daily_wage || 0) : monthsSince(w.join_date) * Number(w.monthly_salary || 0);
+      const rows = (attQ.data ?? []).filter((a) => a.worker_id === w.id);
+      let days = 0, halves = 0, absent = 0, earned = 0;
+      if (mode === "daily") {
+        for (const a of rows) if (a.present) { days += dayVal(a as any); if ((a as any).is_half_day) halves++; }
+        earned = days * Number(w.daily_wage || 0);
+      } else {
+        // salaried: rows are absence entries (full or half day)
+        for (const a of rows) absent += (a as any).is_half_day ? 0.5 : 1;
+        days = accruedDays(w.join_date);
+        const sal = Number(w.monthly_salary || 0);
+        earned = Math.max(0, Math.round(accruedMonths(w.join_date) * sal - absent * (sal / 30)));
+      }
       const paid = (payQ.data ?? []).filter((p) => p.worker_id === w.id).reduce((a, b) => a + Number(b.amount || 0), 0);
-      m.set(w.id, { days, earned, paid, due: earned - paid });
+      m.set(w.id, { days, halves, absent, earned, paid, due: earned - paid });
     }
     return m;
   }, [workersQ.data, attQ.data, payQ.data, mode]);
@@ -126,21 +132,42 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const [attDate, setAttDate] = useState(today);
   const [attOpen, setAttOpen] = useState(false);
   const [present, setPresent] = useState<Set<string>>(new Set());
+  const [half, setHalf] = useState<Set<string>>(new Set());
   const openAtt = (d: string) => {
     setAttDate(d);
-    setPresent(new Set((attQ.data ?? []).filter((a) => a.date === d && a.present).map((a) => a.worker_id)));
+    const day = (attQ.data ?? []).filter((a) => a.date === d && a.present);
+    setPresent(new Set(day.map((a) => a.worker_id)));
+    setHalf(new Set(day.filter((a: any) => a.is_half_day).map((a) => a.worker_id)));
     setAttOpen(true);
   };
   const saveAtt = useMutation({
     mutationFn: async () => {
       const { error: dErr } = await supabase.from("worker_attendance").delete().eq("date", attDate).in("worker_id", ids);
       if (dErr) throw dErr;
-      const rows = ids.map((id) => ({ worker_id: id, date: attDate, present: present.has(id), created_by: me!.user.id }));
-      if (rows.length) { const { error } = await supabase.from("worker_attendance").insert(rows); if (error) throw error; }
+      const rows = ids.map((id) => ({ worker_id: id, date: attDate, present: present.has(id), is_half_day: present.has(id) && half.has(id), created_by: me!.user.id }));
+      if (rows.length) { const { error } = await supabase.from("worker_attendance").insert(rows as any); if (error) throw error; }
     },
     onSuccess: () => { toast.success("হাজিরা সংরক্ষিত"); setAttOpen(false); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // ---- salaried absence (leave) entries
+  const [absDlg, setAbsDlg] = useState<null | { worker_id: string; date: string; half: boolean; note: string }>(null);
+  const saveAbs = useMutation({
+    mutationFn: async () => {
+      const f = absDlg!;
+      const { error } = await supabase.from("worker_attendance").insert({ worker_id: f.worker_id, date: f.date, present: false, is_half_day: f.half, note: f.note || null, created_by: me!.user.id } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("অনুপস্থিতি যোগ হয়েছে"); setAbsDlg(null); invalidate(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const delAbs = useMutation({
+    mutationFn: async (id: string) => { const { error } = await supabase.from("worker_attendance").delete().eq("id", id); if (error) throw error; },
+    onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); invalidate(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const fmtDays = (s: { days: number; halves: number }) => `${bn(s.days)} দিন${s.halves ? ` (${bn(s.halves)}টি হাফ)` : ""}`;
 
   const [detail, setDetail] = useState<any>(null);
   const nameOf = (id: string) => (workersQ.data ?? []).find((w) => w.id === id)?.name ?? "—";
@@ -152,7 +179,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       rightCols: [2, 3, 4, 5],
       rows: (workersQ.data ?? []).map((w) => {
         const s = stats.get(w.id)!;
-        return [w.name, ROLE_LABEL[w.role] ?? w.role, bn(mode === "daily" ? s.days : monthsSince(w.join_date)), `৳ ${bn(s.earned)}`, `৳ ${bn(s.paid)}`, `৳ ${bn(s.due)}`];
+        return [w.name, ROLE_LABEL[w.role] ?? w.role, mode === "daily" ? fmtDays(s) : `${bn(s.days)} দিন${s.absent ? ` (অনুপস্থিত ${bn(s.absent)})` : ""}`, `৳ ${bn(s.earned)}`, `৳ ${bn(s.paid)}`, `৳ ${bn(s.due)}`];
       }),
       totals: [["মোট পাওনা", `৳ ${bn(tot.earned)}`], ["মোট পরিশোধ", `৳ ${bn(tot.paid)}`], ["মোট বাকি", `৳ ${bn(tot.due)}`]],
     });
@@ -175,7 +202,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold md:text-2xl">{mode === "daily" ? "ডেলি শ্রমিক" : "মেস্তুরি ও ম্যানেজার বেতন"}</h1>
-          <p className="text-sm text-muted-foreground">{mode === "daily" ? "দৈনিক হাজিরা × মজুরি = পাওনা; কত নিল ও কত বাকি" : "নির্দিষ্ট মাসিক টাকা; কত নিল ও কত বাকি"}</p>
+          <p className="text-sm text-muted-foreground">{mode === "daily" ? "দৈনিক হাজিরা × মজুরি = পাওনা (হাফ দিন = অর্ধেক মজুরি)" : "প্রতিদিন মাসিক বেতন ÷ ৩০ টাকা যোগ হয়; অনুপস্থিত দিনের টাকা বাদ"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={printAll}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button>
@@ -205,19 +232,20 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
             <TableBody>
               {(workersQ.data ?? []).length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">কেউ যোগ করা হয়নি</TableCell></TableRow>}
               {(workersQ.data ?? []).map((w) => {
-                const s = stats.get(w.id) ?? { days: 0, earned: 0, paid: 0, due: 0 };
+                const s = stats.get(w.id) ?? { days: 0, halves: 0, absent: 0, earned: 0, paid: 0, due: 0 };
                 return (
                   <TableRow key={w.id}>
                     <TableCell>
                       <button className="font-medium text-primary hover:underline" onClick={() => setDetail(w)}>{w.name}</button>
                       <div className="text-xs text-muted-foreground">{ROLE_LABEL[w.role] ?? w.role} • {mode === "daily" ? `দৈনিক ৳ ${bn(w.daily_wage)}` : `মাসিক ৳ ${bn(w.monthly_salary)}`}</div>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{mode === "daily" ? `${bn(s.days)} দিন` : `${bn(monthsSince(w.join_date))} মাস`}</TableCell>
+                    <TableCell className="text-right tabular-nums">{mode === "daily" ? fmtDays(s) : <>{bn(s.days)} দিন{s.absent > 0 && <div className="text-xs text-destructive">অনুপস্থিত {bn(s.absent)} দিন</div>}</>}</TableCell>
                     <TableCell className="text-right tabular-nums">৳ {bn(s.earned)}</TableCell>
                     <TableCell className="text-right tabular-nums text-success">৳ {bn(s.paid)}</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums text-warning">৳ {bn(s.due)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <Button size="sm" variant="outline" onClick={() => setPDlg({ worker_id: w.id, amount: "", date: today, note: "" })}>টাকা দিন</Button>
+                      {mode === "salary" && <Button size="sm" variant="ghost" className="ml-1" onClick={() => setAbsDlg({ worker_id: w.id, date: today, half: false, note: "" })}>ছুটি/অনুপস্থিত</Button>}
                       {isAdmin && <>
                         <Button size="sm" variant="ghost" onClick={() => setWDlg({ id: w.id, name: w.name, phone: w.phone ?? "", role: w.role, wage: String(mode === "daily" ? w.daily_wage : w.monthly_salary), join_date: w.join_date ?? today })}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => confirm(`"${w.name}" মুছবেন?`) && delW.mutate(w.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
@@ -300,11 +328,14 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                 <label key={w.id} className="flex items-center gap-3 rounded-lg border p-2">
                   <Checkbox checked={present.has(w.id)} onCheckedChange={(c) => { const n = new Set(present); c ? n.add(w.id) : n.delete(w.id); setPresent(n); }} />
                   <span className="flex-1">{w.name}</span>
-                  <span className="text-xs text-muted-foreground">৳ {bn(w.daily_wage)}</span>
+                  <span onClick={(e) => e.preventDefault()} className="flex items-center gap-1 text-xs">
+                    <Checkbox checked={half.has(w.id)} onCheckedChange={(c) => { const n = new Set(half); c ? n.add(w.id) : n.delete(w.id); setHalf(n); if (c) setPresent(new Set(present).add(w.id)); }} /> হাফ
+                  </span>
+                  <span className="text-xs text-muted-foreground">৳ {bn(present.has(w.id) && half.has(w.id) ? Number(w.daily_wage || 0) / 2 : w.daily_wage)}</span>
                 </label>
               ))}
             </div>
-            <p className="text-sm">উপস্থিত {bn(present.size)} জন • আজকের মজুরি ৳ {bn((workersQ.data ?? []).filter((w) => present.has(w.id)).reduce((a, w) => a + Number(w.daily_wage || 0), 0))}</p>
+            <p className="text-sm">উপস্থিত {bn(present.size)} জন{half.size ? ` (হাফ ${bn([...half].filter((id) => present.has(id)).length)})` : ""} • আজকের মজুরি ৳ {bn((workersQ.data ?? []).filter((w) => present.has(w.id)).reduce((a, w) => a + Number(w.daily_wage || 0) * (half.has(w.id) ? 0.5 : 1), 0))}</p>
           </div>
           <DialogFooter><Button onClick={() => saveAtt.mutate()} disabled={saveAtt.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
@@ -325,12 +356,35 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                   <div className="rounded-lg border p-2"><div className="text-xs text-muted-foreground">পরিশোধ</div>৳ {bn(s.paid)}</div>
                   <div className="rounded-lg border p-2"><div className="text-xs text-muted-foreground">বাকি</div><b>৳ {bn(s.due)}</b></div>
                 </div>
-                {mode === "daily" && <div><b>উপস্থিতি:</b> {att.length ? att.map((a) => bnDate(a.date)).join(", ") : "—"}</div>}
+                {mode === "daily" && <div><b>উপস্থিতি:</b> {att.length ? att.map((a: any) => bnDate(a.date) + (a.is_half_day ? " (হাফ)" : "")).join(", ") : "—"}</div>}
+                {mode === "salary" && (() => {
+                  const abs = (attQ.data ?? []).filter((a) => a.worker_id === detail.id && !a.present || (a.worker_id === detail.id && (a as any).is_half_day)).sort((a, b) => b.date.localeCompare(a.date));
+                  return <div><b>অনুপস্থিতি / ছুটি:</b> {abs.length === 0 ? "—" : <ul className="mt-1 space-y-1">{abs.map((a: any) => (
+                    <li key={a.id} className="flex items-center justify-between rounded border px-2 py-1">
+                      <span>{bnDate(a.date)} — {a.is_half_day ? "হাফ দিন" : "পুরো দিন"} {a.note ? `(${a.note})` : ""}</span>
+                      <Button size="sm" variant="ghost" onClick={() => confirm("মুছবেন?") && delAbs.mutate(a.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                    </li>))}</ul>}
+                    <div className="mt-1 text-xs text-muted-foreground">কাজের দিন {bn(s.days)} • বাদ {bn(s.absent)} দিন × ৳ {bn(Math.round(Number(detail.monthly_salary || 0) / 30))}</div>
+                  </div>;
+                })()}
                 <div><b>পেমেন্ট:</b>{pays.length === 0 ? " —" : <ul className="mt-1 list-disc pl-5">{pays.map((p) => <li key={p.id}>{bnDate(p.payment_date)} — ৳ {bn(p.amount)} {p.note ? `(${p.note})` : ""}</li>)}</ul>}</div>
               </div>
             );
           })()}
           <DialogFooter><Button variant="outline" onClick={() => printDetail(detail)}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* absence dialog (salaried) */}
+      <Dialog open={!!absDlg} onOpenChange={(o) => !o && setAbsDlg(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>ছুটি / অনুপস্থিতি — {absDlg ? nameOf(absDlg.worker_id) : ""}</DialogTitle></DialogHeader>
+          {absDlg && <div className="space-y-3">
+            <div><Label>তারিখ</Label><Input type="date" value={absDlg.date} onChange={(e) => setAbsDlg({ ...absDlg, date: e.target.value })} /></div>
+            <label className="flex items-center gap-2"><Checkbox checked={absDlg.half} onCheckedChange={(c) => setAbsDlg({ ...absDlg, half: !!c })} /> হাফ দিন (অর্ধেক টাকা বাদ)</label>
+            <div><Label>নোট</Label><Input value={absDlg.note} onChange={(e) => setAbsDlg({ ...absDlg, note: e.target.value })} /></div>
+          </div>}
+          <DialogFooter><Button onClick={() => saveAbs.mutate()} disabled={saveAbs.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
