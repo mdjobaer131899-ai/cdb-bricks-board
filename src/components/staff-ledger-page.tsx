@@ -356,12 +356,35 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                   <div className="rounded-lg border p-2"><div className="text-xs text-muted-foreground">পরিশোধ</div>৳ {bn(s.paid)}</div>
                   <div className="rounded-lg border p-2"><div className="text-xs text-muted-foreground">বাকি</div><b>৳ {bn(s.due)}</b></div>
                 </div>
-                {mode === "daily" && <div><b>উপস্থিতি:</b> {att.length ? att.map((a) => bnDate(a.date)).join(", ") : "—"}</div>}
+                {mode === "daily" && <div><b>উপস্থিতি:</b> {att.length ? att.map((a: any) => bnDate(a.date) + (a.is_half_day ? " (হাফ)" : "")).join(", ") : "—"}</div>}
+                {mode === "salary" && (() => {
+                  const abs = (attQ.data ?? []).filter((a) => a.worker_id === detail.id && !a.present || (a.worker_id === detail.id && (a as any).is_half_day)).sort((a, b) => b.date.localeCompare(a.date));
+                  return <div><b>অনুপস্থিতি / ছুটি:</b> {abs.length === 0 ? "—" : <ul className="mt-1 space-y-1">{abs.map((a: any) => (
+                    <li key={a.id} className="flex items-center justify-between rounded border px-2 py-1">
+                      <span>{bnDate(a.date)} — {a.is_half_day ? "হাফ দিন" : "পুরো দিন"} {a.note ? `(${a.note})` : ""}</span>
+                      <Button size="sm" variant="ghost" onClick={() => confirm("মুছবেন?") && delAbs.mutate(a.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                    </li>))}</ul>}
+                    <div className="mt-1 text-xs text-muted-foreground">কাজের দিন {bn(s.days)} • বাদ {bn(s.absent)} দিন × ৳ {bn(Math.round(Number(detail.monthly_salary || 0) / 30))}</div>
+                  </div>;
+                })()}
                 <div><b>পেমেন্ট:</b>{pays.length === 0 ? " —" : <ul className="mt-1 list-disc pl-5">{pays.map((p) => <li key={p.id}>{bnDate(p.payment_date)} — ৳ {bn(p.amount)} {p.note ? `(${p.note})` : ""}</li>)}</ul>}</div>
               </div>
             );
           })()}
           <DialogFooter><Button variant="outline" onClick={() => printDetail(detail)}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* absence dialog (salaried) */}
+      <Dialog open={!!absDlg} onOpenChange={(o) => !o && setAbsDlg(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>ছুটি / অনুপস্থিতি — {absDlg ? nameOf(absDlg.worker_id) : ""}</DialogTitle></DialogHeader>
+          {absDlg && <div className="space-y-3">
+            <div><Label>তারিখ</Label><Input type="date" value={absDlg.date} onChange={(e) => setAbsDlg({ ...absDlg, date: e.target.value })} /></div>
+            <label className="flex items-center gap-2"><Checkbox checked={absDlg.half} onCheckedChange={(c) => setAbsDlg({ ...absDlg, half: !!c })} /> হাফ দিন (অর্ধেক টাকা বাদ)</label>
+            <div><Label>নোট</Label><Input value={absDlg.note} onChange={(e) => setAbsDlg({ ...absDlg, note: e.target.value })} /></div>
+          </div>}
+          <DialogFooter><Button onClick={() => saveAbs.mutate()} disabled={saveAbs.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
