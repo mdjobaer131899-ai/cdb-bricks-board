@@ -232,7 +232,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
             <TableBody>
               {(workersQ.data ?? []).length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">কেউ যোগ করা হয়নি</TableCell></TableRow>}
               {(workersQ.data ?? []).map((w) => {
-                const s = stats.get(w.id) ?? { days: 0, earned: 0, paid: 0, due: 0 };
+                const s = stats.get(w.id) ?? { days: 0, halves: 0, absent: 0, earned: 0, paid: 0, due: 0 };
                 return (
                   <TableRow key={w.id}>
                     <TableCell>
