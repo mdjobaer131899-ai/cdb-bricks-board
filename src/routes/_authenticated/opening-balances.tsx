@@ -232,7 +232,7 @@ function OpeningBalancesPage() {
     onSuccess: () => {
       toast.success(dialog.mode === "edit" ? "আপডেট হয়েছে" : "ওপেনিং ব্যালেন্স যোগ হয়েছে");
       setDialog({ open: false, mode: "new", form: emptyForm(tab) });
-      qc.invalidateQueries({ queryKey: ["opening-balances"] });
+      qc.invalidateQueries();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -256,7 +256,7 @@ function OpeningBalancesPage() {
     onSuccess: () => {
       toast.success("সংরক্ষিত — ক্যাশে প্রভাব পড়েছে, কিন্তু এ সিজনের লাভ-ক্ষতিতে যোগ হয়নি");
       setPayDialog({ open: false, row: null, amount: "", date: todayBD(), method: "নগদ", note: "" });
-      qc.invalidateQueries({ queryKey: ["opening-balances"] });
+      qc.invalidateQueries();
       qc.invalidateQueries({ queryKey: ["opening-payments"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -269,7 +269,7 @@ function OpeningBalancesPage() {
     },
     onSuccess: () => {
       toast.success("মুছে ফেলা হয়েছে");
-      qc.invalidateQueries({ queryKey: ["opening-balances"] });
+      qc.invalidateQueries();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -281,7 +281,7 @@ function OpeningBalancesPage() {
     },
     onSuccess: () => {
       toast.success("পেমেন্ট মুছে ফেলা হয়েছে");
-      qc.invalidateQueries({ queryKey: ["opening-balances"] });
+      qc.invalidateQueries();
       qc.invalidateQueries({ queryKey: ["opening-payments"] });
     },
     onError: (e: Error) => toast.error(e.message),
