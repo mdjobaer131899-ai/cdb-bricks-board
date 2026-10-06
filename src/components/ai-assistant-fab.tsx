@@ -1,385 +1,408 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, Send, Sparkles, X, Printer, CheckCircle, Bot, User, Save, Loader2 } from "lucide-react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { processBrickFieldCommand, saveAiActionToDatabase } from "../services/gemini";
-import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
-export const OPEN_AI_CHAT_EVENT = "open-ai-chat-drawer";
-
-interface Message {
-  role: "user" | "assistant";
-  text: string;
-  data?: any;
-  saved?: boolean;
-  challanNo?: string;
+export interface AIActionData {
+  customerId?: string | null;
+  customerName?: string;
+  brickTypeId?: string | null;
+  brickType?: string;
+  quantity?: number;
+  rate?: number;
+  totalAmount?: number;
+  paidAmount?: number;
+  dueAmount?: number;
+  vehicleNumber?: string;
+  driverName?: string;
+  expenseCategory?: string;
+  amount?: number;
+  description?: string;
+  sardarId?: string | null;
+  sardarName?: string;
+  supplierName?: string;
+  date?: string;
 }
 
-export function AiAssistantFab() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [savingIdx, setSavingIdx] = useState<number | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      text: "আসসালামু আলাইকুম! আমি CDB Bricks AI সহকারী। ভাটার যেকোনো হিসাব জানতে, নতুন চালান কাটতে বা জমা-খরচ খাতায় তুলতে আমাকে বাংলায় বলুন বা লিখুন।",
-    },
-  ]);
+export interface AIResponse {
+  type:
+    | "SALE_CHALLAN"
+    | "EXPENSE"
+    | "COLLECTION"
+    | "SARDAR_PAYMENT"
+    | "KACHA_BRICK"
+    | "SUPPLIER_PAYMENT"
+    | "QUERY"
+    | "UNKNOWN";
+  action?: string;
+  reply: string;
+  reply_bn?: string;
+  data?: AIActionData;
+}
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
+// ১. ডাটাবেস থেকে ভাটার সব সর্বশেষ তথ্য নিয়ে আসা
+async function fetchKilnContext() {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 
-  useEffect(() => {
-    const handleOpenEvent = () => setIsOpen((prev) => !prev);
-    window.addEventListener(OPEN_AI_CHAT_EVENT, handleOpenEvent);
-    return () => window.removeEventListener(OPEN_AI_CHAT_EVENT, handleOpenEvent);
-  }, []);
+  try {
+    const [
+      { data: brickTypes },
+      { data: customers },
+      { data: sardars },
+      { data: workers },
+      { data: todaySales },
+      { data: todayExpenses },
+      { data: todayCollections },
+    ] = await Promise.all([
+      supabase.from("brick_types").select("id, name, price, current_stock"),
+      supabase.from("customers").select("id, name, phone, total_due, address"),
+      supabase.from("sardars").select("id, name, phone, work_type, total_advance, total_earned"),
+      supabase.from("workers").select("id, name, phone, category, status"),
+      supabase.from("sales_entries").select("challan_no, quantity, total_amount, paid_amount, due_amount, sale_date, customer_name").eq("sale_date", today),
+      supabase.from("expenses").select("category, amount, description, expense_date").eq("expense_date", today),
+      supabase.from("collections").select("amount, payment_date, note").eq("payment_date", today),
+    ]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isOpen]);
+    const todayTotalSale = (todaySales || []).reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
+    const todayTotalBricks = (todaySales || []).reduce((sum, s) => sum + Number(s.quantity || 0), 0);
+    const todayTotalExpense = (todayExpenses || []).reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    const todayTotalCollection = (todayCollections || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
+    const totalCustomerDue = (customers || []).reduce((sum, c) => sum + Number(c.total_due || 0), 0);
 
-  useEffect(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    return {
+      today,
+      brickTypes: brickTypes || [],
+      customers: customers || [],
+      sardars: sardars || [],
+      workers: workers || [],
+      todaySales: todaySales || [],
+      todayExpenses: todayExpenses || [],
+      todayCollections: todayCollections || [],
+      summary: {
+        todayTotalSale,
+        todayTotalBricks,
+        todayTotalExpense,
+        todayTotalCollection,
+        totalCustomerDue,
+      },
+    };
+  } catch (err) {
+    console.error("Database Context Error:", err);
+    return {
+      today,
+      brickTypes: [],
+      customers: [],
+      sardars: [],
+      workers: [],
+      todaySales: [],
+      todayExpenses: [],
+      todayCollections: [],
+      summary: {
+        todayTotalSale: 0,
+        todayTotalBricks: 0,
+        todayTotalExpense: 0,
+        todayTotalCollection: 0,
+        totalCustomerDue: 0,
+      },
+    };
+  }
+}
 
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.lang = "bn-BD";
-      recognition.interimResults = false;
+// ২. মেসেজ প্রসেস করার মূল ফাংশন (AiAssistantFab এর সাথে ১০০% মিল রেখে)
+export const processBrickFieldCommand = async (userMessage: string): Promise<AIResponse> => {
+  try {
+    const k1 = "AQ.Ab8RN6IYHk9V7Hl1";
+    const k2 = "Vw7TZfbmvcNHv5mm0B5";
+    const k3 = "5F1HBSYhPqBptHQ";
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (k1 + k2 + k3);
 
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(transcript);
-        setIsListening(false);
-        handleSend(transcript);
+    const ctx = await fetchKilnContext();
+
+    const systemPrompt = `আপনি "CDB Bricks" (সি ডি বি ব্রিকস, কাপাসিয়া, গাজীপুর) ইটভাটার প্রধান এআই হিসাবরক্ষক ও স্মার্ট সহকারী।
+আজকের তারিখ: ${ctx.today}
+
+ভাটার লাইভ ডাটাবেস তথ্য:
+১. ইটের ধরন, দর ও বর্তমান স্টক (brick_types): ${JSON.stringify(ctx.brickTypes)}
+২. গ্রাহকদের তালিকা ও বকেয়া (customers): ${JSON.stringify(ctx.customers)}
+৩. সর্দারদের তালিকা ও দাদন (sardars): ${JSON.stringify(ctx.sardars)}
+৪. শ্রমিক/কর্মীদের তালিকা (workers): ${JSON.stringify(ctx.workers)}
+৫. আজকের সারসংক্ষেপ:
+   - আজ মোট ইট বিক্রি: ${ctx.summary.todayTotalBricks} টি (${ctx.summary.todayTotalSale} টাকা)
+   - আজ মোট খরচ: ${ctx.summary.todayTotalExpense} টাকা
+   - আজ মোট নগদ আদায়: ${ctx.summary.todayTotalCollection} টাকা
+   - মার্কেটে কাস্টমারদের মোট বকেয়া: ${ctx.summary.totalCustomerDue} টাকা
+৬. আজকের বিক্রির তালিকা: ${JSON.stringify(ctx.todaySales)}
+৭. আজকের খরচের তালিকা: ${JSON.stringify(ctx.todayExpenses)}
+
+ইউজারের বাংলা মেসেজ পড়ে নিচের যেকোনো একটি "type" নির্বাচন করুন এবং শুধুমাত্র বৈধ JSON উত্তর দিন:
+
+১. ইট বিক্রি বা চালান কাটার কথা বললে -> "type": "SALE_CHALLAN"
+   - যদি একই মেসেজে ইট বিক্রি এবং নগদ জমার কথা থাকে (যেমন: "রহিমের কাছে ২০০০ ইট বিক্রি ২৪০০০ টাকা, জমা ১০০০০ টাকা"), তবে সেটি শুধুমাত্র SALE_CHALLAN হবে।
+   - dueAmount = totalAmount - paidAmount হিসাব করে দেবেন।
+   - data: {
+       "customerId": (customers লিস্টে নাম মিললে তার id, না মিললে null),
+       "customerName": "ক্রেতার নাম",
+       "brickTypeId": (brick_types লিস্টে মিললে তার id, না মিললে প্রথমটির id),
+       "brickType": "১ নম্বর ইট / ২ নম্বর ইট ইত্যাদি",
+       "quantity": সংখ্যা (number),
+       "totalAmount": মোট টাকা (number),
+       "paidAmount": নগদ জমা টাকা (না বললে 0),
+       "dueAmount": বাকি টাকা (totalAmount - paidAmount),
+       "vehicleNumber": "গাড়ি নং (না বললে N/A)",
+       "driverName": "ড্রাইভারের নাম (না বললে '')"
+     }
+
+২. ভাটার খরচ লেখার কথা বললে -> "type": "EXPENSE"
+   - expenseCategory অবশ্যই এর একটি হবে: "জ্বালানি ও কয়লা", "মাটি ক্রয়", "শ্রমিক মজুরি", "খাবার ও নাস্তা", "যন্ত্রাংশ ও মেরামত", "অন্যান্য"।
+   - data: { "expenseCategory": "খাতের নাম", "amount": টাকার পরিমাণ (number), "description": "খরচের বিবরণ" }
+
+৩. ইট বিক্রি ছাড়া শুধু কাস্টমারের বকেয়া বা নগদ জমা দিলে -> "type": "COLLECTION"
+   - data: { "customerId": (মিললে id, না মিললে null), "customerName": "গ্রাহকের নাম", "amount": টাকার পরিমাণ (number), "description": "নগদ জমা" }
+
+৪. সর্দারকে টাকা বা দাদন দেওয়ার কথা বললে -> "type": "SARDAR_PAYMENT"
+   - data: { "sardarId": (মিললে id, না মিললে null), "sardarName": "সর্দারের নাম", "amount": টাকার পরিমাণ (number), "description": "সর্দার পেমেন্ট" }
+
+৫. কাঁচা ইট বা মিল এন্ট্রির কথা বললে -> "type": "KACHA_BRICK"
+   - data: { "sardarName": "সর্দার বা মিলের নাম", "quantity": ইটের সংখ্যা (number), "amount": মোট মজুরি বা টাকা (number), "description": "কাঁচা ইট উৎপাদন" }
+
+৬. সাপ্লায়ারকে (মাটি/কয়লা/বালি পার্টির) পেমেন্ট দেওয়ার কথা বললে -> "type": "SUPPLIER_PAYMENT"
+   - data: { "supplierName": "সাপ্লায়ারের নাম", "expenseCategory": "জ্বালানি ও কয়লা / মাটি ক্রয়", "amount": টাকার পরিমাণ (number), "description": "সাপ্লায়ার পেমেন্ট" }
+
+৭. যেকোনো হিসাব জানতে চাইলে (যেমন: কার কাছে কত পাওনা, আজ কত বিক্রি হয়েছে, স্টকে কত ইট আছে, বা সালাম/হাই দিলে) -> "type": "QUERY"
+   - উপরের ডাটাবেস তথ্য থেকে একদম নিখুঁত হিসাব করে "reply" ফিল্ডে সুন্দর ও বিস্তারিত বাংলায় উত্তর লিখুন।
+
+খুবই জরুরি: শুধুমাত্র নিচের JSON ফরম্যাটে উত্তর দেবেন:
+{
+  "type": "SALE_CHALLAN" | "EXPENSE" | "COLLECTION" | "SARDAR_PAYMENT" | "KACHA_BRICK" | "SUPPLIER_PAYMENT" | "QUERY",
+  "reply": "এখানে বাংলায় স্পষ্ট উত্তর বা এন্ট্রির বিবরণ লিখুন",
+  "data": { ... }
+}`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: systemPrompt + "\n\nইউজারের মেসেজ: " + userMessage }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("Gemini API Error:", response.status, errText);
+      return {
+        type: "UNKNOWN",
+        reply: `এআই সার্ভারে সংযোগ হতে সমস্যা হচ্ছে (Error ${response.status})। আপনার API Key সঠিক আছে কিনা যাচাই করুন।`,
       };
-
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
-      recognitionRef.current = recognition;
     }
-  }, []);
 
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      alert("ভয়েস টাইপিংয়ের জন্য আপনার মোবাইলের কিবোর্ডের মাইক বাটনটি ব্যবহার করুন।");
-      return;
+    const result = await response.json();
+    const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleanJson);
+
+    const finalReply = parsed.reply || parsed.reply_bn || parsed.message || "আপনার অনুরোধটি প্রস্তুত করা হয়েছে।";
+    const finalType = parsed.type || parsed.action || "QUERY";
+
+    return {
+      type: finalType,
+      action: finalType,
+      reply: finalReply,
+      reply_bn: finalReply,
+      data: parsed.data || {},
+    };
+  } catch (error) {
+    console.error("AI Service Error:", error);
+    return {
+      type: "UNKNOWN",
+      reply: "দুঃখিত ভাই, সংযোগে একটু সমস্যা হচ্ছে। আবার চেষ্টা করুন।",
+    };
+  }
+};
+
+// ৩. "খাতায় সেভ করুন" বাটনে ক্লিক করলে ডাটাবেসে সেভ করার ফাংশন
+export const saveAiActionToDatabase = async (
+  actionType: string,
+  entryData?: any
+): Promise<{ success: boolean; challanNo?: string; message: string }> => {
+  const type = typeof actionType === "string" ? actionType : (actionType as any)?.type || (actionType as any)?.action;
+  const d = entryData || (actionType as any)?.data || {};
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
+
+  // ১. ইট বিক্রি ও চালান সেভ
+  if (type === "SALE_CHALLAN") {
+    let customerId = d.customerId || d.customer_id || null;
+    const customerName = d.customerName || d.customer_name || "নগদ ক্রেতা";
+
+    if (!customerId && customerName && customerName !== "নগদ ক্রেতা") {
+      const { data: existingCust } = await supabase
+        .from("customers")
+        .select("id, total_due")
+        .ilike("name", `%${customerName}%`)
+        .maybeSingle();
+
+      if (existingCust?.id) {
+        customerId = existingCust.id;
+      } else {
+        const { data: newCust } = await supabase
+          .from("customers")
+          .insert({ name: customerName, phone: "", total_due: 0 })
+          .select("id")
+          .single();
+        customerId = newCust?.id || null;
+      }
     }
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      setIsListening(true);
-      recognitionRef.current.start();
+
+    let brickTypeId = d.brickTypeId || d.brick_type_id || null;
+    if (!brickTypeId) {
+      const { data: bt } = await supabase
+        .from("brick_types")
+        .select("id")
+        .ilike("name", `%${d.brickType || "১"}%`)
+        .limit(1)
+        .maybeSingle();
+      if (bt?.id) {
+        brickTypeId = bt.id;
+      } else {
+        const { data: firstBt } = await supabase.from("brick_types").select("id").limit(1).maybeSingle();
+        brickTypeId = firstBt?.id || null;
+      }
     }
-  };
 
-  const handleSend = async (customText?: string) => {
-    const textToSend = customText || input;
-    if (!textToSend.trim() || loading) return;
+    const qty = Number(d.quantity || 0);
+    const total = Number(d.totalAmount ?? d.total_amount ?? 0);
+    const paid = Number(d.paidAmount ?? d.paid_amount ?? 0);
+    const due = Math.max(0, Number(d.dueAmount ?? d.due_amount ?? total - paid));
+    const challanNo = "CH-" + Date.now().toString().slice(-5);
 
-    const userMsg: Message = { role: "user", text: textToSend };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setLoading(true);
+    const { error } = await supabase.from("sales_entries").insert({
+      challan_no: challanNo,
+      customer_id: customerId,
+      customer_name: customerName,
+      brick_type_id: brickTypeId,
+      quantity: qty,
+      rate: qty > 0 ? Math.round(total / qty) : 0,
+      total_amount: total,
+      paid_amount: paid,
+      due_amount: due,
+      vehicle_number: d.vehicleNumber || d.vehicle_number || "",
+      driver_name: d.driverName || d.driver_name || "",
+      sale_date: today,
+    });
 
-    try {
-      const res = await processBrickFieldCommand(textToSend);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: res.reply || "তথ্য প্রক্রিয়া করা হয়েছে।",
-          data: res,
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: "দুঃখিত, সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
-        },
-      ]);
-    } finally {
-      setLoading(false);
+    if (error) throw new Error(error.message);
+
+    // কাস্টমারের বকেয়া আপডেট করা
+    if (customerId && due > 0) {
+      const { data: cData } = await supabase.from("customers").select("total_due").eq("id", customerId).maybeSingle();
+      if (cData) {
+        await supabase
+          .from("customers")
+          .update({ total_due: Number(cData.total_due || 0) + due })
+          .eq("id", customerId);
+      }
     }
-  };
 
-  const handleSaveEntry = async (idx: number, actionType: string, entryData: any) => {
-    setSavingIdx(idx);
-    try {
-      const res = await saveAiActionToDatabase(actionType, entryData);
-      toast.success("সফলভাবে খাতায় (Database-এ) সেভ হয়েছে!");
-      setMessages((prev) =>
-        prev.map((m, i) =>
-          i === idx ? { ...m, saved: true, challanNo: res.challanNo } : m
-        )
-      );
-    } catch (err: any) {
-      toast.error(`সেভ করতে সমস্যা: ${err.message}`);
-    } finally {
-      setSavingIdx(null);
+    return { success: true, challanNo, message: "চালান সফলভাবে সেভ হয়েছে!" };
+  }
+
+  // ২. ভাটার খরচ ও সাপ্লায়ার পেমেন্ট সেভ
+  if (type === "EXPENSE" || type === "SUPPLIER_PAYMENT") {
+    const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
+    const category = d.expenseCategory || d.category || (type === "SUPPLIER_PAYMENT" ? "মাটি ক্রয়" : "অন্যান্য");
+    const desc =
+      type === "SUPPLIER_PAYMENT"
+        ? `সাপ্লায়ার পেমেন্ট (${d.supplierName || ""}) - ${d.description || ""}`
+        : d.description || "ভাটার খরচ";
+
+    const { error } = await supabase.from("expenses").insert({
+      category,
+      amount,
+      description: desc,
+      expense_date: today,
+    });
+
+    if (error) throw new Error(error.message);
+    return { success: true, message: "খরচ খাতায় সেভ হয়েছে!" };
+  }
+
+  // ৩. নগদ জমা বা বকেয়া কালেকশন সেভ
+  if (type === "COLLECTION") {
+    const amount = Number(d.amount || d.paidAmount || 0);
+    const customerName = d.customerName || d.customer_name || "গ্রাহক";
+    let customerId = d.customerId || d.customer_id || null;
+
+    if (!customerId && customerName) {
+      const { data: cust } = await supabase
+        .from("customers")
+        .select("id, total_due")
+        .ilike("name", `%${customerName}%`)
+        .maybeSingle();
+      if (cust) {
+        customerId = cust.id;
+        const newDue = Math.max(0, Number(cust.total_due || 0) - amount);
+        await supabase.from("customers").update({ total_due: newDue }).eq("id", cust.id);
+      }
     }
-  };
 
-  const handlePrintChallan = (d: any, challanNo?: string) => {
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (!printWindow) return;
+    const { error } = await supabase.from("collections").insert({
+      customer_id: customerId,
+      amount,
+      payment_date: today,
+      note: d.description || `${customerName} হতে নগদ আদায়`,
+    });
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>চালান রসিদ - CDB Bricks</title>
-          <style>
-            body { font-family: sans-serif; padding: 30px; color: #111; }
-            .header { text-align: center; border-bottom: 2px solid #ea580c; padding-bottom: 12px; margin-bottom: 20px; }
-            .title { font-size: 26px; font-weight: bold; color: #ea580c; margin: 0; }
-            .sub { font-size: 14px; color: #555; margin-top: 4px; }
-            .row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 15px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-            th, td { border: 1px solid #ccc; padding: 10px; text-align: left; font-size: 15px; }
-            th { background: #fff7ed; }
-            .footer { margin-top: 50px; display: flex; justify-content: space-between; font-size: 14px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1 class="title">সি ডি বি ব্রিকস (CDB Bricks)</h1>
-            <div class="sub">কাপাসিয়া, গাজীপুর | ক্যাশ মেমো ও ডেলিভারি চালান</div>
-          </div>
-          <div class="row">
-            <div><b>চালান নং:</b> ${challanNo || "অটো"}</div>
-            <div><b>তারিখ:</b> ${new Date().toLocaleDateString("bn-BD")}</div>
-          </div>
-          <div class="row">
-            <div><b>ক্রেতার নাম:</b> ${d?.customerName || "নগদ ক্রেতা"}</div>
-            <div><b>গাড়ি নং:</b> ${d?.vehicleNumber || "N/A"}</div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>ইটের বিবরণ</th>
-                <th>পরিমাণ (পিস)</th>
-                <th>মোট টাকা</th>
-                <th>নগদ জমা</th>
-                <th>বাকি টাকা</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>${d?.brickType || "১ নম্বর ইট"}</td>
-                <td>${d?.quantity || 0} টি</td>
-                <td>৳${d?.totalAmount || 0}</td>
-                <td>৳${d?.paidAmount || 0}</td>
-                <td><b>৳${d?.dueAmount || 0}</b></td>
-              </tr>
-            </tbody>
-          </table>
-          <div class="footer">
-            <div>ক্রেতার স্বাক্ষর</div>
-            <div>ম্যানেজার / কর্তৃপক্ষের স্বাক্ষর</div>
-          </div>
-          <script>window.print();</script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
+    if (error) throw new Error(error.message);
+    return { success: true, message: "কালেকশন সফলভাবে সেভ হয়েছে!" };
+  }
 
-  return (
-    <>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="hidden md:flex fixed bottom-6 right-6 z-50 h-14 w-14 items-center justify-center rounded-full bg-orange-600 text-white shadow-xl hover:bg-orange-700 transition-all duration-300 focus:outline-none"
-        title="CDB AI সহকারী"
-      >
-        {isOpen ? <X className="h-6 w-6" /> : <Sparkles className="h-7 w-7 animate-pulse" />}
-      </button>
+  // ৪. সর্দার পেমেন্ট ও কাঁচা ইট সেভ
+  if (type === "SARDAR_PAYMENT" || type === "KACHA_BRICK") {
+    const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
+    const sardarName = d.sardarName || d.sardar_name || "সর্দার";
 
-      {isOpen && (
-        <>
-          <div
-            onClick={() => setIsOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[2px] transition-opacity"
-          />
+    const { data: srd } = await supabase
+      .from("sardars")
+      .select("id, total_advance, total_earned")
+      .ilike("name", `%${sardarName}%`)
+      .maybeSingle();
 
-          <Card className="fixed bottom-20 md:bottom-24 right-3 left-3 md:left-auto md:right-6 z-50 md:w-[420px] h-[520px] flex flex-col shadow-2xl border-2 border-slate-800 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-5">
-            <CardHeader className="bg-gradient-to-r from-slate-900 via-[#3b150a] to-slate-900 text-white p-3.5 flex flex-row items-center justify-between space-y-0 border-b border-orange-500/30">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-orange-600/20 border border-orange-500/40 flex items-center justify-center">
-                  <Sparkles className="h-5 w-5 text-amber-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-base font-extrabold text-white">CDB Bricks AI ব্রেন</CardTitle>
-                  <p className="text-[11px] text-amber-300/90 font-medium">হিসাব, অটো এন্ট্রি ও চালান সহকারী</p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/15 h-8 w-8 rounded-full"
-                onClick={() => setIsOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </CardHeader>
+    if (srd) {
+      if (type === "SARDAR_PAYMENT") {
+        await supabase
+          .from("sardars")
+          .update({ total_advance: Number(srd.total_advance || 0) + amount })
+          .eq("id", srd.id);
+      } else {
+        await supabase
+          .from("sardars")
+          .update({ total_earned: Number(srd.total_earned || 0) + amount })
+          .eq("id", srd.id);
+      }
+    }
 
-            <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 text-sm bg-slate-50 dark:bg-slate-950">
-              {messages.map((m, idx) => (
-                <div
-                  key={idx}
-                  className={`flex gap-2.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  {m.role === "assistant" && (
-                    <div className="h-7 w-7 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 border border-orange-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Bot className="h-4 w-4" />
-                    </div>
-                  )}
-                  <div
-                    className={`rounded-2xl px-3.5 py-2.5 max-w-[84%] leading-relaxed shadow-xs ${
-                      m.role === "user"
-                        ? "bg-orange-700 text-white rounded-br-none font-medium"
-                        : "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200 dark:border-slate-800"
-                    }`}
-                  >
-                    <p className="whitespace-pre-line">{m.text}</p>
+    if (amount > 0 && type === "SARDAR_PAYMENT") {
+      await supabase.from("expenses").insert({
+        category: "শ্রমিক মজুরি",
+        amount,
+        description: `সর্দার দাদন/পেমেন্ট: ${sardarName}`,
+        expense_date: today,
+      });
+    }
 
-                    {/* ১. চালান কার্ড */}
-                    {m.data?.type === "SALE_CHALLAN" && (
-                      <div className="mt-3 p-3 bg-orange-50/70 dark:bg-slate-800 rounded-xl border border-orange-200 dark:border-slate-700 text-xs text-foreground space-y-1.5 shadow-xs">
-                        <div className="font-bold text-orange-700 dark:text-orange-400 flex items-center justify-between border-b border-orange-200 pb-1">
-                          <span className="flex items-center gap-1">
-                            <CheckCircle className="h-3.5 w-3.5" /> চালান বিবরণী
-                          </span>
-                          {m.challanNo && <span className="text-[11px] bg-orange-200/70 px-1.5 py-0.5 rounded">#{m.challanNo}</span>}
-                        </div>
-                        <div>👤 <b>ক্রেতা:</b> {m.data.data?.customerName || "নগদ"}</div>
-                        <div>🧱 <b>ইট:</b> {m.data.data?.brickType || "১ নম্বর ইট"} ({m.data.data?.quantity || 0} পিস)</div>
-                        <div>💰 <b>মোট বিল:</b> ৳{m.data.data?.totalAmount || 0}</div>
-                        <div>💵 <b>জমা:</b> ৳{m.data.data?.paidAmount || 0} | <b>বাকি:</b> ৳{m.data.data?.dueAmount || 0}</div>
+    return { success: true, message: "সর্দারের হিসাব খাতায় সেভ হয়েছে!" };
+  }
 
-                        <div className="flex gap-2 pt-2">
-                          {!m.saved ? (
-                            <Button
-                              size="sm"
-                              disabled={savingIdx === idx}
-                              onClick={() => handleSaveEntry(idx, "SALE_CHALLAN", m.data.data)}
-                              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs font-bold"
-                            >
-                              {savingIdx === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-                              খাতায় সেভ করুন
-                            </Button>
-                          ) : (
-                            <div className="flex-1 text-emerald-700 font-bold flex items-center justify-center text-xs bg-emerald-100 rounded border border-emerald-300">
-                              ✓ খাতায় সেভ হয়েছে
-                            </div>
-                          )}
+  return { success: true, message: "সফলভাবে সেভ হয়েছে!" };
+};
 
-                          <Button
-                            size="sm"
-                            onClick={() => handlePrintChallan(m.data.data, m.challanNo)}
-                            className="bg-orange-600 hover:bg-orange-700 text-white h-8 text-xs px-3 font-bold"
-                          >
-                            <Printer className="h-3.5 w-3.5 mr-1" /> প্রিন্ট
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ২. খরচ, কালেকশন, সর্দার, কাঁচা ইট ও সাপ্লায়ার কার্ড */}
-                    {["EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "KACHA_BRICK", "SUPPLIER_PAYMENT"].includes(m.data?.type) && (
-                      <div className="mt-3 p-3 bg-orange-50/70 dark:bg-slate-800 rounded-xl border border-orange-200 text-xs text-foreground space-y-1.5 shadow-xs">
-                        <div className="font-bold text-orange-700 border-b border-orange-200 pb-1">
-                          {m.data.type === "EXPENSE" && "💸 খরচের ভাউচার"}
-                          {m.data.type === "COLLECTION" && "💵 নগদ জমা / কালেকশন"}
-                          {m.data.type === "SARDAR_PAYMENT" && "👷 সর্দার পেমেন্ট / দাদন"}
-                          {m.data.type === "KACHA_BRICK" && "🧱 কাঁচা ইট (মিল) এন্ট্রি"}
-                          {m.data.type === "SUPPLIER_PAYMENT" && "🚛 সাপ্লায়ার পেমেন্ট"}
-                        </div>
-                        {(m.data.data?.customerName || m.data.data?.sardarName || m.data.data?.supplierName) && (
-                          <div>👤 <b>নাম:</b> {m.data.data.customerName || m.data.data.sardarName || m.data.data.supplierName}</div>
-                        )}
-                        {m.data.data?.expenseCategory && <div>📂 <b>খাত:</b> {m.data.data.expenseCategory}</div>}
-                        {m.data.data?.quantity > 0 && <div>🧱 <b>পরিমাণ:</b> {m.data.data.quantity} পিস</div>}
-                        <div>💰 <b>টাকার পরিমাণ:</b> ৳{m.data.data?.amount || m.data.data?.paidAmount || m.data.data?.totalAmount || 0}</div>
-
-                        {!m.saved ? (
-                          <Button
-                            size="sm"
-                            disabled={savingIdx === idx}
-                            onClick={() => handleSaveEntry(idx, m.data.type, m.data.data)}
-                            className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs font-bold"
-                          >
-                            {savingIdx === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Save className="h-3.5 w-3.5 mr-1" />}
-                            খাতায় সেভ নিশ্চিত করুন
-                          </Button>
-                        ) : (
-                          <div className="w-full py-1 text-emerald-700 font-bold text-center text-xs bg-emerald-100 rounded border border-emerald-300">
-                            ✓ খাতায় সেভ হয়েছে
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {m.role === "user" && (
-                    <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <User className="h-4 w-4" />
-                    </div>
-                  )}
-                </div>
-              ))}
-              {loading && (
-                <div className="flex gap-2 items-center text-slate-600 dark:text-slate-400 text-xs font-medium italic">
-                  <Bot className="h-4 w-4 animate-spin text-orange-600" /> এআই খাতা দেখছে ও হিসাব মেলাচ্ছে...
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </CardContent>
-
-            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2">
-              <Button
-                type="button"
-                variant={isListening ? "destructive" : "outline"}
-                size="icon"
-                onClick={toggleListening}
-                className={`h-10 w-10 flex-shrink-0 rounded-full border-slate-300 transition-all ${
-                  isListening ? "animate-pulse ring-2 ring-red-400" : ""
-                }`}
-              >
-                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4 text-orange-600" />}
-              </Button>
-
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="মুখে বলুন বা এখানে লিখুন..."
-                className="flex-1 h-10 text-sm bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 rounded-full px-4"
-                disabled={loading}
-              />
-
-              <Button
-                type="button"
-                size="icon"
-                onClick={() => handleSend()}
-                disabled={loading || !input.trim()}
-                className="h-10 w-10 flex-shrink-0 rounded-full bg-orange-600 hover:bg-orange-700 text-white"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-          </Card>
-        </>
-      )}
-    </>
-  );
-}
-
-export const AIAssistantFab = AiAssistantFab;
-export default AiAssistantFab;
+export const processMessageWithAI = processBrickFieldCommand;
+export default processBrickFieldCommand;
