@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Check, ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { createClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +39,6 @@ type IncomeRow = {
 };
 type Range = { from: string; to: string };
 
-// রো-এর আইডি থেকে আসল টেবিলের নাম ও কলাম বের করার নিয়ম
 const ROW_TABLES: Array<[string, string, string]> = [
   ["op", "opening_payments", "payment_date"],
   ["lp", "loan_payments", "payment_date"],
@@ -62,7 +60,7 @@ function resolveRowKey(key: string) {
   throw new Error("অজানা এন্ট্রি");
 }
 
-// সার্ভার ছাড়াই সরাসরি ব্রাউজার থেকে নিরাপদে এডমিন পাসওয়ার্ড যাচাই
+// আলাদা কোনো URL ছাড়াই সরাসরি সচল supabase ক্লায়েন্ট দিয়ে এডমিন ও পাসওয়ার্ড যাচাই
 async function verifyAdminPasswordClient(password: string): Promise<boolean> {
   const { data: userRes } = await supabase.auth.getUser();
   const user = userRes?.user;
@@ -78,20 +76,12 @@ async function verifyAdminPasswordClient(password: string): Promise<boolean> {
     throw new Error("শুধুমাত্র এডমিন এন্ট্রি মুছতে পারবেন");
   }
 
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const tempClient = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  const { error } = await tempClient.auth.signInWithPassword({
+  const { error } = await supabase.auth.signInWithPassword({
     email: user.email,
     password,
   });
 
   if (error) return false;
-  await tempClient.auth.signOut();
   return true;
 }
 
