@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, Send, Sparkles, X, Printer, CheckCircle, Bot, User, Save, Loader2 } from "lucide-react";
+import { Mic, MicOff, Send, Sparkles, X, Printer, CheckCircle, Bot, User, Save, Loader2, Camera, Paperclip, FileText } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { processBrickFieldCommand, saveAiActionToDatabase } from "../services/gemini";
+import { processBrickFieldCommand, saveAiActionToDatabase, AIAttachment } from "../services/gemini";
 import { toast } from "sonner";
 
 export const OPEN_AI_CHAT_EVENT = "open-ai-chat-drawer";
@@ -11,6 +11,8 @@ export const OPEN_AI_CHAT_EVENT = "open-ai-chat-drawer";
 interface Message {
   role: "user" | "assistant";
   text: string;
+  imagePreview?: string;
+  fileName?: string;
   data?: any;
   saved?: boolean;
   challanNo?: string;
@@ -22,15 +24,19 @@ export function AiAssistantFab() {
   const [loading, setLoading] = useState(false);
   const [savingIdx, setSavingIdx] = useState<number | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const [attachment, setAttachment] = useState<(AIAttachment & { previewUrl?: string }) | null>(null);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      text: "আসসালামু আলাইকুম! আমি CDB Bricks AI সহকারী। ভাটার যেকোনো হিসাব জানতে, নতুন চালান কাটতে বা জমা-খরচ খাতায় তুলতে আমাকে বাংলায় বলুন বা লিখুন।",
+      text: "আসসালামু আলাইকুম! আমি CDB Bricks AI সহকারী। ভাটার যেকোনো হিসাব জানতে, নতুন চালান কাটতে, অথবা খাতার পাতা/রসিদ স্ক্যান করতে নিচের ক্যামেরা বা মাইক বাটনটি ব্যবহার করুন।",
     },
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleOpenEvent = () => setIsOpen((prev) => !prev);
@@ -79,17 +85,50 @@ export function AiAssistantFab() {
     }
   };
 
-  const handleSend = async (customText?: string) => {
-    const textToSend = customText || input;
-    if (!textToSend.trim() || loading) return;
+  // ছবি বা ফাইল সিলেক্ট করলে সেটিকে Base64-এ রূপান্তর করা
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    const userMsg: Message = { role: "user", text: textToSend };
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("ফাইলটির সাইজ ১০ মেগাবাইটের কম হতে হবে।");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const resultStr = reader.result as string;
+      const base64Data = resultStr.split(",")[1] || "";
+      setAttachment({
+        mimeType: file.type || "image/jpeg",
+        base64Data,
+        fileName: file.name,
+        previewUrl: file.type.startsWith("image/") ? resultStr : undefined,
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleSend = async (customText?: string) => {
+    const textToSend = (customText ?? input).trim();
+    if ((!textToSend && !attachment) || loading) return;
+
+    const currentAttachment = attachment;
+    const userMsg: Message = {
+      role: "user",
+      text: textToSend || (currentAttachment ? `📎 স্ক্যান করা ফাইল: ${currentAttachment.fileName}` : ""),
+      imagePreview: currentAttachment?.previewUrl,
+      fileName: currentAttachment?.fileName,
+    };
+
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setAttachment(null);
     setLoading(true);
 
     try {
-      const res: any = await processBrickFieldCommand(textToSend);
+      const res: any = await processBrickFieldCommand(textToSend, currentAttachment);
 
       const replyText =
         res?.reply ||
@@ -229,7 +268,7 @@ export function AiAssistantFab() {
             className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[2px] transition-opacity"
           />
 
-          <Card className="fixed bottom-20 md:bottom-24 right-3 left-3 md:left-auto md:right-6 z-50 md:w-[420px] h-[520px] flex flex-col shadow-2xl border-2 border-slate-800 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-5">
+          <Card className="fixed bottom-20 md:bottom-24 right-3 left-3 md:left-auto md:right-6 z-50 md:w-[430px] h-[540px] flex flex-col shadow-2xl border-2 border-slate-800 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-5">
             <CardHeader className="bg-gradient-to-r from-slate-900 via-[#3b150a] to-slate-900 text-white p-3.5 flex flex-row items-center justify-between space-y-0 border-b border-orange-500/30">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-xl bg-orange-600/20 border border-orange-500/40 flex items-center justify-center">
@@ -237,7 +276,7 @@ export function AiAssistantFab() {
                 </div>
                 <div>
                   <CardTitle className="text-base font-extrabold text-white">CDB Bricks AI ব্রেন</CardTitle>
-                  <p className="text-[11px] text-amber-300/90 font-medium">হিসাব, অটো এন্ট্রি ও চালান সহকারী</p>
+                  <p className="text-[11px] text-amber-300/90 font-medium">হিসাব, রসিদ স্ক্যানার ও অটো চালান সহকারী</p>
                 </div>
               </div>
               <Button
@@ -268,6 +307,18 @@ export function AiAssistantFab() {
                         : "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200 dark:border-slate-800"
                     }`}
                   >
+                    {m.imagePreview && (
+                      <img
+                        src={m.imagePreview}
+                        alt="Scanned attachment"
+                        className="mb-2 max-h-40 rounded-lg border border-white/20 object-cover"
+                      />
+                    )}
+                    {!m.imagePreview && m.fileName && (
+                      <div className="mb-1.5 flex items-center gap-1.5 text-xs bg-black/20 px-2 py-1 rounded">
+                        <FileText className="h-3.5 w-3.5" /> {m.fileName}
+                      </div>
+                    )}
                     <p className="whitespace-pre-line">{m.text}</p>
 
                     {/* ১. চালান কার্ড */}
@@ -358,19 +409,91 @@ export function AiAssistantFab() {
               ))}
               {loading && (
                 <div className="flex gap-2 items-center text-slate-600 dark:text-slate-400 text-xs font-medium italic">
-                  <Bot className="h-4 w-4 animate-spin text-orange-600" /> এআই খাতা দেখছে ও হিসাব মেলাচ্ছে...
+                  <Bot className="h-4 w-4 animate-spin text-orange-600" /> এআই খাতা ও ফাইল স্ক্যান করে হিসাব মেলাচ্ছে...
                 </div>
               )}
               <div ref={messagesEndRef} />
             </CardContent>
 
-            <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2">
+            {/* ফাইল বা ছবি অ্যাটাচ করলে তার প্রিভিউ বার */}
+            {attachment && (
+              <div className="px-3 py-2 bg-orange-50 dark:bg-slate-800 border-t border-orange-200 dark:border-slate-700 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {attachment.previewUrl ? (
+                    <img src={attachment.previewUrl} alt="Preview" className="h-10 w-10 rounded object-cover border border-orange-300" />
+                  ) : (
+                    <FileText className="h-8 w-8 text-orange-600 shrink-0" />
+                  )}
+                  <div className="truncate">
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{attachment.fileName}</p>
+                    <p className="text-[10px] text-orange-600 dark:text-orange-400">স্ক্যান করার জন্য প্রস্তুত — সেন্ড চাপুন</p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full text-rose-600 hover:bg-rose-100"
+                  onClick={() => setAttachment(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {/* ইনপুট বার: ক্যামেরা স্ক্যান + ফাইল অ্যাটাচ + ভয়েস মাইক + টেক্সট */}
+            <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-1.5">
+              {/* হিডেন ইনপুটসমূহ */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
+              {/* ১. ক্যামেরা স্ক্যান বাটন */}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={loading}
+                title="রসিদ বা খাতা ক্যামেরা দিয়ে স্ক্যান করুন"
+                className="h-9 w-9 flex-shrink-0 rounded-full border-slate-300 hover:bg-orange-50"
+              >
+                <Camera className="h-4 w-4 text-orange-600" />
+              </Button>
+
+              {/* ২. গ্যালারি / ফাইল অ্যাটাচ বাটন */}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                title="ছবি বা পিডিএফ ফাইল যুক্ত করুন"
+                className="h-9 w-9 flex-shrink-0 rounded-full border-slate-300 hover:bg-orange-50"
+              >
+                <Paperclip className="h-4 w-4 text-slate-700 dark:text-slate-300" />
+              </Button>
+
+              {/* ৩. ভয়েস মাইক বাটন */}
               <Button
                 type="button"
                 variant={isListening ? "destructive" : "outline"}
                 size="icon"
                 onClick={toggleListening}
-                className={`h-10 w-10 flex-shrink-0 rounded-full border-slate-300 transition-all ${
+                title="মুখে বলুন"
+                className={`h-9 w-9 flex-shrink-0 rounded-full border-slate-300 transition-all ${
                   isListening ? "animate-pulse ring-2 ring-red-400" : ""
                 }`}
               >
@@ -381,8 +504,8 @@ export function AiAssistantFab() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="মুখে বলুন বা এখানে লিখুন..."
-                className="flex-1 h-10 text-sm bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 rounded-full px-4"
+                placeholder={attachment ? "ছবিটি সম্পর্কে কিছু লিখুন বা সরাসরি সেন্ড চাপুন..." : "মুখে বলুন, ছবি তুলুন বা লিখুন..."}
+                className="flex-1 h-9 text-sm bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 rounded-full px-3.5"
                 disabled={loading}
               />
 
@@ -390,8 +513,8 @@ export function AiAssistantFab() {
                 type="button"
                 size="icon"
                 onClick={() => handleSend()}
-                disabled={loading || !input.trim()}
-                className="h-10 w-10 flex-shrink-0 rounded-full bg-orange-600 hover:bg-orange-700 text-white"
+                disabled={loading || (!input.trim() && !attachment)}
+                className="h-9 w-9 flex-shrink-0 rounded-full bg-orange-600 hover:bg-orange-700 text-white"
               >
                 <Send className="h-4 w-4" />
               </Button>
