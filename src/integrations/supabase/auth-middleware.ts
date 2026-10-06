@@ -6,24 +6,19 @@ import type { Database } from './types';
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
-    const metaEnv = (import.meta as any).env || {};
-
+    // Vite-এর নিয়ম অনুযায়ী সরাসরি স্ট্যাটিক এক্সেস দিতে হবে যাতে বিল্ডের সময়ই মান বসে যায়
     const SUPABASE_URL =
       process.env.SUPABASE_URL ||
       process.env.VITE_SUPABASE_URL ||
-      metaEnv.VITE_SUPABASE_URL ||
-      metaEnv.SUPABASE_URL;
+      import.meta.env.VITE_SUPABASE_URL;
 
     const SUPABASE_PUBLISHABLE_KEY =
       process.env.SUPABASE_PUBLISHABLE_KEY ||
       process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
       process.env.VITE_SUPABASE_ANON_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      metaEnv.VITE_SUPABASE_PUBLISHABLE_KEY ||
-      metaEnv.VITE_SUPABASE_ANON_KEY ||
-      metaEnv.SUPABASE_PUBLISHABLE_KEY;
+      import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+      import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-    // অন্য যেকোনো সার্ভার ফাইলের (যেমন cash-book.server.ts) সুবিধার জন্য process.env-তেও মানগুলো বসিয়ে দেওয়া হচ্ছে
     if (SUPABASE_URL) process.env.SUPABASE_URL = SUPABASE_URL;
     if (SUPABASE_PUBLISHABLE_KEY) process.env.SUPABASE_PUBLISHABLE_KEY = SUPABASE_PUBLISHABLE_KEY;
 
@@ -59,8 +54,8 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
     }
 
     const supabase = createClient<Database>(
-      SUPABASE_URL!,
-      SUPABASE_PUBLISHABLE_KEY!,
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY,
       {
         global: {
           headers: {
