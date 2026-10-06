@@ -37,47 +37,258 @@ export interface AIResponse {
   data?: AIActionData;
 }
 
-// ১. ডাটাবেস থেকে ভাটার সব সর্বশেষ তথ্য নিয়ে আসা
+// ১. আপনার আসল ডাটাবেস টেবিল থেকে ভাটার সব তথ্য ও নিখুঁত হিসাব নিয়ে আসা
 async function fetchKilnContext() {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 
   try {
     const [
-      { data: brickTypes },
       { data: customers },
+      { data: brickTypes },
+      { data: currentStock },
+      { data: salesEntries },
+      { data: collections },
+      { data: expenses },
+      { data: openingSummary },
+      { data: openingBalances },
+      { data: openingPayments },
       { data: sardars },
+      { data: sardarBalances },
+      { data: sardarPayments },
       { data: workers },
-      { data: todaySales },
-      { data: todayExpenses },
-      { data: todayCollections },
+      { data: workerPayments },
+      { data: suppliers },
+      { data: purchases },
+      { data: supplierPayments },
+      { data: vehicleExpenses },
+      { data: ownerTx },
+      { data: loans },
+      { data: loanPayments },
     ] = await Promise.all([
-      supabase.from("brick_types").select("id, name, price, current_stock"),
-      supabase.from("customers").select("id, name, phone, total_due, address"),
-      supabase.from("sardars").select("id, name, phone, work_type, total_advance, total_earned"),
-      supabase.from("workers").select("id, name, phone, category, status"),
-      supabase
-        .from("sales_entries")
-        .select("challan_no, quantity, total_amount, paid_amount, due_amount, sale_date, customer_name")
-        .eq("sale_date", today),
-      supabase.from("expenses").select("category, amount, description, expense_date").eq("expense_date", today),
-      supabase.from("collections").select("amount, payment_date, note").eq("payment_date", today),
+      supabase.from("customers").select("*").order("name"),
+      supabase.from("brick_types").select("*"),
+      (supabase as any).from("current_stock").select("*"),
+      supabase.from("sales_entries").select("*").eq("status", "approved"),
+      supabase.from("collections").select("*").order("payment_date", { ascending: false }),
+      supabase.from("expenses").select("*").order("expense_date", { ascending: false }),
+      (supabase as any).from("opening_balance_summary").select("*"),
+      supabase.from("opening_balances").select("*, sardar:sardars(name), worker:workers(name), customer:customers(name)"),
+      supabase.from("opening_payments").select("*, ob:opening_balances(kind, party_name, customer:customers(name), sardar:sardars(name), worker:workers(name))"),
+      supabase.from("sardars").select("*").order("name"),
+      (supabase as any).from("sardar_balances").select("*"),
+      supabase.from("sardar_payments").select("*"),
+      supabase.from("workers").select("*").order("name"),
+      supabase.from("worker_payments").select("*"),
+      supabase.from("suppliers").select("*").order("name"),
+      supabase.from("purchases").select("*"),
+      supabase.from("supplier_payments").select("*"),
+      supabase.from("vehicle_expenses").select("*"),
+      supabase.from("owner_transactions").select("*"),
+      supabase.from("loans").select("*"),
+      supabase.from("loan_payments").select("*, loan:loans(direction, party_name)"),
     ]);
 
-    const todayTotalSale = (todaySales || []).reduce((sum, s) => sum + Number(s.total_amount || 0), 0);
-    const todayTotalBricks = (todaySales || []).reduce((sum, s) => sum + Number(s.quantity || 0), 0);
-    const todayTotalExpense = (todayExpenses || []).reduce((sum, e) => sum + Number(e.amount || 0), 0);
-    const todayTotalCollection = (todayCollections || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
-    const totalCustomerDue = (customers || []).reduce((sum, c) => sum + Number(c.total_due || 0), 0);
+    const custMap = new Map<string, { id: string; name: string; phone: string; totalSales: number; totalPaid: number; balance: number }>();
+    (customers || []).forEach((c: any) => {
+      custMap.set(c.id, {
+        id: c.id,
+        name: c.name,
+        phone: c.phone || "",
+        totalSales: 0,
+        totalPaid: 0,
+        balance: 0,
+      });
+    });
+
+    (salesEntries || []).forEach((s: any) => {
+      if (s.customer_id && custMap.has(s.customer_id)) {
+        const item = custMap.get(s.customer_id)!;
+        item.totalSales += Number(s.total_amount || 0);
+      }
+    });
+
+    (collections || []).forEach((col: any) => {
+      if (col.customer_id && custMap.has(col.customer_id)) {
+        const item = custMap.get(col.customer_id)!;
+        item.totalPaid += Number(col.amount || 0);
+      }
+    });
+
+    const customerLedger = Array.from(custMap.values()).map((c) => ({
+      ...c,
+      balance: c.totalSales - c.totalPaid,
+    }));
+
+    // পূর্বের বকেয়া ও জের (Opening Balances) সুন্দরভাবে সাজানো
+    const openingPayByObId = new Map<string, number>();
+    (openingPayments || []).forEach((op: any) => {
+      const obId = op.opening_balance_id;
+      if (obId) {
+        openingPayByObId.set(obId, (openingPayByObId.get(obId) || 0) + Number(op.amount || 0));
+      }
+    });
+
+    const summaryMap = new Map<string, any>();
+    (openingSummary || []).forEach((s: any) => {
+      if (s.id) summaryMap.set(s.id, s);
+    });
+
+    const formattedOpeningBalances = (openingBalances || []).map((ob: any) => {
+      const sumRow = summaryMap.get(ob.id);
+      const totalAmt = Number(sumRow?.amount ?? ob.amount ?? 0);
+      const paidAmt = Number(sumRow?.paid_amount ?? openingPayByObId.get(ob.id) ?? 0);
+      const remAmt = Number(sumRow?.remaining_amount ?? totalAmt - paidAmt);
+      const partyName =
+        ob.party_name ||
+        ob.customer?.name ||
+        ob.sardar?.name ||
+        ob.worker?.name ||
+        "অজানা";
+
+      return {
+        id: ob.id,
+        kind: ob.kind,
+        name: partyName,
+        totalAmount: totalAmt,
+        paidAmount: paidAmt,
+        remainingAmount: remAmt,
+        note: ob.note || "",
+      };
+    });
+
+    // মূল ক্যাশ (Cash Box) হিসাব
+    const totalCollectionsNoContract = (collections || [])
+      .filter((c: any) => !c.contract_id)
+      .reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+    const totalAllCollections = (collections || []).reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+
+    const totalExpenses = (expenses || []).reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
+    const totalSardarPaid = (sardarPayments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    const totalWorkerPaid = (workerPayments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    const totalSupplierPaid = (supplierPayments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    const totalVehicleExp = (vehicleExpenses || []).reduce((s: number, v: any) => s + Number(v.amount || 0), 0);
+
+    let ownerIn = 0;
+    let ownerOut = 0;
+    (ownerTx || []).forEach((t: any) => {
+      const amt = Number(t.amount || 0);
+      const type = String(t.txn_type || "").toLowerCase();
+      if (type.includes("in") || type.includes("deposit") || type.includes("invest") || type.includes("জমা")) {
+        ownerIn += amt;
+      } else {
+        ownerOut += amt;
+      }
+    });
+
+    let loanIn = 0;
+    let loanOut = 0;
+    (loans || []).forEach((l: any) => {
+      const amt = Number(l.amount || 0);
+      const dir = String(l.direction || "").toLowerCase();
+      if (dir.includes("out") || dir.includes("given") || dir.includes("প্রদান")) {
+        loanOut += amt;
+      } else {
+        loanIn += amt;
+      }
+    });
+
+    let loanPayIn = 0;
+    let loanPayOut = 0;
+    (loanPayments || []).forEach((lp: any) => {
+      const amt = Number(lp.amount || 0);
+      const dir = String(lp.loan?.direction || "").toLowerCase();
+      if (dir.includes("out") || dir.includes("given")) {
+        loanPayIn += amt;
+      } else {
+        loanPayOut += amt;
+      }
+    });
+
+    let openingIn = 0;
+    let openingOut = 0;
+    (openingPayments || []).forEach((op: any) => {
+      const amt = Number(op.amount || 0);
+      const kind = String(op.ob?.kind || "").toLowerCase();
+      if (kind.includes("customer") || kind.includes("receivable") || kind.includes("পাওনা")) {
+        openingIn += amt;
+      } else {
+        openingOut += amt;
+      }
+    });
+
+    const cashIn = totalCollectionsNoContract + ownerIn + loanIn + loanPayIn + openingIn;
+    const cashOut =
+      totalExpenses +
+      totalSardarPaid +
+      totalWorkerPaid +
+      totalSupplierPaid +
+      totalVehicleExp +
+      ownerOut +
+      loanOut +
+      loanPayOut +
+      openingOut;
+    const mainCashBalance = cashIn - cashOut;
+
+    // আজকের হিসাব
+    const todaySales = (salesEntries || []).filter((s: any) => s.sale_date === today);
+    const todayCollections = (collections || []).filter((c: any) => c.payment_date === today);
+    const todayExpenses = (expenses || []).filter((e: any) => e.expense_date === today);
+
+    const todayTotalSale = todaySales.reduce((s: number, x: any) => s + Number(x.total_amount || 0), 0);
+    const todayTotalBricks = todaySales.reduce((s: number, x: any) => s + Number(x.quantity || 0), 0);
+    const todayTotalCollection = todayCollections.reduce((s: number, x: any) => s + Number(x.amount || 0), 0);
+    const todayTotalExpense = todayExpenses.reduce((s: number, x: any) => s + Number(x.amount || 0), 0);
+
+    const totalCustomerDue = customerLedger
+      .filter((c) => c.balance > 0)
+      .reduce((s, c) => s + c.balance, 0);
 
     return {
       today,
       brickTypes: brickTypes || [],
-      customers: customers || [],
-      sardars: sardars || [],
+      currentStock: currentStock || [],
+      customerLedger,
+      recentCollections: (collections || []).slice(0, 40).map((c: any) => ({
+        customerName: custMap.get(c.customer_id)?.name || "গ্রাহক",
+        amount: c.amount,
+        date: c.payment_date,
+        method: c.method,
+        note: c.note,
+      })),
+      openingBalances: formattedOpeningBalances,
+      openingPayments: (openingPayments || []).map((op: any) => ({
+        name:
+          op.ob?.party_name ||
+          op.ob?.customer?.name ||
+          op.ob?.sardar?.name ||
+          op.ob?.worker?.name ||
+          "পূর্বের খাত",
+        kind: op.ob?.kind,
+        amount: op.amount,
+        date: op.payment_date,
+        note: op.note,
+      })),
+      sardars: sardarBalances || sardars || [],
       workers: workers || [],
-      todaySales: todaySales || [],
-      todayExpenses: todayExpenses || [],
-      todayCollections: todayCollections || [],
+      suppliers: suppliers || [],
+      cashSummary: {
+        mainCashBalance,
+        cashIn,
+        cashOut,
+        totalAllCollections,
+        totalCollectionsNoContract,
+        totalExpenses,
+        totalSardarPaid,
+        totalWorkerPaid,
+        totalSupplierPaid,
+        totalVehicleExp,
+        ownerIn,
+        ownerOut,
+        loanIn,
+        loanOut,
+        openingIn,
+        openingOut,
+      },
       summary: {
         todayTotalSale,
         todayTotalBricks,
@@ -91,12 +302,32 @@ async function fetchKilnContext() {
     return {
       today,
       brickTypes: [],
-      customers: [],
+      currentStock: [],
+      customerLedger: [],
+      recentCollections: [],
+      openingBalances: [],
+      openingPayments: [],
       sardars: [],
       workers: [],
-      todaySales: [],
-      todayExpenses: [],
-      todayCollections: [],
+      suppliers: [],
+      cashSummary: {
+        mainCashBalance: 0,
+        cashIn: 0,
+        cashOut: 0,
+        totalAllCollections: 0,
+        totalCollectionsNoContract: 0,
+        totalExpenses: 0,
+        totalSardarPaid: 0,
+        totalWorkerPaid: 0,
+        totalSupplierPaid: 0,
+        totalVehicleExp: 0,
+        ownerIn: 0,
+        ownerOut: 0,
+        loanIn: 0,
+        loanOut: 0,
+        openingIn: 0,
+        openingOut: 0,
+      },
       summary: {
         todayTotalSale: 0,
         todayTotalBricks: 0,
@@ -117,10 +348,8 @@ async function callGeminiWithFallback(promptText: string, apiKey: string): Promi
     "models/gemini-flash-lite-latest",
     "models/gemini-flash-latest",
     "models/gemini-2.5-flash",
-    "models/gemini-1.5-flash",
   ];
 
-  // প্রথমে আপনার Key-তে কোন কোন মডেল চালু আছে তা গুগল থেকে জেনে নেওয়া
   try {
     const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
       headers: { "x-goog-api-key": apiKey },
@@ -140,7 +369,6 @@ async function callGeminiWithFallback(promptText: string, apiKey: string): Promi
         .map((m: any) => m.name as string);
 
       if (available.length > 0) {
-        // হালকা ও দ্রুত (lite/flash) মডেলগুলো আগে রাখা যাতে 503 না খায়
         available.sort((a, b) => {
           const score = (name: string) =>
             name.includes("lite") ? 1 : name.includes("2.0-flash") ? 2 : name.includes("flash") ? 3 : 4;
@@ -168,7 +396,6 @@ async function callGeminiWithFallback(promptText: string, apiKey: string): Promi
 
   let lastError = "";
 
-  // একটি মডেল 503 (Busy) বা 404 দিলে থামবে না, পরের সবগুলো মডেল একে একে চেষ্টা করবে!
   for (const modelName of modelsToTry) {
     const cleanModel = modelName.startsWith("models/") ? modelName : `models/${modelName}`;
     try {
@@ -187,7 +414,6 @@ async function callGeminiWithFallback(promptText: string, apiKey: string): Promi
       if (res.ok) {
         return await res.json();
       }
-
       lastError = `${res.status}`;
     } catch (e: any) {
       lastError = e?.message || "NetworkError";
@@ -197,46 +423,67 @@ async function callGeminiWithFallback(promptText: string, apiKey: string): Promi
   throw new Error(`ALL_MODELS_BUSY_${lastError}`);
 }
 
-// ৩. যদি কখনো গুগলের সব সার্ভার একসাথে ডাউন/ব্যস্ত থাকে, তবুও সরাসরি ডাটাবেস থেকে উত্তর দেওয়ার স্মার্ট ব্যাকআপ
+// ৩. যদি গুগল সার্ভার কখনো ব্যস্তও থাকে, তবুও সরাসরি ডাটাবেস থেকে নিখুঁত উত্তর দেওয়ার ব্যাকআপ
 function buildLocalSmartReply(userMessage: string, ctx: Awaited<ReturnType<typeof fetchKilnContext>>): AIResponse {
   const msg = userMessage.trim();
 
-  // কাস্টমারদের বকেয়া জানতে চাইলে
-  if (msg.includes("পাওনা") || msg.includes("বকেয়া") || msg.includes("বাকি")) {
-    const dueCustomers = ctx.customers.filter((c: any) => Number(c.total_due || 0) > 0);
-    if (dueCustomers.length === 0) {
-      return {
-        type: "QUERY",
-        reply: "আলহামদুলিল্লাহ, বর্তমানে কোনো গ্রাহকের কাছে বকেয়া বা পাওনা টাকা নেই।",
-      };
+  // পূর্বের বকেয়া ও জের জানতে চাইলে
+  if (msg.includes("পূর্বের") || msg.includes("জের") || msg.includes("ওপেনিং")) {
+    if (ctx.openingBalances.length === 0) {
+      return { type: "QUERY", reply: "ডাটাবেসে বর্তমানে পূর্বের বকেয়া বা জেরের কোনো এন্ট্রি নেই।" };
     }
-    const listText = dueCustomers
-      .map((c: any, i: number) => `${i + 1}. ${c.name}: ৳${Number(c.total_due).toLocaleString("bn-BD")}`)
+    const lines = ctx.openingBalances
+      .map(
+        (ob: any, i: number) =>
+          `${i + 1}. ${ob.name} (${ob.kind || "খাত"}): মোট ৳${ob.totalAmount.toLocaleString("bn-BD")} | জমা/পরিশোধ: ৳${ob.paidAmount.toLocaleString("bn-BD")} | বাকি: ৳${ob.remainingAmount.toLocaleString("bn-BD")}`
+      )
       .join("\n");
     return {
       type: "QUERY",
-      reply: `📊 মার্কেটে মোট বকেয়া: ৳${ctx.summary.totalCustomerDue.toLocaleString("bn-BD")}\n\nযাদের কাছে পাওনা রয়েছে:\n${listText}`,
+      reply: `📋 পূর্বের বকেয়া ও জেরের সম্পূর্ণ হিসাব:\n${lines}`,
+    };
+  }
+
+  // মূল ক্যাশ বা ক্যাশবক্স জানতে চাইলে
+  if (msg.includes("ক্যাশ") || msg.includes("নগদ কত") || msg.includes("তহবিল") || msg.includes("ব্যালেন্স")) {
+    const c = ctx.cashSummary;
+    return {
+      type: "QUERY",
+      reply: `💰 মূল ক্যাশ ব্যালেন্স: ৳${c.mainCashBalance.toLocaleString("bn-BD")}\n\n📥 মোট ক্যাশ জমা: ৳${c.cashIn.toLocaleString("bn-BD")}\n• গ্রাহক হতে নগদ আদায়: ৳${c.totalCollectionsNoContract.toLocaleString("bn-BD")} (মোট আদায়: ৳${c.totalAllCollections.toLocaleString("bn-BD")})\n• পূর্বের জের আদায়: ৳${c.openingIn.toLocaleString("bn-BD")}\n• মালিক/লোন জমা: ৳${(c.ownerIn + c.loanIn).toLocaleString("bn-BD")}\n\n📤 মোট ক্যাশ খরচ: ৳${c.cashOut.toLocaleString("bn-BD")}\n• সাধারণ খরচ: ৳${c.totalExpenses.toLocaleString("bn-BD")}\n• সর্দার পেমেন্ট: ৳${c.totalSardarPaid.toLocaleString("bn-BD")}\n• শ্রমিক/স্টাফ পেমেন্ট: ৳${c.totalWorkerPaid.toLocaleString("bn-BD")}\n• সাপ্লায়ার পেমেন্ট: ৳${c.totalSupplierPaid.toLocaleString("bn-BD")}\n• গাড়ি খরচ: ৳${c.totalVehicleExp.toLocaleString("bn-BD")}\n• পূর্বের বকেয়া পরিশোধ: ৳${c.openingOut.toLocaleString("bn-BD")}`,
+    };
+  }
+
+  // কোন গ্রাহক কত টাকা জমা দিয়েছে বা পাওনা কত
+  if (msg.includes("গ্রাহক") || msg.includes("জমা") || msg.includes("পাওনা") || msg.includes("বকেয়া") || msg.includes("বাকি")) {
+    const activeCusts = ctx.customerLedger.filter((c) => c.totalSales > 0 || c.totalPaid > 0);
+    if (activeCusts.length === 0) {
+      return { type: "QUERY", reply: "বর্তমানে গ্রাহকদের কোনো বিক্রি বা জমার হিসাব পাওয়া যায়নি।" };
+    }
+    const lines = activeCusts
+      .map(
+        (c, i) =>
+          `${i + 1}. ${c.name}: মোট বিল ৳${c.totalSales.toLocaleString("bn-BD")} | জমা দিয়েছে ৳${c.totalPaid.toLocaleString("bn-BD")} | বকেয়া: ৳${c.balance.toLocaleString("bn-BD")}`
+      )
+      .join("\n");
+    return {
+      type: "QUERY",
+      reply: `👥 গ্রাহকদের জমা ও বকেয়ার হিসাব:\n${lines}\n\nমোট মার্কেট বকেয়া: ৳${ctx.summary.totalCustomerDue.toLocaleString("bn-BD")}`,
     };
   }
 
   // স্টক জানতে চাইলে
   if (msg.includes("স্টক") || msg.includes("কত ইট") || msg.includes("মজুদ")) {
-    if (ctx.brickTypes.length === 0) {
-      return { type: "QUERY", reply: "বর্তমানে ডাটাবেসে ইটের কোনো স্টকের তথ্য পাওয়া যায়নি।" };
+    if (ctx.currentStock.length > 0) {
+      const stockText = ctx.currentStock
+        .map((b: any) => `🧱 ${b.brick_name || b.name}: ${Number(b.quantity || b.current_stock || 0).toLocaleString("bn-BD")} পিস`)
+        .join("\n");
+      return { type: "QUERY", reply: `ভাটার বর্তমান ইটের স্টক:\n${stockText}` };
     }
-    const stockText = ctx.brickTypes
-      .map((b: any) => `🧱 ${b.name}: ${Number(b.current_stock || 0).toLocaleString("bn-BD")} পিস (দর: ৳${b.price || 0})`)
-      .join("\n");
-    return {
-      type: "QUERY",
-      reply: `ভাটার বর্তমান ইটের স্টক:\n${stockText}`,
-    };
   }
 
-  // আজকের হিসাব বা বিক্রি জানতে চাইলে
   return {
     type: "QUERY",
-    reply: `📅 আজকের সারসংক্ষেপ (${ctx.today}):\n• মোট ইট বিক্রি: ${ctx.summary.todayTotalBricks.toLocaleString("bn-BD")} পিস (৳${ctx.summary.todayTotalSale.toLocaleString("bn-BD")})\n• আজ নগদ আদায়: ৳${ctx.summary.todayTotalCollection.toLocaleString("bn-BD")}\n• আজ মোট খরচ: ৳${ctx.summary.todayTotalExpense.toLocaleString("bn-BD")}\n• মার্কেটে মোট বকেয়া: ৳${ctx.summary.totalCustomerDue.toLocaleString("bn-BD")}`,
+    reply: `📊 সি ডি বি ব্রিকস - সারসংক্ষেপ (${ctx.today}):\n• মূল ক্যাশ ব্যালেন্স: ৳${ctx.cashSummary.mainCashBalance.toLocaleString("bn-BD")}\n• আজ ইট বিক্রি: ${ctx.summary.todayTotalBricks.toLocaleString("bn-BD")} পিস (৳${ctx.summary.todayTotalSale.toLocaleString("bn-BD")})\n• আজ নগদ আদায়: ৳${ctx.summary.todayTotalCollection.toLocaleString("bn-BD")}\n• আজ সাধারণ খরচ: ৳${ctx.summary.todayTotalExpense.toLocaleString("bn-BD")}\n• গ্রাহকদের কাছে মোট বকেয়া: ৳${ctx.summary.totalCustomerDue.toLocaleString("bn-BD")}`,
   };
 }
 
@@ -253,28 +500,24 @@ export const processBrickFieldCommand = async (userMessage: string): Promise<AIR
     const systemPrompt = `আপনি "CDB Bricks" (সি ডি বি ব্রিকস, কাপাসিয়া, গাজীপুর) ইটভাটার প্রধান এআই হিসাবরক্ষক ও স্মার্ট সহকারী।
 আজকের তারিখ: ${ctx.today}
 
-ভাটার লাইভ ডাটাবেস তথ্য:
-১. ইটের ধরন, দর ও বর্তমান স্টক (brick_types): ${JSON.stringify(ctx.brickTypes)}
-২. গ্রাহকদের তালিকা ও বকেয়া (customers): ${JSON.stringify(ctx.customers)}
-৩. সর্দারদের তালিকা ও দাদন (sardars): ${JSON.stringify(ctx.sardars)}
-৪. শ্রমিক/কর্মীদের তালিকা (workers): ${JSON.stringify(ctx.workers)}
-৫. আজকের সারসংক্ষেপ:
-   - আজ মোট ইট বিক্রি: ${ctx.summary.todayTotalBricks} টি (${ctx.summary.todayTotalSale} টাকা)
-   - আজ মোট খরচ: ${ctx.summary.todayTotalExpense} টাকা
-   - আজ মোট নগদ আদায়: ${ctx.summary.todayTotalCollection} টাকা
-   - মার্কেটে কাস্টমারদের মোট বকেয়া: ${ctx.summary.totalCustomerDue} টাকা
-৬. আজকের বিক্রির তালিকা: ${JSON.stringify(ctx.todaySales)}
-৭. আজকের খরচের তালিকা: ${JSON.stringify(ctx.todayExpenses)}
+ভাটার লাইভ ডাটাবেসের সম্পূর্ণ ও নিখুঁত তথ্য:
+১. মূল ক্যাশ ও ক্যাশবক্সের হিসাব (cashSummary): ${JSON.stringify(ctx.cashSummary)}
+   (এখানে mainCashBalance হলো বর্তমান মূল ক্যাশ, cashIn হলো মোট ক্যাশ জমা, এবং cashOut হলো মোট ক্যাশ খরচ)
+২. পূর্বের বকেয়া ও জেরের তালিকা (openingBalances - কে কত টাকা পাবে বা দেবে, কত জমা/পরিশোধ হয়েছে এবং কত বাকি): ${JSON.stringify(ctx.openingBalances)}
+৩. পূর্বের বকেয়া ও জের হতে জমার তালিকা (openingPayments): ${JSON.stringify(ctx.openingPayments)}
+৪. প্রতিটি গ্রাহকের মোট বিল, মোট জমা এবং বর্তমান বকেয়া (customerLedger): ${JSON.stringify(ctx.customerLedger)}
+৫. গ্রাহকদের সাম্প্রতিক নগদ জমার তালিকা (recentCollections): ${JSON.stringify(ctx.recentCollections)}
+৬. ইটের বর্তমান স্টক (currentStock): ${JSON.stringify(ctx.currentStock)} এবং ইটের ধরন (brickTypes): ${JSON.stringify(ctx.brickTypes)}
+৭. সর্দারদের হিসাব (sardars): ${JSON.stringify(ctx.sardars)}
+৮. আজকের সারসংক্ষেপ: ${JSON.stringify(ctx.summary)}
 
 ইউজারের বাংলা মেসেজ পড়ে নিচের যেকোনো একটি "type" নির্বাচন করুন এবং শুধুমাত্র বৈধ JSON উত্তর দিন:
 
 ১. ইট বিক্রি বা চালান কাটার কথা বললে -> "type": "SALE_CHALLAN"
-   - যদি একই মেসেজে ইট বিক্রি এবং নগদ জমার কথা থাকে (যেমন: "রহিমের কাছে ২০০০ ইট বিক্রি ২৪০০০ টাকা, জমা ১০০০০ টাকা"), তবে সেটি শুধুমাত্র SALE_CHALLAN হবে।
-   - dueAmount = totalAmount - paidAmount হিসাব করে দেবেন।
    - data: {
-       "customerId": (customers লিস্টে নাম মিললে তার id, না মিললে null),
+       "customerId": (customerLedger লিস্টে নাম মিললে তার id, না মিললে null),
        "customerName": "ক্রেতার নাম",
-       "brickTypeId": (brick_types লিস্টে মিললে তার id, না মিললে প্রথমটির id),
+       "brickTypeId": (brickTypes লিস্টে মিললে তার id, না মিললে প্রথমটির id),
        "brickType": "১ নম্বর ইট / ২ নম্বর ইট ইত্যাদি",
        "quantity": সংখ্যা (number),
        "totalAmount": মোট টাকা (number),
@@ -285,7 +528,6 @@ export const processBrickFieldCommand = async (userMessage: string): Promise<AIR
      }
 
 ২. ভাটার খরচ লেখার কথা বললে -> "type": "EXPENSE"
-   - expenseCategory অবশ্যই এর একটি হবে: "জ্বালানি ও কয়লা", "মাটি ক্রয়", "শ্রমিক মজুরি", "খাবার ও নাস্তা", "যন্ত্রাংশ ও মেরামত", "অন্যান্য"।
    - data: { "expenseCategory": "খাতের নাম", "amount": টাকার পরিমাণ (number), "description": "খরচের বিবরণ" }
 
 ৩. ইট বিক্রি ছাড়া শুধু কাস্টমারের বকেয়া বা নগদ জমা দিলে -> "type": "COLLECTION"
@@ -295,18 +537,18 @@ export const processBrickFieldCommand = async (userMessage: string): Promise<AIR
    - data: { "sardarId": (মিললে id, না মিললে null), "sardarName": "সর্দারের নাম", "amount": টাকার পরিমাণ (number), "description": "সর্দার পেমেন্ট" }
 
 ৫. কাঁচা ইট বা মিল এন্ট্রির কথা বললে -> "type": "KACHA_BRICK"
-   - data: { "sardarName": "সর্দার বা মিলের নাম", "quantity": ইটের সংখ্যা (number), "amount": মোট মজুরি বা টাকা (number), "description": "কাঁচা ইট উৎপাদন" }
+   - data: { "sardarName": "সর্দারের নাম", "quantity": ইটের সংখ্যা (number), "amount": মোট মজুরি বা টাকা (number), "description": "কাঁচা ইট উৎপাদন" }
 
-৬. সাপ্লায়ারকে (মাটি/কয়লা/বালি পার্টির) পেমেন্ট দেওয়ার কথা বললে -> "type": "SUPPLIER_PAYMENT"
+৬. সাপ্লায়ারকে পেমেন্ট দেওয়ার কথা বললে -> "type": "SUPPLIER_PAYMENT"
    - data: { "supplierName": "সাপ্লায়ারের নাম", "expenseCategory": "জ্বালানি ও কয়লা / মাটি ক্রয়", "amount": টাকার পরিমাণ (number), "description": "সাপ্লায়ার পেমেন্ট" }
 
-৭. যেকোনো হিসাব জানতে চাইলে (যেমন: কার কাছে কত পাওনা, আজ কত বিক্রি হয়েছে, স্টকে কত ইট আছে, বা সালাম/হাই দিলে) -> "type": "QUERY"
-   - উপরের ডাটাবেস তথ্য থেকে একদম নিখুঁত হিসাব করে "reply" ফিল্ডে সুন্দর ও বিস্তারিত বাংলায় উত্তর লিখুন।
+৭. যেকোনো হিসাব জানতে চাইলে (যেমন: "পূর্বের বকেয়া ও জের", "কোন গ্রাহক কত টাকা জমা দিয়েছে", "মূল ক্যাশ কত আছে", "কার কাছে কত পাওনা", "আজকের বিক্রি কত") -> "type": "QUERY"
+   - উপরের লাইভ ডাটাবেস তথ্য থেকে একদম নিখুঁত নাম ও টাকার অংক উল্লেখ করে "reply" ফিল্ডে সুন্দর ও বিস্তারিত বাংলায় উত্তর লিখুন। কোনো তথ্য বানিয়ে বলবেন না।
 
-খুবই জরুরি: শুধুমাত্র নিচের JSON ফরম্যাটে উত্তর দেবেন:
+শুধুমাত্র নিচের JSON ফরম্যাটে উত্তর দেবেন:
 {
   "type": "SALE_CHALLAN" | "EXPENSE" | "COLLECTION" | "SARDAR_PAYMENT" | "KACHA_BRICK" | "SUPPLIER_PAYMENT" | "QUERY",
-  "reply": "এখানে বাংলায় স্পষ্ট উত্তর বা এন্ট্রির বিবরণ লিখুন",
+  "reply": "এখানে বাংলায় স্পষ্ট ও বিস্তারিত উত্তর লিখুন",
   "data": { ... }
 }`;
 
@@ -331,12 +573,11 @@ export const processBrickFieldCommand = async (userMessage: string): Promise<AIR
     };
   } catch (error: any) {
     console.error("AI Service Fallback Triggered:", error);
-    // গুগল সার্ভার ৫0৩/ব্যস্ত থাকলেও এরর না দেখিয়ে সরাসরি লাইভ ডাটাবেস থেকে উত্তর দেবে!
     return buildLocalSmartReply(userMessage, ctx);
   }
 };
 
-// ৫. "খাতায় সেভ করুন" বাটনে ক্লিক করলে ডাটাবেসে সেভ করার ফাংশন
+// ৫. "খাতায় সেভ করুন" বাটনে ক্লিক করলে আপনার আসল টেবিলের কলাম অনুযায়ী সেভ করার ফাংশন
 export const saveAiActionToDatabase = async (
   actionType: string,
   entryData?: any
@@ -345,14 +586,17 @@ export const saveAiActionToDatabase = async (
   const d = entryData || (actionType as any)?.data || {};
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 
+  const { data: authData } = await supabase.auth.getUser();
+  const userId = authData?.user?.id || null;
+
   if (type === "SALE_CHALLAN") {
     let customerId = d.customerId || d.customer_id || null;
     const customerName = d.customerName || d.customer_name || "নগদ ক্রেতা";
 
-    if (!customerId && customerName && customerName !== "নগদ ক্রেতা") {
+    if (!customerId && customerName) {
       const { data: existingCust } = await supabase
         .from("customers")
-        .select("id, total_due")
+        .select("id")
         .ilike("name", `%${customerName}%`)
         .maybeSingle();
 
@@ -361,7 +605,7 @@ export const saveAiActionToDatabase = async (
       } else {
         const { data: newCust } = await supabase
           .from("customers")
-          .insert({ name: customerName, phone: "", total_due: 0 })
+          .insert({ name: customerName, phone: "", created_by: userId } as any)
           .select("id")
           .single();
         customerId = newCust?.id || null;
@@ -387,56 +631,82 @@ export const saveAiActionToDatabase = async (
     const qty = Number(d.quantity || 0);
     const total = Number(d.totalAmount ?? d.total_amount ?? 0);
     const paid = Number(d.paidAmount ?? d.paid_amount ?? 0);
-    const due = Math.max(0, Number(d.dueAmount ?? d.due_amount ?? total - paid));
     const challanNo = "CH-" + Date.now().toString().slice(-5);
 
     const { error } = await supabase.from("sales_entries").insert({
       challan_no: challanNo,
       customer_id: customerId,
-      customer_name: customerName,
       brick_type_id: brickTypeId,
       quantity: qty,
-      rate: qty > 0 ? Math.round(total / qty) : 0,
       total_amount: total,
-      paid_amount: paid,
-      due_amount: due,
       vehicle_number: d.vehicleNumber || d.vehicle_number || "",
-      driver_name: d.driverName || d.driver_name || "",
       sale_date: today,
-    });
+      status: "approved",
+      sale_type: paid >= total ? "cash" : "credit",
+      created_by: userId,
+    } as any);
 
     if (error) throw new Error(error.message);
 
-    if (customerId && due > 0) {
-      const { data: cData } = await supabase.from("customers").select("total_due").eq("id", customerId).maybeSingle();
-      if (cData) {
-        await supabase
-          .from("customers")
-          .update({ total_due: Number(cData.total_due || 0) + due })
-          .eq("id", customerId);
-      }
+    // যদি নগদ জমা থাকে তবে collections টেবিলে এন্ট্রি হবে
+    if (paid > 0 && customerId) {
+      await supabase.from("collections").insert({
+        customer_id: customerId,
+        amount: paid,
+        payment_date: today,
+        method: "cash",
+        note: `চালান #${challanNo} বাবদ নগদ জমা`,
+        created_by: userId,
+      } as any);
     }
 
     return { success: true, challanNo, message: "চালান সফলভাবে সেভ হয়েছে!" };
   }
 
-  if (type === "EXPENSE" || type === "SUPPLIER_PAYMENT") {
+  if (type === "EXPENSE") {
     const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
-    const category = d.expenseCategory || d.category || (type === "SUPPLIER_PAYMENT" ? "মাটি ক্রয়" : "অন্যান্য");
-    const desc =
-      type === "SUPPLIER_PAYMENT"
-        ? `সাপ্লায়ার পেমেন্ট (${d.supplierName || ""}) - ${d.description || ""}`
-        : d.description || "ভাটার খরচ";
+    const category = d.expenseCategory || d.category || "আনুষাঙ্গিক";
+    const note = d.description || d.note || "ভাটার খরচ";
 
     const { error } = await supabase.from("expenses").insert({
       category,
       amount,
-      description: desc,
+      note,
       expense_date: today,
-    });
+      created_by: userId,
+    } as any);
 
     if (error) throw new Error(error.message);
     return { success: true, message: "খরচ খাতায় সেভ হয়েছে!" };
+  }
+
+  if (type === "SUPPLIER_PAYMENT") {
+    const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
+    const supplierName = d.supplierName || "সাপ্লায়ার";
+
+    let supplierId: string | null = null;
+    const { data: sup } = await supabase.from("suppliers").select("id").ilike("name", `%${supplierName}%`).maybeSingle();
+    if (sup?.id) {
+      supplierId = sup.id;
+    } else {
+      const { data: newSup } = await supabase
+        .from("suppliers")
+        .insert({ name: supplierName, material_type: d.expenseCategory || "অন্যান্য" } as any)
+        .select("id")
+        .single();
+      supplierId = newSup?.id || null;
+    }
+
+    const { error } = await supabase.from("supplier_payments").insert({
+      supplier_id: supplierId,
+      amount,
+      payment_date: today,
+      note: d.description || `${supplierName}-কে পেমেন্ট`,
+      created_by: userId,
+    } as any);
+
+    if (error) throw new Error(error.message);
+    return { success: true, message: "সাপ্লায়ার পেমেন্ট সেভ হয়েছে!" };
   }
 
   if (type === "COLLECTION") {
@@ -447,13 +717,18 @@ export const saveAiActionToDatabase = async (
     if (!customerId && customerName) {
       const { data: cust } = await supabase
         .from("customers")
-        .select("id, total_due")
+        .select("id")
         .ilike("name", `%${customerName}%`)
         .maybeSingle();
-      if (cust) {
+      if (cust?.id) {
         customerId = cust.id;
-        const newDue = Math.max(0, Number(cust.total_due || 0) - amount);
-        await supabase.from("customers").update({ total_due: newDue }).eq("id", cust.id);
+      } else {
+        const { data: newCust } = await supabase
+          .from("customers")
+          .insert({ name: customerName, phone: "", created_by: userId } as any)
+          .select("id")
+          .single();
+        customerId = newCust?.id || null;
       }
     }
 
@@ -461,8 +736,10 @@ export const saveAiActionToDatabase = async (
       customer_id: customerId,
       amount,
       payment_date: today,
+      method: "cash",
       note: d.description || `${customerName} হতে নগদ আদায়`,
-    });
+      created_by: userId,
+    } as any);
 
     if (error) throw new Error(error.message);
     return { success: true, message: "কালেকশন সফলভাবে সেভ হয়েছে!" };
@@ -472,33 +749,38 @@ export const saveAiActionToDatabase = async (
     const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
     const sardarName = d.sardarName || d.sardar_name || "সর্দার";
 
-    const { data: srd } = await supabase
-      .from("sardars")
-      .select("id, total_advance, total_earned")
-      .ilike("name", `%${sardarName}%`)
-      .maybeSingle();
-
-    if (srd) {
-      if (type === "SARDAR_PAYMENT") {
-        await supabase
-          .from("sardars")
-          .update({ total_advance: Number(srd.total_advance || 0) + amount })
-          .eq("id", srd.id);
-      } else {
-        await supabase
-          .from("sardars")
-          .update({ total_earned: Number(srd.total_earned || 0) + amount })
-          .eq("id", srd.id);
-      }
+    let sardarId: string | null = d.sardarId || null;
+    if (!sardarId) {
+      const { data: srd } = await supabase
+        .from("sardars")
+        .select("id")
+        .ilike("name", `%${sardarName}%`)
+        .maybeSingle();
+      sardarId = srd?.id || null;
     }
 
-    if (amount > 0 && type === "SARDAR_PAYMENT") {
-      await supabase.from("expenses").insert({
-        category: "শ্রমিক মজুরি",
+    if (type === "SARDAR_PAYMENT" && sardarId) {
+      const { error } = await supabase.from("sardar_payments").insert({
+        sardar_id: sardarId,
         amount,
-        description: `সর্দার দাদন/পেমেন্ট: ${sardarName}`,
-        expense_date: today,
-      });
+        payment_date: today,
+        payment_type: "advance",
+        method: "cash",
+        note: d.description || `${sardarName}-কে দাদন/পেমেন্ট`,
+        created_by: userId,
+      } as any);
+      if (error) throw new Error(error.message);
+    } else if (type === "KACHA_BRICK" && sardarId) {
+      const { error } = await supabase.from("kacha_brick_entries").insert({
+        sardar_id: sardarId,
+        quantity: Number(d.quantity || 0),
+        amount,
+        entry_type: "production",
+        entry_date: today,
+        note: d.description || "কাঁচা ইট এন্ট্রি",
+        created_by: userId,
+      } as any);
+      if (error) throw new Error(error.message);
     }
 
     return { success: true, message: "সর্দারের হিসাব খাতায় সেভ হয়েছে!" };
