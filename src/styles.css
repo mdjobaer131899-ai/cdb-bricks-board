@@ -321,4 +321,23 @@ div.fixed.bottom-0 {
 /* ৩. হোম পেজের মেইন ব্যানারে "সি ডি বি ব্রিকস" লেখা যেন ভেঙে না যায় */
 h1, h2 {
   letter-spacing: -0.01em;
+}/* Fix transparent modal and dropdown background */
+[role="dialog"],
+[data-radix-popper-content-wrapper] > div {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dark [role="dialog"],
+.dark [data-radix-popper-content-wrapper] > div {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border: 1px solid #1e293b !important;
+}
+
+[data-state="open"].fixed.inset-0 {
+  background-color: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
 }
