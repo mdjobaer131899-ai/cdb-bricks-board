@@ -2,6 +2,30 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+// Vercel সার্ভারে SUPABASE_URL না থাকলে অটোমেটিক VITE_ থেকে নিয়ে নেবে
+function ensureServerEnv() {
+  if (typeof process !== "undefined" && process.env) {
+    const metaEnv = (import.meta as any).env || {};
+    process.env.SUPABASE_URL =
+      process.env.SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      metaEnv.VITE_SUPABASE_URL;
+
+    process.env.SUPABASE_PUBLISHABLE_KEY =
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.VITE_SUPABASE_ANON_KEY ||
+      metaEnv.VITE_SUPABASE_PUBLISHABLE_KEY ||
+      metaEnv.VITE_SUPABASE_ANON_KEY;
+
+    process.env.SUPABASE_PROJECT_ID =
+      process.env.SUPABASE_PROJECT_ID ||
+      process.env.VITE_SUPABASE_PROJECT_ID ||
+      metaEnv.VITE_SUPABASE_PROJECT_ID;
+  }
+}
+ensureServerEnv();
+
 const UpdateExpenseSchema = z.object({
   id: z.string().uuid(),
   category: z.string().min(1).max(80),
@@ -28,6 +52,7 @@ export const updateExpenseEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => UpdateExpenseSchema.parse(input))
   .handler(async ({ data, context }) => {
+    ensureServerEnv();
     const { supabase } = context;
     const { error } = await supabase
       .from("expenses")
@@ -53,6 +78,7 @@ export const updateIncomeEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => UpdateIncomeSchema.parse(input))
   .handler(async ({ data, context }) => {
+    ensureServerEnv();
     const { supabase } = context;
     const { error } = await supabase
       .from("collections")
@@ -79,6 +105,7 @@ export const deleteExpenseWithPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => DeleteSchema.parse(input))
   .handler(async ({ data, context }) => {
+    ensureServerEnv();
     const { verifyCurrentAdminPassword } = await import("./cash-book.server");
     const ok = await verifyCurrentAdminPassword(context.userId, data.password);
     if (!ok) throw new Error("অননুমোদিত অথবা এডমিন পাসওয়ার্ড সঠিক নয়");
@@ -99,6 +126,7 @@ export const deleteIncomeWithPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => DeleteSchema.parse(input))
   .handler(async ({ data, context }) => {
+    ensureServerEnv();
     const { verifyCurrentAdminPassword } = await import("./cash-book.server");
     const ok = await verifyCurrentAdminPassword(context.userId, data.password);
     if (!ok) throw new Error("অননুমোদিত অথবা এডমিন পাসওয়ার্ড সঠিক নয়");
@@ -144,6 +172,7 @@ export const updateCashRow = createServerFn({ method: "POST" })
     note: z.string().max(500).nullable().optional(),
   }).parse(input))
   .handler(async ({ data, context }) => {
+    ensureServerEnv();
     const { table, dateCol, id } = resolveKey(data.key);
     const patch: Record<string, unknown> = { amount: data.amount, [dateCol]: data.date };
     if (data.note) patch.note = data.note;
@@ -156,6 +185,7 @@ export const deleteCashRow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => z.object({ key: z.string().min(2).max(60), password: z.string().min(1).max(200) }).parse(input))
   .handler(async ({ data, context }) => {
+    ensureServerEnv();
     const { verifyCurrentAdminPassword } = await import("./cash-book.server");
     const ok = await verifyCurrentAdminPassword(context.userId, data.password);
     if (!ok) throw new Error("অননুমোদিত অথবা এডমিন পাসওয়ার্ড সঠিক নয়");

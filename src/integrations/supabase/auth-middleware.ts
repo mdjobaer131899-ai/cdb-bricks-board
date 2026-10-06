@@ -1,16 +1,31 @@
 import process from "node:process";
-import { createMiddleware } from '@tanstack/react-start'
-import { getRequest } from '@tanstack/react-start/server'
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from './types'
-
-
+import { createMiddleware } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from './types';
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
-    
-    const SUPABASE_URL = process.env.SUPABASE_URL;
-    const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+    const metaEnv = (import.meta as any).env || {};
+
+    const SUPABASE_URL =
+      process.env.SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      metaEnv.VITE_SUPABASE_URL ||
+      metaEnv.SUPABASE_URL;
+
+    const SUPABASE_PUBLISHABLE_KEY =
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.VITE_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      metaEnv.VITE_SUPABASE_PUBLISHABLE_KEY ||
+      metaEnv.VITE_SUPABASE_ANON_KEY ||
+      metaEnv.SUPABASE_PUBLISHABLE_KEY;
+
+    // অন্য যেকোনো সার্ভার ফাইলের (যেমন cash-book.server.ts) সুবিধার জন্য process.env-তেও মানগুলো বসিয়ে দেওয়া হচ্ছে
+    if (SUPABASE_URL) process.env.SUPABASE_URL = SUPABASE_URL;
+    if (SUPABASE_PUBLISHABLE_KEY) process.env.SUPABASE_PUBLISHABLE_KEY = SUPABASE_PUBLISHABLE_KEY;
 
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
       const missing = [
@@ -21,7 +36,7 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       console.error(`[Supabase] ${message}`);
       throw new Error(message);
     }
-    
+
     const request = getRequest();
 
     if (!request?.headers) {
