@@ -1,9 +1,16 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
+import { CashBoxPanel } from "@/components/cash-box-panel";
+import { DailyIncomeExpenseFolders } from "@/components/daily-folders";
 
-export const Route = createFileRoute('/_authenticated/cash-book')({
-  component: RouteComponent,
-})
+export const Route = createFileRoute("/_authenticated/cash-book")({
+  component: CashBookPage,
+});
 
-function RouteComponent() {
-  return <div>Hello "/_authenticated/cash-book"!</div>
+function CashBookPage() {
+  return (
+    <div className="space-y-6 pb-20">
+      <CashBoxPanel />
+      <DailyIncomeExpenseFolders />
+    </div>
+  );
 }
