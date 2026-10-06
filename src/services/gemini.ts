@@ -61,7 +61,7 @@ export function clearAiCache() {
 }
 
 // ============================================================
-// ১. ডাটাবেস থেকে ভাটার সব তথ্য ও ১০০% নিখুঁত পাওনা-দেনার হিসাব নিয়ে আসা
+// ১. ওয়েবসাইটের আসল ফর্মুলা অনুযায়ী ডাটাবেস থেকে সকল হিসাব নিয়ে আসা
 // ============================================================
 
 async function fetchKilnContext() {
@@ -90,40 +90,73 @@ async function fetchKilnContext() {
       { data: workers },
       { data: workerPayments },
       { data: suppliers },
+      { data: purchases },
+      { data: rawPurchases },
       { data: supplierPayments },
       { data: vehicleExpenses },
       { data: ownerTx },
       { data: loans },
       { data: loanPayments },
     ] = await Promise.all([
-      supabase.from("customers").select("id, name, phone").order("name"),
+      supabase.from("customers").select("id, name, phone, address").order("name"),
       supabase.from("brick_types").select("id, name, price"),
       (supabase as any).from("current_stock").select("*"),
-      supabase.from("sales_entries").select("id, customer_id, quantity, total_amount, sale_date, status, opening_balance_id").eq("status", "approved"),
-      supabase.from("collections").select("id, customer_id, contract_id, amount, payment_date, method, note").order("payment_date", { ascending: false }),
+      supabase
+        .from("sales_entries")
+        .select("id, challan_no, customer_id, quantity, total_amount, sale_date, status, sale_type, contract_id, opening_balance_id")
+        .eq("status", "approved"),
+      supabase
+        .from("collections")
+        .select("id, customer_id, contract_id, amount, payment_date, method, note")
+        .order("payment_date", { ascending: false }),
       supabase.from("contracts").select("*"),
-      supabase.from("expenses").select("id, category, amount, expense_date, note").order("expense_date", { ascending: false }),
+      supabase
+        .from("expenses")
+        .select("id, category, amount, expense_date, note")
+        .order("expense_date", { ascending: false }),
       (supabase as any).from("opening_balance_summary").select("*"),
-      supabase.from("opening_balances").select("id, kind, party_name, customer_id, sardar_id, worker_id, amount, note, sardar:sardars(name), worker:workers(name), customer:customers(name)"),
-      supabase.from("opening_payments").select("id, opening_balance_id, amount, payment_date, note, ob:opening_balances(kind, party_name, customer_id, customer:customers(name), sardar:sardars(name), worker:workers(name))"),
+      supabase
+        .from("opening_balances")
+        .select("id, kind, party_name, customer_id, sardar_id, worker_id, amount, note, sardar:sardars(name), worker:workers(name), customer:customers(name)"),
+      supabase
+        .from("opening_payments")
+        .select("id, opening_balance_id, amount, payment_date, note, ob:opening_balances(kind, party_name, customer_id, customer:customers(name), sardar:sardars(name), worker:workers(name))"),
       supabase.from("sardars").select("id, name, kind, is_active").order("name"),
       (supabase as any).from("sardar_balances").select("*"),
-      supabase.from("sardar_payments").select("amount, payment_date"),
+      supabase.from("sardar_payments").select("sardar_id, amount, payment_date, note"),
       supabase.from("workers").select("id, name, role, active").order("name"),
-      supabase.from("worker_payments").select("amount, payment_date"),
-      supabase.from("suppliers").select("id, name, material_type").order("name"),
-      supabase.from("supplier_payments").select("amount, payment_date"),
+      supabase.from("worker_payments").select("worker_id, amount, payment_date"),
+      supabase.from("suppliers").select("id, name, material_type, phone").order("name"),
+      supabase.from("purchases").select("supplier_id, item_name, total_amount, purchase_date"),
+      supabase.from("raw_material_purchases").select("supplier_id, total_amount, purchase_date"),
+      supabase.from("supplier_payments").select("supplier_id, amount, payment_date, note"),
       supabase.from("vehicle_expenses").select("amount, expense_date"),
-      supabase.from("owner_transactions").select("amount, txn_type, txn_date"),
-      supabase.from("loans").select("amount, direction, loan_date"),
-      supabase.from("loan_payments").select("amount, payment_date, loan:loans(direction)"),
+      supabase.from("owner_transactions").select("amount, txn_type, txn_date, note"),
+      supabase.from("loans").select("id, amount, direction, loan_date, party_name"),
+      supabase.from("loan_payments").select("amount, payment_date, loan:loans(direction, party_name)"),
     ]);
 
-    // পূর্বের বকেয়া ও জের (Opening Balances) প্রসেস করা
-    const openingPayByObId = new Map<string, number>();
+    // --------------------------------------------------------
+    // ক. পূর্বের বকেয়া ও জের (opening_balance_summary ও opening_balances)
+    // ওয়েবসাইটের নিয়ম অনুযায়ী: এগুলো পূর্বের দায় (নগদ পেমেন্ট অথবা ইট ডেলিভারির মাধ্যমে পরিশোধ করা হয়)
+    // --------------------------------------------------------
+    const openingCashPaidMap = new Map<string, number>();
     (openingPayments || []).forEach((op: any) => {
       if (op.opening_balance_id) {
-        openingPayByObId.set(op.opening_balance_id, (openingPayByObId.get(op.opening_balance_id) || 0) + Number(op.amount || 0));
+        openingCashPaidMap.set(
+          op.opening_balance_id,
+          (openingCashPaidMap.get(op.opening_balance_id) || 0) + Number(op.amount || 0)
+        );
+      }
+    });
+
+    const openingBrickPaidMap = new Map<string, number>();
+    (salesEntries || []).forEach((s: any) => {
+      if (s.opening_balance_id) {
+        openingBrickPaidMap.set(
+          s.opening_balance_id,
+          (openingBrickPaidMap.get(s.opening_balance_id) || 0) + Number(s.total_amount || 0)
+        );
       }
     });
 
@@ -135,56 +168,55 @@ async function fetchKilnContext() {
     const formattedOpeningBalances = (openingBalances || []).map((ob: any) => {
       const sumRow = summaryMap.get(ob.id);
       const totalAmt = Number(sumRow?.amount ?? ob.amount ?? 0);
-      const paidAmt = Number(sumRow?.paid_amount ?? openingPayByObId.get(ob.id) ?? 0);
-      const remAmt = Number(sumRow?.remaining_amount ?? totalAmt - paidAmt);
-      const partyName = ob.party_name || ob.customer?.name || ob.sardar?.name || ob.worker?.name || "অজানা";
-      const kindStr = String(ob.kind || "").toLowerCase();
-
-      // kind অনুযায়ী বোঝা যে আমরা পাবো নাকি পার্টি আমাদের কাছে পাবে
-      // customer_advance / payable / worker / sardar / supplier মানে পার্টি আমাদের কাছে পাবে (ভাটার দেনা)
-      const isPayableToParty =
-        kindStr.includes("payable") ||
-        kindStr.includes("advance") ||
-        kindStr.includes("due_to") ||
-        kindStr.includes("sardar") ||
-        kindStr.includes("worker") ||
-        kindStr.includes("supplier") ||
-        kindStr.includes("দেনা") ||
-        kindStr.includes("পাবে") ||
-        kindStr.includes("অগ্রিম");
+      const cashSettled = openingCashPaidMap.get(ob.id) || 0;
+      const brickSettled = openingBrickPaidMap.get(ob.id) || 0;
+      const paidAmt = Number(sumRow?.paid_amount ?? cashSettled + brickSettled);
+      const remAmt = Number(sumRow?.remaining_amount ?? Math.max(0, totalAmt - paidAmt));
+      const partyName =
+        ob.party_name ||
+        ob.customer?.name ||
+        ob.sardar?.name ||
+        ob.worker?.name ||
+        "অজানা";
 
       return {
         id: ob.id,
         customerId: ob.customer_id || null,
+        sardarId: ob.sardar_id || null,
+        workerId: ob.worker_id || null,
         kind: ob.kind,
-        isPayableToParty,
-        statusMeaning: isPayableToParty
-          ? "এই পার্টি/গ্রাহক আমাদের (ভাটার) কাছে টাকা বা ইট পাবে (ভাটার দেনা)"
-          : "আমরা (ভাটা) এই পার্টি/গ্রাহকের কাছে টাকা পাবো (ভাটার পাওনা)",
         name: partyName,
         totalAmount: totalAmt,
         paidAmount: paidAmt,
+        cashPaid: cashSettled,
+        brickDeliveredAmount: brickSettled,
         remainingAmount: remAmt,
+        status_bn:
+          remAmt > 0
+            ? `পূর্বের জের বাবদ ${partyName} আমাদের (ভাটার) কাছে এখনো ৳${remAmt.toLocaleString("bn-BD")} পাবে`
+            : "পূর্বের জের সম্পূর্ণ পরিশোধিত (৳০)",
         note: ob.note || "",
       };
     });
 
-    // প্রতিটি গ্রাহকের লেজার (চলতি বিক্রি + জমা + পূর্বের জের একসাথে সমন্বয়)
+    // --------------------------------------------------------
+    // খ. প্রতিটি গ্রাহকের চলতি মৌসুমের লেজার (collections.index.tsx ও advance-sales.tsx অনুযায়ী)
+    // --------------------------------------------------------
     const custMap = new Map<
       string,
       {
         id: string;
         name: string;
         phone: string;
-        totalBrickTakenAmount: number;
-        totalBricksQty: number;
-        totalCashDeposited: number;
-        openingReceivableRemaining: number; // পূর্বের জের বাবদ আমরা পাবো
-        openingPayableRemaining: number; // পূর্বের জের বাবদ গ্রাহক আমাদের কাছে পাবে
-        netBalance: number;
+        currentSeasonBrickQty: number;
+        currentSeasonBrickAmount: number; // এই মৌসুমে নেওয়া ইটের মোট বিল (পূর্বের জের বাদে)
+        openingBalanceBrickAmount: number; // পূর্বের জেরের বিপরীতে নেওয়া ইটের বিল
+        totalCashDeposited: number; // গ্রাহক মোট নগদ জমা দিয়েছে (collections)
+        currentSeasonNet: number; // sales_total - collected_total
+        weWillGetFromCustomer: number; // আমরা (ভাটা) গ্রাহকের কাছে পাবো (যদি ইটের বিল > জমা হয়)
+        customerWillGetFromUs: number; // গ্রাহক আমাদের (ভাটার) কাছে পাবে (যদি জমা > ইটের বিল হয়)
+        previousDueCustomerWillGet: number; // পূর্বের জের বাবদ গ্রাহক আমাদের কাছে পাবে (যদি থাকে)
         status_bn: string;
-        weWillGet_Receivable: number;
-        customerWillGet_Payable: number;
       }
     >();
 
@@ -193,30 +225,30 @@ async function fetchKilnContext() {
         id: c.id,
         name: c.name,
         phone: c.phone || "",
-        totalBrickTakenAmount: 0,
-        totalBricksQty: 0,
+        currentSeasonBrickQty: 0,
+        currentSeasonBrickAmount: 0,
+        openingBalanceBrickAmount: 0,
         totalCashDeposited: 0,
-        openingReceivableRemaining: 0,
-        openingPayableRemaining: 0,
-        netBalance: 0,
-        status_bn: "হিসাব সমান (কোনো পাওনা বা দেনা নেই)",
-        weWillGet_Receivable: 0,
-        customerWillGet_Payable: 0,
+        currentSeasonNet: 0,
+        weWillGetFromCustomer: 0,
+        customerWillGetFromUs: 0,
+        previousDueCustomerWillGet: 0,
+        status_bn: "হিসাব সমান (৳০)",
       });
     });
 
-    // ১. অনুমোদিত ইট বিক্রি যোগ (যেগুলো opening_balance_id দিয়ে পূর্বের জেরের বিপরীতে কাটা হয়নি সেগুলো চলতি বিক্রি)
     (salesEntries || []).forEach((s: any) => {
       if (s.customer_id && custMap.has(s.customer_id)) {
         const item = custMap.get(s.customer_id)!;
-        if (!s.opening_balance_id) {
-          item.totalBrickTakenAmount += Number(s.total_amount || 0);
+        item.currentSeasonBrickQty += Number(s.quantity || 0);
+        if (s.opening_balance_id) {
+          item.openingBalanceBrickAmount += Number(s.total_amount || 0);
+        } else {
+          item.currentSeasonBrickAmount += Number(s.total_amount || 0);
         }
-        item.totalBricksQty += Number(s.quantity || 0);
       }
     });
 
-    // ২. গ্রাহকের নগদ জমা (collections) যোগ
     (collections || []).forEach((col: any) => {
       if (col.customer_id && custMap.has(col.customer_id)) {
         const item = custMap.get(col.customer_id)!;
@@ -224,52 +256,88 @@ async function fetchKilnContext() {
       }
     });
 
-    // ৩. পূর্বের বকেয়া/জের (Opening Balances) গ্রাহকের নামের সাথে মেলানো
+    // যদি গ্রাহকের নামে কোনো পূর্বের জের (opening_balances) থাকে, তা আলাদা ফিল্ডে রাখা
     formattedOpeningBalances.forEach((ob: any) => {
       let targetCust = ob.customerId ? custMap.get(ob.customerId) : undefined;
       if (!targetCust && ob.name) {
-        const found = Array.from(custMap.values()).find(
+        targetCust = Array.from(custMap.values()).find(
           (c) => c.name.trim().toLowerCase() === String(ob.name).trim().toLowerCase()
         );
-        if (found) targetCust = found;
       }
       if (targetCust && ob.remainingAmount > 0) {
-        if (ob.isPayableToParty) {
-          targetCust.openingPayableRemaining += ob.remainingAmount;
-        } else {
-          targetCust.openingReceivableRemaining += ob.remainingAmount;
-        }
+        targetCust.previousDueCustomerWillGet += ob.remainingAmount;
       }
     });
 
-    // ৪. চূড়ান্ত নিট ব্যালেন্স হিসাব:
-    // মোট ভাটার পাওনা দিক = চলতি ইটের বিল (totalBrickTakenAmount) + পূর্বের পাওনা জের (openingReceivableRemaining)
-    // মোট গ্রাহকের জমার দিক = চলতি নগদ জমা (totalCashDeposited) + পূর্বের অগ্রিম/দেনা জের (openingPayableRemaining)
     const customerLedger = Array.from(custMap.values()).map((c) => {
-      const totalDebit = c.totalBrickTakenAmount + c.openingReceivableRemaining;
-      const totalCredit = c.totalCashDeposited + c.openingPayableRemaining;
-      const diff = totalDebit - totalCredit;
-      c.netBalance = diff;
+      // ওয়েবসাইটের collections.index.tsx এর আসল সূত্র:
+      // balance = sales_total - collected_total
+      const diff = c.currentSeasonBrickAmount - c.totalCashDeposited;
+      c.currentSeasonNet = diff;
+
+      const statusParts: string[] = [];
 
       if (diff > 0) {
-        // ইটের বিল বেশি, জমা কম -> আমরা (ভাটা) গ্রাহকের কাছে টাকা পাবো
-        c.weWillGet_Receivable = diff;
-        c.customerWillGet_Payable = 0;
-        c.status_bn = `আমরা (ভাটা) এই গ্রাহকের কাছে ৳${diff.toLocaleString("bn-BD")} পাবো (বকেয়া)`;
+        // ইট বেশি নিয়েছে, টাকা কম দিয়েছে -> আমরা (ভাটা) গ্রাহকের কাছে টাকা পাবো
+        c.weWillGetFromCustomer = diff;
+        c.customerWillGetFromUs = 0;
+        statusParts.push(`চলতি মৌসুমে আমরা (ভাটা) এই গ্রাহকের কাছে ৳${diff.toLocaleString("bn-BD")} পাবো (বকেয়া)`);
       } else if (diff < 0) {
-        // গ্রাহকের জমা বেশি, ইট কম নিয়েছে -> গ্রাহক আমাদের (ভাটার) কাছে টাকা বা ইট পাবে!
-        c.weWillGet_Receivable = 0;
-        c.customerWillGet_Payable = Math.abs(diff);
-        c.status_bn = `এই গ্রাহক আমাদের (ভাটার) কাছে ৳${Math.abs(diff).toLocaleString("bn-BD")} পাবে (অগ্রিম জমা দেওয়া আছে)`;
+        // টাকা বেশি জমা দিয়েছে, ইট এখনো নেয়নি বা কম নিয়েছে -> গ্রাহক আমাদের (ভাটার) কাছে টাকা/ইট পাবে!
+        c.weWillGetFromCustomer = 0;
+        c.customerWillGetFromUs = Math.abs(diff);
+        statusParts.push(`চলতি মৌসুমে এই গ্রাহক আমাদের (ভাটার) কাছে ৳${Math.abs(diff).toLocaleString("bn-BD")} পাবে (অগ্রিম জমা দেওয়া আছে)`);
       } else {
-        c.weWillGet_Receivable = 0;
-        c.customerWillGet_Payable = 0;
-        c.status_bn = "হিসাব সমান (৳০)";
+        c.weWillGetFromCustomer = 0;
+        c.customerWillGetFromUs = 0;
+        statusParts.push("চলতি মৌসুমের হিসাব সমান (৳০)");
       }
+
+      if (c.previousDueCustomerWillGet > 0) {
+        statusParts.push(`পূর্বের জের বাবদও এই গ্রাহক আমাদের কাছে ৳${c.previousDueCustomerWillGet.toLocaleString("bn-BD")} পাবে`);
+      }
+
+      c.status_bn = statusParts.join(" এবং ");
       return c;
     });
 
-    // মূল ক্যাশ (Cash Box) হিসাব
+    // --------------------------------------------------------
+    // গ. সাপ্লায়ারদের লেজার (suppliers.tsx ও purchases.tsx অনুযায়ী)
+    // --------------------------------------------------------
+    const supMap = new Map<string, { id: string; name: string; material: string; totalPurchase: number; totalPaid: number; duePayable: number }>();
+    (suppliers || []).forEach((s: any) => {
+      supMap.set(s.id, {
+        id: s.id,
+        name: s.name,
+        material: s.material_type || "",
+        totalPurchase: 0,
+        totalPaid: 0,
+        duePayable: 0,
+      });
+    });
+    (purchases || []).forEach((p: any) => {
+      if (p.supplier_id && supMap.has(p.supplier_id)) {
+        supMap.get(p.supplier_id)!.totalPurchase += Number(p.total_amount || 0);
+      }
+    });
+    (rawPurchases || []).forEach((rp: any) => {
+      if (rp.supplier_id && supMap.has(rp.supplier_id)) {
+        supMap.get(rp.supplier_id)!.totalPurchase += Number(rp.total_amount || 0);
+      }
+    });
+    (supplierPayments || []).forEach((sp: any) => {
+      if (sp.supplier_id && supMap.has(sp.supplier_id)) {
+        supMap.get(sp.supplier_id)!.totalPaid += Number(sp.amount || 0);
+      }
+    });
+    const supplierLedger = Array.from(supMap.values()).map((s) => ({
+      ...s,
+      duePayable: s.totalPurchase - s.totalPaid,
+    }));
+
+    // --------------------------------------------------------
+    // ঘ. মূল ক্যাশবক্সের হিসাব (হুবহু src/lib/cash-queries.ts অনুযায়ী)
+    // --------------------------------------------------------
     const totalCollectionsNoContract = (collections || [])
       .filter((c: any) => !c.contract_id)
       .reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
@@ -280,6 +348,9 @@ async function fetchKilnContext() {
     const totalWorkerPaid = (workerPayments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
     const totalSupplierPaid = (supplierPayments || []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
     const totalVehicleExp = (vehicleExpenses || []).reduce((s: number, v: any) => s + Number(v.amount || 0), 0);
+
+    // cash-queries.ts ও cash-book.tsx অনুযায়ী সকল opening_payments হলো "পূর্বের দায় পরিশোধ" (Cash Out / ব্যয়)
+    const totalOpeningPaymentsOut = (openingPayments || []).reduce((s: number, op: any) => s + Number(op.amount || 0), 0);
 
     let ownerIn = 0, ownerOut = 0;
     (ownerTx || []).forEach((t: any) => {
@@ -305,18 +376,20 @@ async function fetchKilnContext() {
       else loanPayOut += amt;
     });
 
-    let openingIn = 0, openingOut = 0;
-    (openingPayments || []).forEach((op: any) => {
-      const amt = Number(op.amount || 0);
-      const kind = String(op.ob?.kind || "").toLowerCase();
-      if (kind.includes("customer") || kind.includes("receivable") || kind.includes("পাওনা")) openingIn += amt;
-      else openingOut += amt;
-    });
-
-    const cashIn = totalCollectionsNoContract + ownerIn + loanIn + loanPayIn + openingIn;
-    const cashOut = totalExpenses + totalSardarPaid + totalWorkerPaid + totalSupplierPaid + totalVehicleExp + ownerOut + loanOut + loanPayOut + openingOut;
+    const cashIn = totalCollectionsNoContract + ownerIn + loanIn + loanPayIn;
+    const cashOut =
+      totalExpenses +
+      totalSardarPaid +
+      totalWorkerPaid +
+      totalSupplierPaid +
+      totalVehicleExp +
+      ownerOut +
+      loanOut +
+      loanPayOut +
+      totalOpeningPaymentsOut;
     const mainCashBalance = cashIn - cashOut;
 
+    // আজকের সারসংক্ষেপ
     const todaySales = (salesEntries || []).filter((s: any) => s.sale_date === today);
     const todayCollections = (collections || []).filter((c: any) => c.payment_date === today);
     const todayExpenses = (expenses || []).filter((e: any) => e.expense_date === today);
@@ -326,20 +399,19 @@ async function fetchKilnContext() {
     const todayTotalCollection = todayCollections.reduce((s: number, x: any) => s + Number(x.amount || 0), 0);
     const todayTotalExpense = todayExpenses.reduce((s: number, x: any) => s + Number(x.amount || 0), 0);
 
-    // যাদের কাছে আমরা (ভাটা) টাকা পাবো তাদের মোট যোগফল
-    const totalWeWillGetFromCustomers = customerLedger.reduce((s, c) => s + c.weWillGet_Receivable, 0);
-    // যারা আমাদের (ভাটার) কাছে অগ্রিম টাকা বা ইট পাবে তাদের মোট যোগফল
-    const totalCustomersWillGetFromUs = customerLedger.reduce((s, c) => s + c.customerWillGet_Payable, 0);
+    const totalWeWillGetFromCustomers = customerLedger.reduce((s, c) => s + c.weWillGetFromCustomer, 0);
+    const totalCustomersWillGetFromUs = customerLedger.reduce((s, c) => s + c.customerWillGetFromUs, 0);
+    const totalOpeningRemainingPayable = formattedOpeningBalances.reduce((s: number, o: any) => s + o.remainingAmount, 0);
 
     cachedContext = {
       today,
       brickTypes: brickTypes || [],
       currentStock: currentStock || [],
       customerLedger,
-      customersWhoOweUs: customerLedger.filter((c) => c.weWillGet_Receivable > 0),
-      customersWeOwe: customerLedger.filter((c) => c.customerWillGet_Payable > 0),
+      customersWhoOweUs: customerLedger.filter((c) => c.weWillGetFromCustomer > 0),
+      customersWeOweAdvance: customerLedger.filter((c) => c.customerWillGetFromUs > 0),
       contracts: contracts || [],
-      recentCollections: (collections || []).slice(0, 35).map((c: any) => ({
+      recentCollections: (collections || []).slice(0, 40).map((c: any) => ({
         customerName: custMap.get(c.customer_id)?.name || "গ্রাহক",
         amount: c.amount,
         date: c.payment_date,
@@ -347,14 +419,15 @@ async function fetchKilnContext() {
         note: c.note,
       })),
       openingBalances: formattedOpeningBalances,
-      openingPayments: (openingPayments || []).slice(0, 30).map((op: any) => ({
+      openingPayments: (openingPayments || []).slice(0, 40).map((op: any) => ({
         name: op.ob?.party_name || op.ob?.customer?.name || op.ob?.sardar?.name || op.ob?.worker?.name || "পূর্বের খাত",
         kind: op.ob?.kind,
         amount: op.amount,
         date: op.payment_date,
+        note: op.note,
       })),
       sardars: sardarBalances || sardars || [],
-      suppliers: suppliers || [],
+      supplierLedger,
       cashSummary: {
         mainCashBalance,
         cashIn,
@@ -370,8 +443,7 @@ async function fetchKilnContext() {
         ownerOut,
         loanIn,
         loanOut,
-        openingIn,
-        openingOut,
+        totalOpeningPaymentsOut,
       },
       summary: {
         todayTotalSale,
@@ -380,6 +452,7 @@ async function fetchKilnContext() {
         todayTotalCollection,
         totalWeWillGetFromCustomers,
         totalCustomersWillGetFromUs,
+        totalOpeningRemainingPayable,
       },
     };
     lastFetchTime = Date.now();
@@ -392,26 +465,48 @@ async function fetchKilnContext() {
       currentStock: [],
       customerLedger: [],
       customersWhoOweUs: [],
-      customersWeOwe: [],
+      customersWeOweAdvance: [],
       contracts: [],
       recentCollections: [],
       openingBalances: [],
       openingPayments: [],
       sardars: [],
-      suppliers: [],
-      cashSummary: { mainCashBalance: 0, cashIn: 0, cashOut: 0, totalAllCollections: 0, totalCollectionsNoContract: 0, totalExpenses: 0, totalSardarPaid: 0, totalWorkerPaid: 0, totalSupplierPaid: 0, totalVehicleExp: 0, ownerIn: 0, ownerOut: 0, loanIn: 0, loanOut: 0, openingIn: 0, openingOut: 0 },
-      summary: { todayTotalSale: 0, todayTotalBricks: 0, todayTotalExpense: 0, todayTotalCollection: 0, totalWeWillGetFromCustomers: 0, totalCustomersWillGetFromUs: 0 },
+      supplierLedger: [],
+      cashSummary: {
+        mainCashBalance: 0,
+        cashIn: 0,
+        cashOut: 0,
+        totalAllCollections: 0,
+        totalCollectionsNoContract: 0,
+        totalExpenses: 0,
+        totalSardarPaid: 0,
+        totalWorkerPaid: 0,
+        totalSupplierPaid: 0,
+        totalVehicleExp: 0,
+        ownerIn: 0,
+        ownerOut: 0,
+        loanIn: 0,
+        loanOut: 0,
+        totalOpeningPaymentsOut: 0,
+      },
+      summary: {
+        todayTotalSale: 0,
+        todayTotalBricks: 0,
+        todayTotalExpense: 0,
+        todayTotalCollection: 0,
+        totalWeWillGetFromCustomers: 0,
+        totalCustomersWillGetFromUs: 0,
+        totalOpeningRemainingPayable: 0,
+      },
     };
   }
 }
 
 // ============================================================
-// ২. Gemini কল — প্রথমে Supabase Edge Function (gemini-proxy) চেক করবে,
-//    সেটি না থাকলে বা ব্যর্থ হলে স্বয়ংক্রিয়ভাবে সরাসরি Gemini API কল করবে!
+// ২. Gemini কল — প্রথমে Supabase Edge Function ও পরে Direct API Fallback
 // ============================================================
 
 async function callGeminiFast(promptText: string, attachment?: AIAttachment | null): Promise<any> {
-  // ধাপ ক: যদি আপনার gemini-proxy Edge Function চালু থাকে তবে সেটি চেষ্টা করবে
   try {
     const { data, error } = await supabase.functions.invoke("gemini-proxy", {
       body: {
@@ -426,10 +521,9 @@ async function callGeminiFast(promptText: string, attachment?: AIAttachment | nu
       return data;
     }
   } catch {
-    // gemini-proxy না থাকলে নিচের ডাইরেক্ট মেথডে চলে যাবে
+    // Fallback to direct API
   }
 
-  // ধাপ খ: সরাসরি ফাস্ট মডেল কল করা (যাতে এজ ফাংশন না থাকলেও কখনোই ফেল না করে)
   const k1 = "AQ.Ab8RN6IYHk9V7Hl1";
   const k2 = "Vw7TZfbmvcNHv5mm0B5";
   const k3 = "5F1HBSYhPqBptHQ";
@@ -466,7 +560,7 @@ async function callGeminiFast(promptText: string, attachment?: AIAttachment | nu
         return await res.json();
       }
     } catch {
-      // try next model
+      // try next
     }
   }
 
@@ -474,73 +568,105 @@ async function callGeminiFast(promptText: string, attachment?: AIAttachment | nu
 }
 
 // ============================================================
-// ৩. অফলাইন স্মার্ট ব্যাকআপ রিপ্লাই (AI ব্যস্ত থাকলেও নির্দিষ্ট গ্রাহকের নিখুঁত উত্তর)
+// ৩. অফলাইন স্মার্ট ব্যাকআপ রিপ্লাই (AI ব্যস্ত থাকলেও ১০০% সঠিক হিসাব দেবে)
 // ============================================================
 
 function buildLocalSmartReply(userMessage: string, ctx: any): AIResponse {
   const msg = userMessage.trim();
 
-  // যদি ইউজার নির্দিষ্ট কোনো গ্রাহকের নাম উল্লেখ করে প্রশ্ন করে
+  // ১. নির্দিষ্ট কোনো গ্রাহকের নাম ধরে জানতে চাইলে (যেমন: "আলী মুনসুর এর হিসাব দেন")
   const matchedCustomer = ctx.customerLedger.find(
     (c: any) => c.name && msg.toLowerCase().includes(c.name.trim().toLowerCase())
   );
   if (matchedCustomer) {
     const c = matchedCustomer;
-    return {
-      type: "QUERY",
-      reply: `👤 গ্রাহক: ${c.name}\n• মোট ইট নিয়েছে: ${c.totalBricksQty.toLocaleString("bn-BD")} পিস (মূল্য: ৳${c.totalBrickTakenAmount.toLocaleString("bn-BD")})\n• মোট নগদ জমা দিয়েছে: ৳${c.totalCashDeposited.toLocaleString("bn-BD")}\n${
-        c.openingPayableRemaining > 0
-          ? `• পূর্বের অগ্রিম/পাওনা জের: ৳${c.openingPayableRemaining.toLocaleString("bn-BD")}\n`
-          : ""
-      }${
-        c.openingReceivableRemaining > 0
-          ? `• পূর্বের বকেয়া জের: ৳${c.openingReceivableRemaining.toLocaleString("bn-BD")}\n`
-          : ""
-      }👉 বর্তমান অবস্থা: **${c.status_bn}**`,
-    };
+    const lines = [
+      `👤 গ্রাহক: ${c.name}`,
+      `• চলতি মৌসুমে ইট নিয়েছে: ${c.currentSeasonBrickQty.toLocaleString("bn-BD")} পিস (বিল: ৳${c.currentSeasonBrickAmount.toLocaleString("bn-BD")})`,
+      `• চলতি মৌসুমে নগদ জমা দিয়েছে: ৳${c.totalCashDeposited.toLocaleString("bn-BD")}`,
+    ];
+    if (c.customerWillGetFromUs > 0) {
+      lines.push(`👉 **চলতি অবস্থা: ${c.name} আমাদের (ভাটার) কাছে ৳${c.customerWillGetFromUs.toLocaleString("bn-BD")} পাবে (অগ্রিম জমা দেওয়া আছে)**`);
+    } else if (c.weWillGetFromCustomer > 0) {
+      lines.push(`👉 **চলতি অবস্থা: আমরা (ভাটা) ${c.name}-এর কাছে ৳${c.weWillGetFromCustomer.toLocaleString("bn-BD")} পাবো (বকেয়া)**`);
+    } else {
+      lines.push(`👉 **চলতি অবস্থা: হিসাব সমান (৳০)**`);
+    }
+
+    if (c.previousDueCustomerWillGet > 0) {
+      lines.push(`📌 নোট (পূর্বের জের): পূর্বের খাতায় ${c.name} আমাদের কাছে আরও ৳${c.previousDueCustomerWillGet.toLocaleString("bn-BD")} পাবে।`);
+    }
+
+    return { type: "QUERY", reply: lines.join("\n") };
   }
 
+  // ২. পূর্বের বকেয়া ও জের জানতে চাইলে
   if (msg.includes("পূর্বের") || msg.includes("জের") || msg.includes("ওপেনিং")) {
-    if (ctx.openingBalances.length === 0) return { type: "QUERY", reply: "ডাটাবেসে বর্তমানে পূর্বের বকেয়া বা জেরের কোনো এন্ট্রি নেই।" };
+    if (ctx.openingBalances.length === 0) {
+      return { type: "QUERY", reply: "ডাটাবেসে বর্তমানে পূর্বের বকেয়া বা জেরের কোনো এন্ট্রি নেই।" };
+    }
     const lines = ctx.openingBalances
       .map(
         (ob: any, i: number) =>
-          `${i + 1}. ${ob.name} (${ob.kind}): মোট ৳${ob.totalAmount.toLocaleString("bn-BD")} | পরিশোধ/আদায়: ৳${ob.paidAmount.toLocaleString("bn-BD")} | বাকি: ৳${ob.remainingAmount.toLocaleString("bn-BD")} ➔ [${ob.statusMeaning}]`
+          `${i + 1}. ${ob.name} (${ob.kind}): মোট পূর্বের জের ৳${ob.totalAmount.toLocaleString("bn-BD")} | পরিশোধ হয়েছে: ৳${ob.paidAmount.toLocaleString("bn-BD")} | **এখনো আমাদের কাছে পাবে: ৳${ob.remainingAmount.toLocaleString("bn-BD")}**`
       )
       .join("\n");
-    return { type: "QUERY", reply: `📋 পূর্বের বকেয়া ও জেরের হিসাব:\n${lines}` };
+    return {
+      type: "QUERY",
+      reply: `📋 পূর্বের বকেয়া ও জেরের হিসাব (ভাটার পূর্বের দায়):\n${lines}\n\nমোট অপরিশোধিত পূর্বের জের: ৳${ctx.summary.totalOpeningRemainingPayable.toLocaleString("bn-BD")}`,
+    };
   }
 
+  // ৩. মূল ক্যাশ বা ক্যাশবক্স জানতে চাইলে
   if (msg.includes("ক্যাশ") || msg.includes("নগদ কত") || msg.includes("তহবিল") || msg.includes("ব্যালেন্স")) {
     const c = ctx.cashSummary;
     return {
       type: "QUERY",
-      reply: `💰 মূল ক্যাশ ব্যালেন্স: ৳${c.mainCashBalance.toLocaleString("bn-BD")}\n\n📥 মোট ক্যাশ জমা: ৳${c.cashIn.toLocaleString("bn-BD")}\n• গ্রাহক নগদ আদায়: ৳${c.totalCollectionsNoContract.toLocaleString("bn-BD")} (চুক্তিসহ মোট জমা: ৳${c.totalAllCollections.toLocaleString("bn-BD")})\n• পূর্বের জের আদায়: ৳${c.openingIn.toLocaleString("bn-BD")}\n\n📤 মোট ক্যাশ খরচ: ৳${c.cashOut.toLocaleString("bn-BD")}\n• সাধারণ খরচ: ৳${c.totalExpenses.toLocaleString("bn-BD")}\n• সর্দার পেমেন্ট: ৳${c.totalSardarPaid.toLocaleString("bn-BD")}\n• শ্রমিক/স্টাফ পেমেন্ট: ৳${c.totalWorkerPaid.toLocaleString("bn-BD")}\n• সাপ্লায়ার পেমেন্ট: ৳${c.totalSupplierPaid.toLocaleString("bn-BD")}\n• পূর্বের দেনা পরিশোধ: ৳${c.openingOut.toLocaleString("bn-BD")}`,
+      reply: `💰 মূল ক্যাশ ব্যালেন্স: ৳${c.mainCashBalance.toLocaleString("bn-BD")}\n\n📥 মোট ক্যাশ জমা (আয়): ৳${c.cashIn.toLocaleString("bn-BD")}\n• গ্রাহক হতে নগদ আদায়: ৳${c.totalCollectionsNoContract.toLocaleString("bn-BD")} (চুক্তিসহ মোট জমা: ৳${c.totalAllCollections.toLocaleString("bn-BD")})\n• মালিক/লোন হতে জমা: ৳${(c.ownerIn + c.loanIn).toLocaleString("bn-BD")}\n\n📤 মোট ক্যাশ খরচ (ব্যয়): ৳${c.cashOut.toLocaleString("bn-BD")}\n• সাধারণ খরচ: ৳${c.totalExpenses.toLocaleString("bn-BD")}\n• পূর্বের দায় পরিশোধ: ৳${c.totalOpeningPaymentsOut.toLocaleString("bn-BD")}\n• সর্দার পেমেন্ট: ৳${c.totalSardarPaid.toLocaleString("bn-BD")}\n• শ্রমিক/স্টাফ পেমেন্ট: ৳${c.totalWorkerPaid.toLocaleString("bn-BD")}\n• সাপ্লায়ার পেমেন্ট: ৳${c.totalSupplierPaid.toLocaleString("bn-BD")}\n• গাড়ি খরচ: ৳${c.totalVehicleExp.toLocaleString("bn-BD")}`,
     };
   }
 
+  // ৪. সাপ্লায়ারদের হিসাব জানতে চাইলে
+  if (msg.includes("সাপ্লায়ার") || msg.includes("সাপ্লায়ার") || msg.includes("মাটি") || msg.includes("কয়লা") || msg.includes("ভেকু")) {
+    if (ctx.supplierLedger.length === 0) return { type: "QUERY", reply: "সাপ্লায়ারদের কোনো হিসাব পাওয়া যায়নি।" };
+    const lines = ctx.supplierLedger
+      .map(
+        (s: any, i: number) =>
+          `${i + 1}. ${s.name} (${s.material}): মোট বিল ৳${s.totalPurchase.toLocaleString("bn-BD")} | পরিশোধ ৳${s.totalPaid.toLocaleString("bn-BD")} | পাবে: ৳${s.duePayable.toLocaleString("bn-BD")}`
+      )
+      .join("\n");
+    return { type: "QUERY", reply: `🚛 সাপ্লায়ারদের হিসাব:\n${lines}` };
+  }
+
+  // ৫. গ্রাহকদের জমা ও পাওনা-দেনার তালিকা জানতে চাইলে
   if (msg.includes("গ্রাহক") || msg.includes("জমা") || msg.includes("পাওনা") || msg.includes("বকেয়া") || msg.includes("বাকি") || msg.includes("পাবে")) {
-    const weGetList = ctx.customersWhoOweUs
-      .map((c: any, i: number) => `${i + 1}. ${c.name}: ইট বাবদ ৳${(c.totalBrickTakenAmount + c.openingReceivableRemaining).toLocaleString("bn-BD")}, জমা ৳${(c.totalCashDeposited + c.openingPayableRemaining).toLocaleString("bn-BD")} ➔ **আমরা (ভাটা) পাবো: ৳${c.weWillGet_Receivable.toLocaleString("bn-BD")}**`)
+    const theyGetList = ctx.customersWeOweAdvance
+      .map(
+        (c: any, i: number) =>
+          `${i + 1}. ${c.name}: নগদ জমা দিয়েছে ৳${c.totalCashDeposited.toLocaleString("bn-BD")}, ইট নিয়েছে ৳${c.currentSeasonBrickAmount.toLocaleString("bn-BD")} ➔ **গ্রাহক আমাদের কাছে পাবে: ৳${c.customerWillGetFromUs.toLocaleString("bn-BD")}**`
+      )
       .join("\n");
 
-    const theyGetList = ctx.customersWeOwe
-      .map((c: any, i: number) => `${i + 1}. ${c.name}: জমা ৳${(c.totalCashDeposited + c.openingPayableRemaining).toLocaleString("bn-BD")}, ইট নিয়েছে ৳${(c.totalBrickTakenAmount + c.openingReceivableRemaining).toLocaleString("bn-BD")} ➔ **গ্রাহক আমাদের কাছে পাবে: ৳${c.customerWillGet_Payable.toLocaleString("bn-BD")}**`)
+    const weGetList = ctx.customersWhoOweUs
+      .map(
+        (c: any, i: number) =>
+          `${i + 1}. ${c.name}: ইট নিয়েছে ৳${c.currentSeasonBrickAmount.toLocaleString("bn-BD")}, জমা দিয়েছে ৳${c.totalCashDeposited.toLocaleString("bn-BD")} ➔ **আমরা (ভাটা) পাবো: ৳${c.weWillGetFromCustomer.toLocaleString("bn-BD")}**`
+      )
       .join("\n");
 
     let replyText = "";
     if (theyGetList) {
-      replyText += `🟠 **যেসব গ্রাহক আমাদের (ভাটার) কাছে টাকা/ইট পাবে** (অগ্রিম জমা - মোট: ৳${ctx.summary.totalCustomersWillGetFromUs.toLocaleString("bn-BD")}):\n${theyGetList}\n\n`;
+      replyText += `🟠 **যেসব গ্রাহক আমাদের (ভাটার) কাছে টাকা/ইট পাবে** (অগ্রিম জমা দিয়েছে — মোট: ৳${ctx.summary.totalCustomersWillGetFromUs.toLocaleString("bn-BD")}):\n${theyGetList}\n\n`;
     }
     if (weGetList) {
-      replyText += `🟢 **যাদের কাছে আমরা (ভাটা) টাকা পাবো** (বকেয়া - মোট: ৳${ctx.summary.totalWeWillGetFromCustomers.toLocaleString("bn-BD")}):\n${weGetList}`;
+      replyText += `🟢 **যাদের কাছে আমরা (ভাটা) টাকা পাবো** (ইট বাবদ বকেয়া — মোট: ৳${ctx.summary.totalWeWillGetFromCustomers.toLocaleString("bn-BD")}):\n${weGetList}`;
     }
     return { type: "QUERY", reply: replyText.trim() || "বর্তমানে কোনো গ্রাহকের কাছে পাওনা বা দেনা নেই।" };
   }
 
   return {
     type: "QUERY",
-    reply: `📊 সি ডি বি ব্রিকস - সারসংক্ষেপ (${ctx.today}):\n• মূল ক্যাশ ব্যালেন্স: ৳${ctx.cashSummary.mainCashBalance.toLocaleString("bn-BD")}\n• আজ ইট বিক্রি: ${ctx.summary.todayTotalBricks.toLocaleString("bn-BD")} পিস (৳${ctx.summary.todayTotalSale.toLocaleString("bn-BD")})\n• আজ নগদ আদায়: ৳${ctx.summary.todayTotalCollection.toLocaleString("bn-BD")}\n• গ্রাহকদের কাছে আমরা পাবো (বকেয়া): ৳${ctx.summary.totalWeWillGetFromCustomers.toLocaleString("bn-BD")}\n• গ্রাহকরা আমাদের কাছে পাবে (অগ্রিম জমা): ৳${ctx.summary.totalCustomersWillGetFromUs.toLocaleString("bn-BD")}`,
+    reply: `📊 সি ডি বি ব্রিকস - সারসংক্ষেপ (${ctx.today}):\n• মূল ক্যাশ ব্যালেন্স: ৳${ctx.cashSummary.mainCashBalance.toLocaleString("bn-BD")}\n• আজ ইট বিক্রি: ${ctx.summary.todayTotalBricks.toLocaleString("bn-BD")} পিস (৳${ctx.summary.todayTotalSale.toLocaleString("bn-BD")})\n• আজ নগদ আদায়: ৳${ctx.summary.todayTotalCollection.toLocaleString("bn-BD")}\n• গ্রাহকরা অগ্রিম জমা বাবদ আমাদের কাছে পাবে: ৳${ctx.summary.totalCustomersWillGetFromUs.toLocaleString("bn-BD")}\n• আমরা গ্রাহকদের কাছে বকেয়া পাবো: ৳${ctx.summary.totalWeWillGetFromCustomers.toLocaleString("bn-BD")}\n• পূর্বের জের বাবদ পাওনাদাররা পাবে: ৳${ctx.summary.totalOpeningRemainingPayable.toLocaleString("bn-BD")}`,
   };
 }
 
@@ -558,29 +684,28 @@ export const processBrickFieldCommand = async (
     const systemPrompt = `আপনি "CDB Bricks" (সি ডি বি ব্রিকস, কাপাসিয়া, গাজীপুর) ইটভাটার প্রধান এআই হিসাবরক্ষক ও রসিদ স্ক্যানার।
 আজকের তারিখ: ${ctx.today}
 
-হিসাবের সবচেয়ে গুরুত্বপূর্ণ নিয়ম (কখনোই উল্টাপাল্টা করবেন না):
-১. কোনো গ্রাহকের "customerWillGet_Payable" যদি ০ এর বেশি হয় (অর্থাৎ তার জমা টাকা তার নেওয়া ইটের দামের চেয়ে বেশি), তার মানে **ওই গ্রাহক আমাদের (ভাটার) কাছে টাকা বা ইট পাবে** (গ্রাহক পাওনাদার / অগ্রিম জমা দিয়েছে)। একে কখনোই "গ্রাহকের কাছে আমরা পাবো" বলবেন না!
-২. কোনো গ্রাহকের "weWillGet_Receivable" যদি ০ এর বেশি হয় (অর্থাৎ ইটের দাম বেশি এবং জমা কম), শুধুমাত্র তখনই **আমরা (ভাটা) ওই গ্রাহকের কাছে টাকা পাবো (বকেয়া)**।
-৩. প্রতিটি গ্রাহকের "status_bn" ফিল্ডে স্পষ্ট বাংলায় লেখা আছে কে কার কাছে টাকা পাবে—উত্তর দেওয়ার সময় হুবহু সেই অর্থ বজায় রাখবেন।
+হিসাবের সবচেয়ে গুরুত্বপূর্ণ নিয়ম (১০০% মেনে চলবেন, কখনোই উল্টো বলবেন না):
+১. গ্রাহকের চলতি মৌসুমের হিসাব (customerLedger):
+   - যদি কোনো গ্রাহকের "totalCashDeposited" (নগদ জমা) তার "currentSeasonBrickAmount" (নেওয়া ইটের বিল) থেকে বেশি হয়, তবে তার "customerWillGetFromUs" > 0 হবে। এর মানে **ওই গ্রাহক আমাদের (ভাটার) কাছে টাকা বা ইট পাবে (অগ্রিম জমা দিয়েছে)**! উদাহরণস্বরূপ: আলী মুনসুর ১২,০০,০০০ টাকা জমা দিয়েছেন এবং ০ টাকার ইট নিয়েছেন, তাই **আলী মুনসুর আমাদের (ভাটার) কাছে ১২,০০,০০০ টাকা/ইট পাবেন**! কখনোই বলবেন না যে আমরা তার কাছে টাকা পাবো!
+   - শুধুমাত্র যদি "currentSeasonBrickAmount" (ইটের বিল) বেশি হয় এবং "totalCashDeposited" (জমা) কম হয় ("weWillGetFromCustomer" > 0), তখনই **আমরা (ভাটা) গ্রাহকের কাছে টাকা পাবো (বকেয়া)**।
+২. পূর্বের বকেয়া ও জের (openingBalances):
+   - এই ওয়েবসাইটে "openingBalances" টেবিলের সকল এন্ট্রি হলো ভাটার **পূর্বের দায় (Old Liabilities)**—অর্থাৎ ওই ব্যক্তি বা গ্রাহক আমাদের (ভাটার) কাছে টাকা বা ইট পাবেন। একে চলতি মৌসুমের জমার সাথে বিয়োগ করবেন না, বরং আলাদাভাবে বলবেন।
 
 ভাটার লাইভ ডাটাবেসের সম্পূর্ণ তথ্য:
 ১. মূল ক্যাশ ও ক্যাশবক্সের হিসাব (cashSummary): ${JSON.stringify(ctx.cashSummary)}
-২. যেসব গ্রাহক আমাদের (ভাটার) কাছে টাকা/ইট পাবে (customersWeOwe - ভাটার দেনা/অগ্রিম জমা): ${JSON.stringify(ctx.customersWeOwe)}
-৩. যেসব গ্রাহকের কাছে আমরা (ভাটা) টাকা পাবো (customersWhoOweUs - ভাটার পাওনা/বকেয়া): ${JSON.stringify(ctx.customersWhoOweUs)}
+২. যেসব গ্রাহক আমাদের (ভাটার) কাছে টাকা/ইট পাবে (customersWeOweAdvance - অগ্রিম জমা দিয়েছে): ${JSON.stringify(ctx.customersWeOweAdvance)}
+৩. যেসব গ্রাহকের কাছে আমরা (ভাটা) টাকা পাবো (customersWhoOweUs - বকেয়া): ${JSON.stringify(ctx.customersWhoOweUs)}
 ৪. সকল গ্রাহকের সম্পূর্ণ লেজার (customerLedger): ${JSON.stringify(ctx.customerLedger)}
-৫. পূর্বের বকেয়া ও জেরের তালিকা (openingBalances - statusMeaning মনোযোগ দিয়ে দেখুন): ${JSON.stringify(ctx.openingBalances)}
-৬. পূর্বের বকেয়া ও জের হতে জমা/পরিশোধ (openingPayments): ${JSON.stringify(ctx.openingPayments)}
+৫. পূর্বের বকেয়া ও জেরের তালিকা (openingBalances - ভাটার পূর্বের দায়): ${JSON.stringify(ctx.openingBalances)}
+৬. পূর্বের দায় পরিশোধের তালিকা (openingPayments): ${JSON.stringify(ctx.openingPayments)}
 ৭. গ্রাহকদের সাম্প্রতিক নগদ জমার তালিকা (recentCollections): ${JSON.stringify(ctx.recentCollections)}
 ৮. ইটের বর্তমান স্টক (currentStock): ${JSON.stringify(ctx.currentStock)} এবং ইটের ধরন (brickTypes): ${JSON.stringify(ctx.brickTypes)}
 ৯. সর্দারদের হিসাব (sardars): ${JSON.stringify(ctx.sardars)}
-১০. আজকের সারসংক্ষেপ: ${JSON.stringify(ctx.summary)}
+১০. সাপ্লায়ারদের হিসাব (supplierLedger): ${JSON.stringify(ctx.supplierLedger)}
+১১. আজকের সারসংক্ষেপ: ${JSON.stringify(ctx.summary)}
 
 ছবি বা ফাইল স্ক্যানিংয়ের নিয়ম:
-- ইউজার যদি কোনো রসিদ, ক্যাশ মেমো, চালান বা খাতার পাতার ছবি/ফাইল দেয়, তবে ছবিটি নিখুঁতভাবে পড়ে (OCR) সেখান থেকে ক্রেতার নাম, ইটের পরিমাণ, টাকার পরিমাণ বা খরচের বিবরণ বের করুন এবং উপযুক্ত type (যেমন SALE_CHALLAN, EXPENSE, COLLECTION ইত্যাদি) সিলেক্ট করে কার্ড আকারে সেভ করার জন্য data দিন। আর যদি শুধু ছবিটি সম্পর্কে জানতে চায় তবে QUERY সিলেক্ট করে বিস্তারিত বলুন।
-
-তারিখের নিয়ম:
-- রসিদ বা খাতায় তারিখ লেখা থাকলে (যেমন ০৫/১০/২০২৬ বা ৫ অক্টোবর) সেটি দিন/মাস/বছর ধরে নিয়ে data.date-এ YYYY-MM-DD ফরম্যাটে দিন (যেমন 2026-10-05)।
-- তারিখ পরিষ্কার না হলে data.date বাদ দিন, কখনো আন্দাজ করবেন না। বাদ দিলে আজকের তারিখে সেভ হবে।
+- ইউজার যদি কোনো রসিদ, ক্যাশ মেমো, চালান বা খাতার পাতার ছবি/ফাইল দেয়, তবে ছবিটি নিখুঁতভাবে পড়ে (OCR) সেখান থেকে ক্রেতার নাম, ইটের পরিমাণ, টাকার পরিমাণ বা খরচের বিবরণ বের করুন এবং উপযুক্ত type (যেমন SALE_CHALLAN, EXPENSE, COLLECTION ইত্যাদি) সিলেক্ট করে কার্ড আকারে সেভ করার জন্য data দিন।
 
 ইউজারের বাংলা মেসেজ বা ছবি পড়ে সঠিক "type" নির্বাচন করুন এবং শুধুমাত্র JSON উত্তর দিন:
 - ইট বিক্রি বা চালান: "SALE_CHALLAN" -> data: { customerId, customerName, brickTypeId, brickType, quantity, totalAmount, paidAmount, dueAmount, vehicleNumber, date }
@@ -589,12 +714,12 @@ export const processBrickFieldCommand = async (
 - সর্দারকে পেমেন্ট/দাদন: "SARDAR_PAYMENT" -> data: { sardarId, sardarName, amount, description, date }
 - কাঁচা ইট এন্ট্রি: "KACHA_BRICK" -> data: { sardarName, quantity, amount, description, date }
 - সাপ্লায়ার পেমেন্ট: "SUPPLIER_PAYMENT" -> data: { supplierName, expenseCategory, amount, description, date }
-- যেকোনো প্রশ্ন বা হিসাব জানতে চাইলে: "QUERY" -> উপরের লাইভ ডাটাবেস দেখে একদম নিখুঁতভাবে কে কার কাছে কত পাবে তা স্পষ্ট করে "reply" তে বাংলায় লিখুন।
+- যেকোনো প্রশ্ন বা হিসাব জানতে চাইলে: "QUERY" -> উপরের লাইভ ডাটাবেস দেখে একদম নিখুঁতভাবে "reply" তে বাংলায় উত্তর লিখুন।
 
 JSON ফরম্যাট:
 {
   "type": "SALE_CHALLAN" | "EXPENSE" | "COLLECTION" | "SARDAR_PAYMENT" | "KACHA_BRICK" | "SUPPLIER_PAYMENT" | "QUERY",
-  "reply": "বাংলায় স্পষ্ট ও সঠিক উত্তর",
+  "reply": "বাংলায় স্পষ্ট ও শতভাগ সঠিক উত্তর",
   "data": { ... }
 }`;
 
@@ -699,7 +824,6 @@ export const saveAiActionToDatabase = async (
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData?.user?.id || null;
 
-  // ---------- চালান ----------
   if (type === "SALE_CHALLAN") {
     const customerId = await resolveCustomerId(d, userId, "নগদ ক্রেতা");
 
@@ -762,7 +886,6 @@ export const saveAiActionToDatabase = async (
     return { success: true, challanNo, message: "চালান সফলভাবে সেভ হয়েছে!" };
   }
 
-  // ---------- খরচ ----------
   if (type === "EXPENSE") {
     const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
     requirePositive(amount, "খরচের টাকা");
@@ -778,7 +901,6 @@ export const saveAiActionToDatabase = async (
     return { success: true, message: "খরচ খাতায় সেভ হয়েছে!" };
   }
 
-  // ---------- সাপ্লায়ার পেমেন্ট ----------
   if (type === "SUPPLIER_PAYMENT") {
     const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
     requirePositive(amount, "পেমেন্টের টাকা");
@@ -807,7 +929,6 @@ export const saveAiActionToDatabase = async (
     return { success: true, message: "সাপ্লায়ার পেমেন্ট সেভ হয়েছে!" };
   }
 
-  // ---------- কালেকশন (গ্রাহকের নগদ জমা) ----------
   if (type === "COLLECTION") {
     const amount = Number(d.amount || d.paidAmount || 0);
     requirePositive(amount, "জমার টাকা");
@@ -827,7 +948,6 @@ export const saveAiActionToDatabase = async (
     return { success: true, message: "কালেকশন সফলভাবে সেভ হয়েছে!" };
   }
 
-  // ---------- সর্দার পেমেন্ট / কাঁচা ইট ----------
   if (type === "SARDAR_PAYMENT" || type === "KACHA_BRICK") {
     const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
     const sardarName = String(d.sardarName || d.sardar_name || "সর্দার").trim();
