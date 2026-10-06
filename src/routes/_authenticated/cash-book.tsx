@@ -2,8 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Check, ArrowDownCircle, ArrowUpCircle, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,14 +17,9 @@ import {
 } from "@/components/ui/dialog";
 import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
-import { createCollection } from "@/lib/collections.functions";
-import { createExpense } from "@/lib/expenses.functions";
-import {
-  deleteExpenseWithPassword, deleteIncomeWithPassword, updateIncomeEntry, updateCashRow, deleteCashRow,
-} from "@/lib/cash-book.functions";
 import { toast } from "sonner";
 import { fetchCashHistory } from "@/lib/cash-queries";
-import { AddExpenseDialog, EXPENSE_HEADS } from "@/components/cash-box-panel";
+import { AddExpenseDialog } from "@/components/cash-box-panel";
 
 export const Route = createFileRoute("/_authenticated/cash-book")({
   head: () => ({
@@ -43,15 +38,63 @@ type IncomeRow = {
   id: string; amount: number; payment_date: string; method: string | null; note: string | null;
   customer_id: string; customer: { name: string } | null;
 };
-type ExpenseRow = {
-  id: string; amount: number; expense_date: string; category: string; note: string | null;
-};
 type Range = { from: string; to: string };
 
-/**
- * স্মার্ট নাম ও খাত বিভাজন:
- * "আনুষাঙ্গিক — চেক বিল" থাকলে নামের ঘরে "চেক বিল" বড় করে দেখাবে এবং খাতে "আনুষাঙ্গিক" দেখাবে।
- */
+// রো-এর আইডি থেকে আসল টেবিলের নাম ও কলাম বের করার নিয়ম
+const ROW_TABLES: Array<[string, string, string]> = [
+  ["op", "opening_payments", "payment_date"],
+  ["lp", "loan_payments", "payment_date"],
+  ["e", "expenses", "expense_date"],
+  ["s", "sardar_payments", "payment_date"],
+  ["w", "worker_payments", "payment_date"],
+  ["p", "supplier_payments", "payment_date"],
+  ["o", "owner_transactions", "txn_date"],
+  ["l", "loans", "loan_date"],
+];
+
+function resolveRowKey(key: string) {
+  for (const [p, table, dateCol] of ROW_TABLES) {
+    if (key.startsWith(p)) {
+      const id = key.slice(p.length);
+      if (id.length >= 30) return { table, dateCol, id };
+    }
+  }
+  throw new Error("অজানা এন্ট্রি");
+}
+
+// সার্ভার ছাড়াই সরাসরি ব্রাউজার থেকে নিরাপদে এডমিন পাসওয়ার্ড যাচাই
+async function verifyAdminPasswordClient(password: string): Promise<boolean> {
+  const { data: userRes } = await supabase.auth.getUser();
+  const user = userRes?.user;
+  if (!user || !user.email) throw new Error("অনুগ্রহ করে আবার লগইন করুন");
+
+  const { data: roleData } = await (supabase as any)
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (roleData?.role !== "admin") {
+    throw new Error("শুধুমাত্র এডমিন এন্ট্রি মুছতে পারবেন");
+  }
+
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  const tempClient = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { error } = await tempClient.auth.signInWithPassword({
+    email: user.email,
+    password,
+  });
+
+  if (error) return false;
+  await tempClient.auth.signOut();
+  return true;
+}
+
 function parseRowNameAndHead(head: string, detail?: string | null) {
   const cleanDetail = detail && detail !== "—" ? detail.trim() : "";
   const cleanHead = (head || "").trim();
@@ -81,33 +124,9 @@ function parseRowNameAndHead(head: string, detail?: string | null) {
   };
 }
 
-/**
- * মোবাইলের জন্য সংক্ষিপ্ত তারিখ (যেমন: "২৬ আগ, ২০২৬" থেকে "২৬ আগ") যাতে ১ লাইনেই জায়গা হয়
- */
 function shortBnDate(dateStr: string) {
   const full = bnDate(dateStr);
   return full.split(",")[0] || full;
-}
-
-async function fetchIncomes({ from, to }: Range): Promise<IncomeRow[]> {
-  let q = sdb
-    .from("collections")
-    .select("id, amount, payment_date, method, note, customer_id, customer:customers(name)")
-    .is("contract_id", null);
-  if (from) q = q.gte("payment_date", from);
-  if (to) q = q.lte("payment_date", to);
-  const { data, error } = await q.order("payment_date", { ascending: false }).limit(2000);
-  if (error) throw error;
-  return (data ?? []) as unknown as IncomeRow[];
-}
-
-async function fetchExpenses({ from, to }: Range): Promise<ExpenseRow[]> {
-  let q = sdb.from("expenses").select("id, amount, expense_date, category, note");
-  if (from) q = q.gte("expense_date", from);
-  if (to) q = q.lte("expense_date", to);
-  const { data, error } = await q.order("expense_date", { ascending: false }).limit(2000);
-  if (error) throw error;
-  return (data ?? []) as unknown as ExpenseRow[];
 }
 
 async function fetchCustomers() {
@@ -205,6 +224,26 @@ function CashBookPage() {
 
   return (
     <div className="space-y-4">
+      <style>{`
+        [role="dialog"],
+        [data-radix-popper-content-wrapper] > div {
+          background-color: #ffffff !important;
+          color: #0f172a !important;
+          border: 1px solid #cbd5e1 !important;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+        }
+        .dark [role="dialog"],
+        .dark [data-radix-popper-content-wrapper] > div {
+          background-color: #0f172a !important;
+          color: #f8fafc !important;
+          border: 1px solid #1e293b !important;
+        }
+        [data-state="open"].fixed.inset-0 {
+          background-color: rgba(0, 0, 0, 0.75) !important;
+          backdrop-filter: blur(4px) !important;
+        }
+      `}</style>
+
       <div className="space-y-3">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
@@ -280,7 +319,7 @@ function CashBookPage() {
                 <div className="min-w-48"><Label className="text-xs">খাত</Label>
                   <Select value={hHead} onValueChange={setHHead}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-800 shadow-xl z-50">
                       <SelectItem value="__all__">সব খাত</SelectItem>
                       {heads.map(([h, v]) => <SelectItem key={h} value={h}>{v.dir === "in" ? "আয়" : "ব্যয়"} — {h}</SelectItem>)}
                     </SelectContent>
@@ -412,7 +451,6 @@ function AllExpenseList({ rows, loading, onDone }: { rows: Array<{ id: string; d
       </CardHeader>
 
       <CardContent className="px-1.5 sm:px-6 pb-4">
-        {/* ১-লাইনের ফিক্সড উইডথ টেবিল: ডানে-বামে স্ক্রলও লাগবে না, ডাবল লাইনও হবে না */}
         <div className="w-full overflow-hidden rounded-lg border">
           <table className="w-full table-fixed border-collapse text-[11px] sm:text-sm">
             <thead>
@@ -484,22 +522,27 @@ function RowEditDialog({ row, onDone }: { row: { id: string; date: string; head:
   const [amount, setAmount] = useState(String(row.amount));
   const [date, setDate] = useState(row.date?.slice(0, 10) ?? "");
   const [note, setNote] = useState("");
-  const fn = useServerFn(updateCashRow);
+
   const mut = useMutation({
     mutationFn: async () => {
       const amt = Number(amount);
       if (!Number.isFinite(amt) || amt <= 0) throw new Error("টাকার পরিমাণ সঠিক নয়");
-      return fn({ data: { key: row.id, amount: amt, date, note: note || null } });
+      const { table, dateCol, id } = resolveRowKey(row.id);
+      const patch: Record<string, unknown> = { amount: amt, [dateCol]: date };
+      if (note.trim()) patch.note = note.trim();
+      const { error } = await (supabase as any).from(table).update(patch).eq("id", id);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => { toast.success("হালনাগাদ হয়েছে"); setOpen(false); onDone(); },
     onError: (e: Error) => toast.error(e.message),
   });
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" className="h-6 w-5 sm:h-7 sm:w-7 p-0"><Pencil className="h-3 w-3 sm:h-3.5 sm:w-3.5" /></Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 shadow-2xl">
         <DialogHeader>
           <DialogTitle>ব্যয় সম্পাদনা</DialogTitle>
           <DialogDescription>{row.detail !== "—" ? row.detail : ""} — {row.head}</DialogDescription>
@@ -520,21 +563,27 @@ function RowEditDialog({ row, onDone }: { row: { id: string; date: string; head:
 function RowDeleteDialog({ rowKey, label, onDone }: { rowKey: string; label: string; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
-  const fn = useServerFn(deleteCashRow);
+
   const mut = useMutation({
     mutationFn: async () => {
       if (!password) throw new Error("এডমিন পাসওয়ার্ড দিন");
-      return fn({ data: { key: rowKey, password } });
+      const ok = await verifyAdminPasswordClient(password);
+      if (!ok) throw new Error("এডমিন পাসওয়ার্ড সঠিক নয়");
+
+      const { table, id } = resolveRowKey(rowKey);
+      const { error } = await (supabase as any).from(table).delete().eq("id", id);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => { toast.success("এন্ট্রি মুছে ফেলা হয়েছে"); setOpen(false); setPassword(""); onDone(); },
     onError: (e: Error) => toast.error(e.message || "মুছে ফেলা যায়নি"),
   });
+
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setPassword(""); }}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" className="h-6 w-5 sm:h-7 sm:w-7 p-0 text-destructive"><Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" /></Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 shadow-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Lock className="h-4 w-4 text-destructive" />এডমিন পাসওয়ার্ড দিন</DialogTitle>
           <DialogDescription>{label} — এন্ট্রি স্থায়ীভাবে মুছে যাবে।</DialogDescription>
@@ -581,18 +630,22 @@ function IncomeDialog({ row, customers, onDone }: {
   const [method, setMethod] = useState(row?.method ?? "cash");
   const [note, setNote] = useState(row?.note ?? "");
 
-  const create = useServerFn(createCollection);
-  const update = useServerFn(updateIncomeEntry);
-
   const mut = useMutation({
     mutationFn: async () => {
       const amt = Number(amount);
       if (!customerId) throw new Error("গ্রাহক নির্বাচন করুন");
       if (!Number.isFinite(amt) || amt <= 0) throw new Error("টাকার পরিমাণ সঠিক নয়");
       if (editing) {
-        return update({ data: { id: row!.id, customer_id: customerId, amount: amt, payment_date: date, method: method || null, note: note || null } });
+        const { error } = await sdb.from("collections").update({
+          customer_id: customerId, amount: amt, payment_date: date, method: method || null, note: note || null,
+        }).eq("id", row!.id);
+        if (error) throw new Error(error.message);
+        return;
       }
-      return create({ data: { customer_id: customerId, contract_id: null, amount: amt, payment_date: date, method: method || null, note: note || null } });
+      const { error } = await sdb.from("collections").insert({
+        customer_id: customerId, contract_id: null, amount: amt, payment_date: date, method: method || null, note: note || null,
+      });
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       toast.success(editing ? "আয় হালনাগাদ হয়েছে" : "আয় যোগ হয়েছে");
@@ -612,7 +665,7 @@ function IncomeDialog({ row, customers, onDone }: {
           <Button size="sm" className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 w-full h-11 text-sm font-bold shadow-sm"><Plus className="h-4 w-4" />আয় যোগ</Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 shadow-2xl">
         <DialogHeader>
           <DialogTitle>{editing ? "আয় সম্পাদনা" : "নতুন নগদ আয় এন্ট্রি"}</DialogTitle>
           <DialogDescription>চুক্তি বহির্ভূত নগদ আয়।</DialogDescription>
@@ -622,7 +675,7 @@ function IncomeDialog({ row, customers, onDone }: {
             <Label>গ্রাহক *</Label>
             <Select value={customerId} onValueChange={setCustomerId}>
               <SelectTrigger><SelectValue placeholder="গ্রাহক নির্বাচন করুন" /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-800 shadow-xl z-50">
                 {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -641,7 +694,7 @@ function IncomeDialog({ row, customers, onDone }: {
             <Label>মাধ্যম</Label>
             <Select value={method} onValueChange={setMethod}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-800 shadow-xl z-50">
                 {METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
               </SelectContent>
             </Select>
