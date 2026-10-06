@@ -108,18 +108,50 @@ async function fetchKilnContext() {
   }
 }
 
-// ২. অটোমেটিক সঠিক Gemini Model বেছে নেওয়ার ফাংশন (যাতে কখনো 404 না আসে)
+// ২. গুগল সার্ভার ব্যস্ত (503) থাকলেও সবগুলো মডেল চেক করে উত্তর আনার ফাংশন
 async function callGeminiWithFallback(promptText: string, apiKey: string): Promise<any> {
-  const candidateModels = [
-    "gemini-flash-latest",
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-flash",
+  let modelsToTry = [
+    "models/gemini-2.5-flash-lite",
+    "models/gemini-2.0-flash",
+    "models/gemini-2.0-flash-lite",
+    "models/gemini-flash-lite-latest",
+    "models/gemini-flash-latest",
+    "models/gemini-2.5-flash",
+    "models/gemini-1.5-flash",
   ];
+
+  // প্রথমে আপনার Key-তে কোন কোন মডেল চালু আছে তা গুগল থেকে জেনে নেওয়া
+  try {
+    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+      headers: { "x-goog-api-key": apiKey },
+    });
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      const available = (listData.models || [])
+        .filter(
+          (m: any) =>
+            m.supportedGenerationMethods?.includes("generateContent") &&
+            m.name?.includes("gemini") &&
+            !m.name?.includes("image") &&
+            !m.name?.includes("tts") &&
+            !m.name?.includes("embedding") &&
+            !m.name?.includes("vision")
+        )
+        .map((m: any) => m.name as string);
+
+      if (available.length > 0) {
+        // হালকা ও দ্রুত (lite/flash) মডেলগুলো আগে রাখা যাতে 503 না খায়
+        available.sort((a, b) => {
+          const score = (name: string) =>
+            name.includes("lite") ? 1 : name.includes("2.0-flash") ? 2 : name.includes("flash") ? 3 : 4;
+          return score(a) - score(b);
+        });
+        modelsToTry = [...new Set([...available, ...modelsToTry])];
+      }
+    }
+  } catch (e) {
+    console.warn("Model list check skipped:", e);
+  }
 
   const payload = {
     contents: [
@@ -129,18 +161,19 @@ async function callGeminiWithFallback(promptText: string, apiKey: string): Promi
       },
     ],
     generationConfig: {
+      temperature: 0.1,
       responseMimeType: "application/json",
     },
   };
 
-  let lastStatus = 0;
-  let lastErrorText = "";
+  let lastError = "";
 
-  // তালিকার মডেলগুলো একে একে চেষ্টা করবে
-  for (const model of candidateModels) {
+  // একটি মডেল 503 (Busy) বা 404 দিলে থামবে না, পরের সবগুলো মডেল একে একে চেষ্টা করবে!
+  for (const modelName of modelsToTry) {
+    const cleanModel = modelName.startsWith("models/") ? modelName : `models/${modelName}`;
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/${cleanModel}:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: {
@@ -155,67 +188,67 @@ async function callGeminiWithFallback(promptText: string, apiKey: string): Promi
         return await res.json();
       }
 
-      lastStatus = res.status;
-      lastErrorText = await res.text().catch(() => "");
-      // যদি 404 বা 400 হয় তবে পরের মডেল ট্রাই করবে
-      if (res.status !== 404 && res.status !== 400) {
-        break;
-      }
+      lastError = `${res.status}`;
     } catch (e: any) {
-      lastErrorText = e?.message || "Network error";
+      lastError = e?.message || "NetworkError";
     }
   }
 
-  // যদি উপরের কোনোটি না মেলে, তবে সরাসরি API থেকে সক্রিয় মডেলের তালিকা এনে প্রথমটি ব্যবহার করবে
-  try {
-    const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
-      headers: { "x-goog-api-key": apiKey },
-    });
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      const validModel = (listData.models || []).find(
-        (m: any) =>
-          m.supportedGenerationMethods?.includes("generateContent") &&
-          m.name?.includes("gemini") &&
-          !m.name?.includes("image") &&
-          !m.name?.includes("tts") &&
-          !m.name?.includes("embedding")
-      );
-
-      if (validModel?.name) {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/${validModel.name}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey,
-            },
-            body: JSON.stringify(payload),
-          }
-        );
-        if (res.ok) {
-          return await res.json();
-        }
-        lastStatus = res.status;
-      }
-    }
-  } catch (e) {
-    console.error("Model discovery error:", e);
-  }
-
-  throw new Error(`HTTP_${lastStatus || 404}: ${lastErrorText}`);
+  throw new Error(`ALL_MODELS_BUSY_${lastError}`);
 }
 
-// ৩. মেসেজ প্রসেস করার মূল ফাংশন
+// ৩. যদি কখনো গুগলের সব সার্ভার একসাথে ডাউন/ব্যস্ত থাকে, তবুও সরাসরি ডাটাবেস থেকে উত্তর দেওয়ার স্মার্ট ব্যাকআপ
+function buildLocalSmartReply(userMessage: string, ctx: Awaited<ReturnType<typeof fetchKilnContext>>): AIResponse {
+  const msg = userMessage.trim();
+
+  // কাস্টমারদের বকেয়া জানতে চাইলে
+  if (msg.includes("পাওনা") || msg.includes("বকেয়া") || msg.includes("বাকি")) {
+    const dueCustomers = ctx.customers.filter((c: any) => Number(c.total_due || 0) > 0);
+    if (dueCustomers.length === 0) {
+      return {
+        type: "QUERY",
+        reply: "আলহামদুলিল্লাহ, বর্তমানে কোনো গ্রাহকের কাছে বকেয়া বা পাওনা টাকা নেই।",
+      };
+    }
+    const listText = dueCustomers
+      .map((c: any, i: number) => `${i + 1}. ${c.name}: ৳${Number(c.total_due).toLocaleString("bn-BD")}`)
+      .join("\n");
+    return {
+      type: "QUERY",
+      reply: `📊 মার্কেটে মোট বকেয়া: ৳${ctx.summary.totalCustomerDue.toLocaleString("bn-BD")}\n\nযাদের কাছে পাওনা রয়েছে:\n${listText}`,
+    };
+  }
+
+  // স্টক জানতে চাইলে
+  if (msg.includes("স্টক") || msg.includes("কত ইট") || msg.includes("মজুদ")) {
+    if (ctx.brickTypes.length === 0) {
+      return { type: "QUERY", reply: "বর্তমানে ডাটাবেসে ইটের কোনো স্টকের তথ্য পাওয়া যায়নি।" };
+    }
+    const stockText = ctx.brickTypes
+      .map((b: any) => `🧱 ${b.name}: ${Number(b.current_stock || 0).toLocaleString("bn-BD")} পিস (দর: ৳${b.price || 0})`)
+      .join("\n");
+    return {
+      type: "QUERY",
+      reply: `ভাটার বর্তমান ইটের স্টক:\n${stockText}`,
+    };
+  }
+
+  // আজকের হিসাব বা বিক্রি জানতে চাইলে
+  return {
+    type: "QUERY",
+    reply: `📅 আজকের সারসংক্ষেপ (${ctx.today}):\n• মোট ইট বিক্রি: ${ctx.summary.todayTotalBricks.toLocaleString("bn-BD")} পিস (৳${ctx.summary.todayTotalSale.toLocaleString("bn-BD")})\n• আজ নগদ আদায়: ৳${ctx.summary.todayTotalCollection.toLocaleString("bn-BD")}\n• আজ মোট খরচ: ৳${ctx.summary.todayTotalExpense.toLocaleString("bn-BD")}\n• মার্কেটে মোট বকেয়া: ৳${ctx.summary.totalCustomerDue.toLocaleString("bn-BD")}`,
+  };
+}
+
+// ৪. মেসেজ প্রসেস করার মূল ফাংশন
 export const processBrickFieldCommand = async (userMessage: string): Promise<AIResponse> => {
+  const ctx = await fetchKilnContext();
+
   try {
     const k1 = "AQ.Ab8RN6IYHk9V7Hl1";
     const k2 = "Vw7TZfbmvcNHv5mm0B5";
     const k3 = "5F1HBSYhPqBptHQ";
     const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || k1 + k2 + k3).trim();
-
-    const ctx = await fetchKilnContext();
 
     const systemPrompt = `আপনি "CDB Bricks" (সি ডি বি ব্রিকস, কাপাসিয়া, গাজীপুর) ইটভাটার প্রধান এআই হিসাবরক্ষক ও স্মার্ট সহকারী।
 আজকের তারিখ: ${ctx.today}
@@ -297,15 +330,13 @@ export const processBrickFieldCommand = async (userMessage: string): Promise<AIR
       data: parsed.data || {},
     };
   } catch (error: any) {
-    console.error("AI Service Error:", error);
-    return {
-      type: "UNKNOWN",
-      reply: "দুঃখিত ভাই, এআই সংযোগে একটু সমস্যা হয়েছে (" + (error?.message?.slice(0, 40) || "Error") + ")।",
-    };
+    console.error("AI Service Fallback Triggered:", error);
+    // গুগল সার্ভার ৫0৩/ব্যস্ত থাকলেও এরর না দেখিয়ে সরাসরি লাইভ ডাটাবেস থেকে উত্তর দেবে!
+    return buildLocalSmartReply(userMessage, ctx);
   }
 };
 
-// ৪. "খাতায় সেভ করুন" বাটনে ক্লিক করলে ডাটাবেসে সেভ করার ফাংশন
+// ৫. "খাতায় সেভ করুন" বাটনে ক্লিক করলে ডাটাবেসে সেভ করার ফাংশন
 export const saveAiActionToDatabase = async (
   actionType: string,
   entryData?: any
