@@ -163,7 +163,7 @@ export function AiAssistantFab() {
           className="fixed bottom-5 right-5 z-50 hidden items-center gap-2 rounded-full bg-gradient-to-br from-primary to-primary/80 px-4 py-3 text-primary-foreground shadow-lg ring-1 ring-primary/30 transition-transform hover:scale-105 active:scale-95 md:flex"
         >
           <Sparkles className="h-4 w-4" />
-          <span className="text-sm font-medium">CDB AI সহকারী</span>
+          <span className="text-sm font-medium">CDB Bricks AI ব্রেন</span>
         </button>
       )}
 
@@ -177,8 +177,8 @@ export function AiAssistantFab() {
                 <Bot className="h-4 w-4" />
               </div>
               <div className="leading-tight">
-                <div className="text-sm font-semibold">CDB Bricks AI সহকারী</div>
-                <div className="text-[11px] text-muted-foreground">বাংলায় প্রশ্ন করুন</div>
+                <div className="text-sm font-semibold">CDB Bricks AI ব্রেন</div>
+                <div className="text-[11px] text-muted-foreground">হিসাব, অটো এন্ট্রি ও চালান সহকারী</div>
               </div>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="h-8 w-8">
@@ -193,9 +193,8 @@ export function AiAssistantFab() {
                 <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-primary/10">
                   <Sparkles className="h-6 w-6 text-primary" />
                 </div>
-                <div className="text-sm font-medium">আসসালামু আলাইকুম! 👋</div>
-                <div className="text-xs text-muted-foreground">
-                  আমি আপনার ব্যবসার তথ্য নিয়ে সাহায্য করতে পারি। যেমন:
+                <div className="text-[13px] leading-relaxed text-muted-foreground">
+                  আসসালামু আলাইকুম! আমি CDB Bricks AI সহকারী। ভাটার যেকোনো হিসাব জানতে, নতুন চালান কাটতে বা জমা-খরচ খাতায় তুলতে আমাকে বাংলায় বলুন বা লিখুন।
                 </div>
                 <div className="mx-auto flex max-w-[280px] flex-wrap gap-1.5">
                   {[
@@ -356,7 +355,7 @@ export function AiAssistantFab() {
                     void handleSend();
                   }
                 }}
-                placeholder="আপনার প্রশ্ন লিখুন…"
+                placeholder="মুখে বলুন বা এখানে লিখুন..."
                 rows={1}
                 className="min-h-[40px] max-h-[120px] resize-none text-sm bg-muted/50 focus-visible:ring-1 focus-visible:ring-primary/30"
                 disabled={!token}
