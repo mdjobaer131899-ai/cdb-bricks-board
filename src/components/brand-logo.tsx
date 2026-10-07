@@ -5,21 +5,30 @@ import { useState } from "react";
 interface Props {
   className?: string;
   alt?: string;
+  size?: "sm" | "md" | "lg" | "xl";
 }
+
+const SIZE_MAP = {
+  sm: "h-7 w-7",
+  md: "h-9 w-9",
+  lg: "h-14 w-14",
+  xl: "h-20 w-20",
+};
 
 /**
  * CDB brand logo with graceful fallback.
  * The Lovable-hosted asset URL may not be available locally or after
  * certain deployments — when that happens we show a branded SVG instead.
  */
-export function BrandLogo({ className, alt = "CDB Bricks Logo" }: Props) {
+export function BrandLogo({ className, alt = "CDB Bricks Logo", size }: Props) {
   const [failed, setFailed] = useState(false);
+  const sizeClass = size ? SIZE_MAP[size] : "";
 
   if (failed) {
     return (
       <svg
         viewBox="0 0 48 48"
-        className={cn("object-contain", className)}
+        className={cn("object-contain", sizeClass, className)}
         aria-label={alt}
       >
         <rect width="48" height="48" rx="10" fill="url(#cdb-grad)" />
@@ -49,7 +58,7 @@ export function BrandLogo({ className, alt = "CDB Bricks Logo" }: Props) {
     <img
       src={logoAsset.url}
       alt={alt}
-      className={cn("object-contain", className)}
+      className={cn("object-contain", sizeClass, className)}
       loading="eager"
       decoding="async"
       onError={() => setFailed(true)}

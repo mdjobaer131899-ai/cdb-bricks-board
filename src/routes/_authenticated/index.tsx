@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { NavGrid } from "@/components/nav-grid";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { ManagerDashboard } from "@/components/manager-dashboard";
 import { PendingRoleState } from "@/components/pending-role-state";
@@ -32,8 +33,8 @@ function Index() {
       </div>
     );
   }
-  if (data.role === "admin") return <AdminDashboard />;
-  if (data.role === "manager") return <ManagerDashboard />;
+  if (data.role === "admin") return <AdminDashboard navGrid={<NavGrid />} />;
+  if (data.role === "manager") return <ManagerDashboard navGrid={<NavGrid />} />;
   return <PendingRoleState onRetry={refetch} />;
 }
 
