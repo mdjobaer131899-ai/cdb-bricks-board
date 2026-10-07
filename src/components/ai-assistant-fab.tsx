@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Bot, Send, Sparkles, X, Loader2 } from "lucide-react";
+import { Bot, Send, Sparkles, X, Loader2, Mic, Paperclip, PieChart, CheckCircle2, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useLocation } from "@tanstack/react-router";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 function getText(m: UIMessage): string {
   return m.parts
@@ -40,11 +42,47 @@ function activeToolLabel(m: UIMessage): string | null {
 export const OPEN_AI_CHAT_EVENT = "cdb:open-ai-chat";
 
 export function AiAssistantFab() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => {
+    if (typeof sessionStorage !== "undefined") {
+      return sessionStorage.getItem("cdb:ai-open") === "true";
+    }
+    return false;
+  });
+  
+  useEffect(() => {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem("cdb:ai-open", String(open));
+    }
+  }, [open]);
+
   const [input, setInput] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const location = useLocation();
+
+  const [isListening, setIsListening] = useState(false);
+  const startListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("আপনার ব্রাউজারে ভয়েস সাপোর্ট নেই");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "bn-BD";
+    recognition.interimResults = false;
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput((prev) => (prev ? prev + " " + transcript : transcript));
+    };
+    recognition.onerror = (event: any) => {
+      console.error(event.error);
+      setIsListening(false);
+    };
+    recognition.onend = () => setIsListening(false);
+    recognition.start();
+  };
 
   useEffect(() => {
     const handler = () => setOpen(true);
@@ -74,10 +112,26 @@ export function AiAssistantFab() {
     [],
   );
 
-  const { messages, sendMessage, status, error, stop } = useChat({
+  const initialMessages = useMemo(() => {
+    if (typeof sessionStorage === "undefined") return [];
+    try {
+      return JSON.parse(sessionStorage.getItem("cdb:ai-messages") || "[]");
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const { messages, append, status, error, stop } = useChat({
+    initialMessages,
     transport,
     onError: (e) => console.error("AI chat error:", e),
   });
+
+  useEffect(() => {
+    if (typeof sessionStorage !== "undefined" && messages.length > 0) {
+      sessionStorage.setItem("cdb:ai-messages", JSON.stringify(messages));
+    }
+  }, [messages]);
 
   const busy = status === "submitted" || status === "streaming";
 
@@ -93,7 +147,7 @@ export function AiAssistantFab() {
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
-    await sendMessage({ text });
+    await append({ role: "user", content: text }, { data: { currentPath: location.pathname } });
   };
 
   return (
@@ -162,19 +216,97 @@ export function AiAssistantFab() {
               {messages.map((m) => {
                 const text = getText(m);
                 const isUser = m.role === "user";
-                if (!text && !isUser && status !== "streaming") return null;
+                if (!text && !isUser && status !== "streaming" && !m.toolInvocations?.length) return null;
                 return (
-                  <div key={m.id} className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-                    <div
-                      className={cn(
-                        "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap leading-relaxed",
-                        isUser
-                          ? "bg-primary text-primary-foreground rounded-br-sm"
-                          : "bg-muted text-foreground rounded-bl-sm",
-                      )}
-                    >
-                      {text || <span className="text-muted-foreground">…</span>}
-                    </div>
+                  <div key={m.id} className="flex flex-col gap-2">
+                    {(text || isUser) && (
+                      <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+                        <div
+                          className={cn(
+                            "max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap leading-relaxed",
+                            isUser
+                              ? "bg-primary text-primary-foreground rounded-br-sm"
+                              : "bg-muted text-foreground rounded-bl-sm",
+                          )}
+                        >
+                          {text || <span className="text-muted-foreground">…</span>}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Generative UI Tool Invocations */}
+                    {m.toolInvocations?.map((ti) => {
+                      if (ti.state !== "result") return null;
+                      
+                      // 1. Sales Chart
+                      if (ti.toolName === "getSalesSummary" || ti.toolName === "getCustomerSummary") {
+                        const data = ti.result as any;
+                        if (!data?.breakdown_by_brick?.length) return null;
+                        return (
+                          <div key={ti.toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-muted/50 p-3 text-sm border shadow-sm">
+                            <div className="mb-3 flex items-center gap-2 font-semibold text-primary">
+                              <PieChart className="h-4 w-4" /> বিক্রির চার্ট
+                            </div>
+                            <div className="h-[120px] w-full">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={data.breakdown_by_brick} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                                  <YAxis tick={{ fontSize: 10 }} />
+                                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                                  <Bar dataKey="qty" fill="var(--color-primary)" radius={[4, 4, 0, 0]}>
+                                    {data.breakdown_by_brick.map((entry: any, index: number) => (
+                                      <Cell key={`cell-${index}`} fill={`hsl(var(--primary) / ${0.7 + (index % 3) * 0.1})`} />
+                                    ))}
+                                  </Bar>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // 2. Expense Draft
+                      if (ti.toolName === "prepareExpenseDraft") {
+                        const draft = (ti.result as any).draft;
+                        return (
+                          <div key={ti.toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-blue-500/10 p-3 text-sm border border-blue-500/20 shadow-sm">
+                            <div className="mb-2 flex items-center gap-2 font-semibold text-blue-600 dark:text-blue-400">
+                              <Receipt className="h-4 w-4" /> খরচের ড্রাফট প্রস্তুত
+                            </div>
+                            <div className="mb-3 space-y-1 text-xs">
+                              <div><span className="text-muted-foreground">খাত:</span> {draft.category}</div>
+                              <div><span className="text-muted-foreground">পরিমাণ:</span> ৳{draft.amount}</div>
+                              {draft.note && <div><span className="text-muted-foreground">নোট:</span> {draft.note}</div>}
+                            </div>
+                            <Button size="sm" className="w-full h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={() => window.dispatchEvent(new CustomEvent("open-expense-modal", { detail: draft }))}>
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> ড্রাফট চেক করুন
+                            </Button>
+                          </div>
+                        );
+                      }
+
+                      // 3. Sales Draft
+                      if (ti.toolName === "prepareSalesDraft") {
+                        const draft = (ti.result as any).draft;
+                        return (
+                          <div key={ti.toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-green-500/10 p-3 text-sm border border-green-500/20 shadow-sm">
+                            <div className="mb-2 flex items-center gap-2 font-semibold text-green-600 dark:text-green-400">
+                              <Receipt className="h-4 w-4" /> বিক্রির ড্রাফট প্রস্তুত
+                            </div>
+                            <div className="mb-3 space-y-1 text-xs">
+                              <div><span className="text-muted-foreground">গ্রাহক:</span> {draft.customerName}</div>
+                              <div><span className="text-muted-foreground">ইট:</span> {draft.brickType} ({draft.quantity} পিস/ফুট)</div>
+                              <div><span className="text-muted-foreground">দর:</span> ৳{draft.price}</div>
+                            </div>
+                            <Button size="sm" className="w-full h-8 text-xs bg-green-600 hover:bg-green-700 text-white" onClick={() => window.dispatchEvent(new CustomEvent("open-sales-modal", { detail: draft }))}>
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> ড্রাফট চেক করুন
+                            </Button>
+                          </div>
+                        );
+                      }
+                      
+                      return null;
+                    })}
                   </div>
                 );
               })}
@@ -203,6 +335,9 @@ export function AiAssistantFab() {
           {/* Composer */}
           <div className="border-t p-2">
             <div className="flex items-end gap-2">
+              <Button size="icon" variant="ghost" className="h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground">
+                <Paperclip className="h-4 w-4" />
+              </Button>
               <Textarea
                 ref={taRef}
                 value={input}
@@ -215,15 +350,23 @@ export function AiAssistantFab() {
                 }}
                 placeholder="আপনার প্রশ্ন লিখুন…"
                 rows={1}
-                className="min-h-[40px] max-h-[120px] resize-none text-sm"
+                className="min-h-[40px] max-h-[120px] resize-none text-sm bg-muted/50 focus-visible:ring-1 focus-visible:ring-primary/30"
                 disabled={!token}
               />
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className={cn("h-10 w-10 shrink-0 transition-colors", isListening ? "text-red-500 bg-red-500/10 hover:bg-red-500/20" : "text-muted-foreground hover:text-foreground")}
+                onClick={startListening}
+              >
+                <Mic className="h-4 w-4" />
+              </Button>
               {busy ? (
                 <Button size="icon" variant="outline" onClick={() => stop()} className="h-10 w-10 shrink-0">
                   <X className="h-4 w-4" />
                 </Button>
               ) : (
-                <Button size="icon" onClick={handleSend} disabled={!input.trim() || !token} className="h-10 w-10 shrink-0">
+                <Button size="icon" onClick={handleSend} disabled={!input.trim() || !token} className="h-10 w-10 shrink-0 bg-primary/90 hover:bg-primary">
                   <Send className="h-4 w-4" />
                 </Button>
               )}

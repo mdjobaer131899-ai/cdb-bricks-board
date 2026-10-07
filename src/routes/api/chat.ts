@@ -50,8 +50,11 @@ export const Route = createFileRoute("/api/chat")({
             return new Response("এই ফিচারটি শুধু অ্যাডমিনদের জন্য।", { status: 403 });
           }
 
-          const body = (await request.json()) as { messages?: UIMessage[] };
+          const body = (await request.json()) as { messages?: UIMessage[], data?: { currentPath?: string } };
           const messages = Array.isArray(body.messages) ? body.messages : [];
+          const currentPath = body.data?.currentPath || "অজানা";
+
+          const dynamicSystemPrompt = `${SYSTEM_PROMPT}\n\nবর্তমান ব্যবহারকারীর কনটেক্সট (রাউট/পেইজ): ${currentPath}`;
 
           const apiKey = process.env.LOVABLE_API_KEY;
           if (!apiKey) {
@@ -63,7 +66,7 @@ export const Route = createFileRoute("/api/chat")({
 
           const result = streamText({
             model: gateway("google/gemini-2.5-flash"),
-            system: SYSTEM_PROMPT,
+            system: dynamicSystemPrompt,
             messages: await convertToModelMessages(messages),
             tools,
             stopWhen: stepCountIs(50),

@@ -491,6 +491,24 @@ export function buildAssistantTools(supabase: DB) {
         };
       },
     }),
+
+    /** Draft Expense */
+    prepareExpenseDraft: tool({
+      description: "খরচের ড্রাফট তৈরি করুন (যেমন: ৫০ টাকার চা-নাস্তা)। ডাটাবেসে সেভ হবে না, শুধু ইউজারের কাছে ড্রাফট হিসেবে যাবে।",
+      inputSchema: z.object({ amount: z.number(), category: z.string(), note: z.string().optional() }),
+      execute: async (draft) => {
+        return { success: true, draft, message: "আমি খরচের ড্রাফট তৈরি করেছি। অনুগ্রহ করে সেভ করুন।" };
+      }
+    }),
+
+    /** Draft Sales */
+    prepareSalesDraft: tool({
+      description: "বিক্রির ড্রাফট তৈরি করুন।",
+      inputSchema: z.object({ customerName: z.string(), brickType: z.string(), quantity: z.number(), price: z.number() }),
+      execute: async (draft) => {
+        return { success: true, draft, message: "আমি বিক্রির ড্রাফট তৈরি করেছি। অনুগ্রহ করে সেভ করুন।" };
+      }
+    }),
   };
 }
 
