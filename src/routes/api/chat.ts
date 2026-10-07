@@ -65,7 +65,7 @@ export const Route = createFileRoute("/api/chat")({
           const tools = buildAssistantTools(supabaseAdmin);
 
           const result = streamText({
-            model: gateway("google/gemini-2.5-flash"),
+            model: gateway("google/gemini-1.5-flash"),
             system: dynamicSystemPrompt,
             messages: await convertToModelMessages(messages),
             tools,
