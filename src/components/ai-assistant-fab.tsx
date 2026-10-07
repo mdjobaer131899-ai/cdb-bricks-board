@@ -112,7 +112,7 @@ export function AiAssistantFab() {
     [],
   );
 
-  const initialMessages = useMemo(() => {
+  const storedMessages = useMemo(() => {
     if (typeof sessionStorage === "undefined") return [];
     try {
       return JSON.parse(sessionStorage.getItem("cdb:ai-messages") || "[]");
@@ -121,8 +121,8 @@ export function AiAssistantFab() {
     }
   }, []);
 
-  const { messages, append, status, error, stop } = useChat({
-    initialMessages,
+  const { messages, sendMessage, status, error, stop } = useChat({
+    messages: storedMessages,
     transport,
     onError: (e) => console.error("AI chat error:", e),
   });
@@ -147,7 +147,10 @@ export function AiAssistantFab() {
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
-    await append({ role: "user", content: text }, { data: { currentPath: location.pathname } });
+    await sendMessage(
+      { text },
+      { body: { data: { currentPath: location.pathname } } },
+    );
   };
 
   return (
@@ -216,7 +219,8 @@ export function AiAssistantFab() {
               {messages.map((m) => {
                 const text = getText(m);
                 const isUser = m.role === "user";
-                if (!text && !isUser && status !== "streaming" && !m.toolInvocations?.length) return null;
+                const toolParts = m.parts.filter((p): p is any => p.type === "dynamic-tool" || (typeof p.type === "string" && p.type.startsWith("tool-") && p.type !== "text"));
+                if (!text && !isUser && status !== "streaming" && !toolParts.length) return null;
                 return (
                   <div key={m.id} className="flex flex-col gap-2">
                     {(text || isUser) && (
@@ -235,15 +239,19 @@ export function AiAssistantFab() {
                     )}
                     
                     {/* Generative UI Tool Invocations */}
-                    {m.toolInvocations?.map((ti) => {
-                      if (ti.state !== "result") return null;
+                    {toolParts.map((ti: any) => {
+                      const toolName = ti.type === "dynamic-tool" ? ti.toolName : ti.type.replace(/^tool-/, "");
+                      const toolCallId = ti.toolCallId;
+                      const isReady = ti.state === "result" || ti.state === "output-available";
+                      if (!isReady) return null;
+                      const result = ti.output ?? ti.result;
                       
                       // 1. Sales Chart
-                      if (ti.toolName === "getSalesSummary" || ti.toolName === "getCustomerSummary") {
-                        const data = ti.result as any;
+                      if (toolName === "getSalesSummary" || toolName === "getCustomerSummary") {
+                        const data = result as any;
                         if (!data?.breakdown_by_brick?.length) return null;
                         return (
-                          <div key={ti.toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-muted/50 p-3 text-sm border shadow-sm">
+                          <div key={toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-muted/50 p-3 text-sm border shadow-sm">
                             <div className="mb-3 flex items-center gap-2 font-semibold text-primary">
                               <PieChart className="h-4 w-4" /> বিক্রির চার্ট
                             </div>
@@ -266,10 +274,10 @@ export function AiAssistantFab() {
                       }
                       
                       // 2. Expense Draft
-                      if (ti.toolName === "prepareExpenseDraft") {
-                        const draft = (ti.result as any).draft;
+                      if (toolName === "prepareExpenseDraft") {
+                        const draft = (result as any).draft;
                         return (
-                          <div key={ti.toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-blue-500/10 p-3 text-sm border border-blue-500/20 shadow-sm">
+                          <div key={toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-blue-500/10 p-3 text-sm border border-blue-500/20 shadow-sm">
                             <div className="mb-2 flex items-center gap-2 font-semibold text-blue-600 dark:text-blue-400">
                               <Receipt className="h-4 w-4" /> খরচের ড্রাফট প্রস্তুত
                             </div>
@@ -286,10 +294,10 @@ export function AiAssistantFab() {
                       }
 
                       // 3. Sales Draft
-                      if (ti.toolName === "prepareSalesDraft") {
-                        const draft = (ti.result as any).draft;
+                      if (toolName === "prepareSalesDraft") {
+                        const draft = (result as any).draft;
                         return (
-                          <div key={ti.toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-green-500/10 p-3 text-sm border border-green-500/20 shadow-sm">
+                          <div key={toolCallId} className="mr-auto w-[85%] rounded-2xl rounded-bl-sm bg-green-500/10 p-3 text-sm border border-green-500/20 shadow-sm">
                             <div className="mb-2 flex items-center gap-2 font-semibold text-green-600 dark:text-green-400">
                               <Receipt className="h-4 w-4" /> বিক্রির ড্রাফট প্রস্তুত
                             </div>
