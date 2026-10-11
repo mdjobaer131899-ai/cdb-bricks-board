@@ -77,6 +77,7 @@ export const Route = createFileRoute("/api/chat")({
     handlers: {
       POST: async ({ request }) => {
         let timeoutSignal: AbortSignal | undefined;
+        let requestStage = "request setup";
 
         try {
           const authHeader = request.headers.get("authorization") ?? "";
@@ -90,6 +91,7 @@ export const Route = createFileRoute("/api/chat")({
 
           timeoutSignal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
           const abortSignal = AbortSignal.any([request.signal, timeoutSignal]);
+          requestStage = "Supabase authentication";
 
           const supabaseUrl =
             process.env.SUPABASE_URL ||
@@ -127,6 +129,7 @@ export const Route = createFileRoute("/api/chat")({
 
           const userId = userData.user.id;
 
+          requestStage = "role lookup";
           const { data: roleRows, error: roleError } = await supabase
             .from("user_roles")
             .select("role")
@@ -137,6 +140,7 @@ export const Route = createFileRoute("/api/chat")({
             return new Response("এই ফিচারটি শুধু অ্যাডমিন বা ম্যানেজারের জন্য।", { status: 403 });
           }
           const userRoles = roleRows.map((row) => row.role);
+          requestStage = "page permission lookup";
           const { data: permissionRows, error: permissionError } = await supabase
             .from("page_permissions")
             .select("page_key")
@@ -155,6 +159,7 @@ export const Route = createFileRoute("/api/chat")({
           const isJsonResponse =
             body.format === "json" || new URL(request.url).searchParams.get("format") === "json";
 
+          requestStage = "season lookup";
           const { data: season } = body.seasonId
             ? await supabase
                 .from("seasons")
@@ -226,6 +231,12 @@ export const Route = createFileRoute("/api/chat")({
             ? { ...assistantTools, ...comprehensiveTools }
             : comprehensiveTools;
 
+          requestStage = "AI model/tool execution";
+          console.info("[/api/chat] generation started", {
+            format: isJsonResponse ? "json" : "stream",
+            toolCount: Object.keys(tools).length,
+          });
+
           if (isJsonResponse) {
             const result = await generateText({
               model,
@@ -281,7 +292,10 @@ ${JSON.stringify(seasonContext)}`,
             (error instanceof Error &&
               (error.name === "TimeoutError" || error.name === "AbortError"))
           ) {
-            console.error("[/api/chat] request timed out or was cancelled:", message);
+            console.error("[/api/chat] request timed out or was cancelled:", {
+              stage: requestStage,
+              message,
+            });
             return new Response("উত্তর তৈরি করতে বেশি সময় লাগছে। ছোট করে প্রশ্নটি আবার করুন।", {
               status: 504,
             });

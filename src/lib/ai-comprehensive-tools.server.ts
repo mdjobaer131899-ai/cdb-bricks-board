@@ -454,6 +454,7 @@ export function buildComprehensiveAssistantTools(
         search: z.string().nullable().optional(),
       }),
       execute: async ({ dataset, from, to, search }) => {
+        console.info("[AI tool] countRecords started", { dataset });
         assertDatasetAccess(dataset);
 
         if (!DATASETS[dataset] && !VIEW_DATASETS.includes(dataset)) {
@@ -487,6 +488,7 @@ export function buildComprehensiveAssistantTools(
           throw new Error(error.message);
         }
 
+        console.info("[AI tool] countRecords completed", { dataset, count: count ?? 0 });
         return {
           dataset,
           count: count ?? 0,
@@ -504,6 +506,7 @@ export function buildComprehensiveAssistantTools(
         "প্রশ্ন অনুযায়ী অনুমোদিত table বা view থেকে প্রকৃত data, record count এবং totals দেয়। কোনো তথ্য অনুমান করবে না।",
       inputSchema: DataInput,
       execute: async ({ dataset, from, to, search, limit }) => {
+        console.info("[AI tool] getBusinessData started", { dataset });
         assertDatasetAccess(dataset);
 
         if (!DATASETS[dataset] && !VIEW_DATASETS.includes(dataset)) {
@@ -538,6 +541,7 @@ export function buildComprehensiveAssistantTools(
 
         const rows = await enrichRows(supabase, dataset, data ?? []);
 
+        console.info("[AI tool] getBusinessData completed", { dataset, count: rows.length });
         return {
           dataset,
           count: rows.length,
@@ -563,6 +567,7 @@ export function buildComprehensiveAssistantTools(
         limit: z.number().int().min(1).max(20).default(10),
       }),
       execute: async ({ term, limit }) => {
+        console.info("[AI tool] searchEntityDetails started");
         const cleanTerm = term.trim();
         if (!cleanTerm) {
           return { customers: [], workers: [], sardars: [], suppliers: [] };
@@ -724,6 +729,7 @@ export function buildComprehensiveAssistantTools(
         to: z.string().nullable().optional(),
       }),
       execute: async ({ from, to }) => {
+        console.info("[AI tool] getBusinessOverview started");
         [
           "customers",
           "workers",
@@ -856,6 +862,7 @@ export function buildComprehensiveAssistantTools(
         search: z.string().nullable().optional(),
       }),
       execute: async ({ dataset, metric, field, from, to, search }) => {
+        console.info("[AI tool] verifyDatabaseAnswer started", { dataset, metric });
         if (!allowedDatasets.includes(dataset)) {
           throw new Error(`এই dataset-এ আপনার access নেই: ${dataset}`);
         }
@@ -919,6 +926,7 @@ export function buildComprehensiveAssistantTools(
         to: z.string().nullable().optional(),
       }),
       execute: async ({ from, to }) => {
+        console.info("[AI tool] getDashboardSummary started");
         const datasets = [
           "sales_entries",
           "collections",
