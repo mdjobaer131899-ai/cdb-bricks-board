@@ -190,6 +190,33 @@ export type Database = {
           },
         ]
       }
+      book_marks: {
+        Row: {
+          checked: boolean
+          created_at: string
+          entry_key: string
+          page: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          checked?: boolean
+          created_at?: string
+          entry_key: string
+          page?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          checked?: boolean
+          created_at?: string
+          entry_key?: string
+          page?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       brick_types: {
         Row: {
           created_at: string
@@ -839,6 +866,83 @@ export type Database = {
         }
         Relationships: []
       }
+      loan_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          loan_id: string
+          note: string | null
+          payment_date: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          loan_id: string
+          note?: string | null
+          payment_date?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          loan_id?: string
+          note?: string | null
+          payment_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_payments_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loans: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          direction: string
+          id: string
+          loan_date: string
+          note: string | null
+          party_name: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          direction?: string
+          id?: string
+          loan_date?: string
+          note?: string | null
+          party_name: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          direction?: string
+          id?: string
+          loan_date?: string
+          note?: string | null
+          party_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       opening_balances: {
         Row: {
           amount: number
@@ -1049,6 +1153,98 @@ export type Database = {
           },
         ]
       }
+      owner_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          note: string | null
+          owner_id: string
+          txn_date: string
+          txn_type: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          note?: string | null
+          owner_id: string
+          txn_date?: string
+          txn_type?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string | null
+          owner_id?: string
+          txn_date?: string
+          txn_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owner_transactions_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      owners: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          note: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          note?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          note?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      page_permissions: {
+        Row: {
+          created_at: string
+          id: string
+          page_key: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          page_key: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          page_key?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       production_entries: {
         Row: {
           brick_type_id: string
@@ -1178,6 +1374,59 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      purchases: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          item_name: string
+          note: string | null
+          purchase_date: string
+          quantity: number
+          supplier_id: string | null
+          total_amount: number
+          unit: string | null
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          item_name: string
+          note?: string | null
+          purchase_date?: string
+          quantity?: number
+          supplier_id?: string | null
+          total_amount?: number
+          unit?: string | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          item_name?: string
+          note?: string | null
+          purchase_date?: string
+          quantity?: number
+          supplier_id?: string | null
+          total_amount?: number
+          unit?: string | null
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchases_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       raw_material_purchases: {
         Row: {
@@ -1692,6 +1941,10 @@ export type Database = {
           group_id: string | null
           id: string
           is_active: boolean
+          join_date: string | null
+          kind: string
+          mill_name: string | null
+          monthly_salary: number
           name: string
           note: string | null
           phone: string | null
@@ -1703,6 +1956,10 @@ export type Database = {
           group_id?: string | null
           id?: string
           is_active?: boolean
+          join_date?: string | null
+          kind?: string
+          mill_name?: string | null
+          monthly_salary?: number
           name: string
           note?: string | null
           phone?: string | null
@@ -1714,6 +1971,10 @@ export type Database = {
           group_id?: string | null
           id?: string
           is_active?: boolean
+          join_date?: string | null
+          kind?: string
+          mill_name?: string | null
+          monthly_salary?: number
           name?: string
           note?: string | null
           phone?: string | null
@@ -2133,6 +2394,7 @@ export type Database = {
           created_by: string | null
           date: string
           id: string
+          is_half_day: boolean
           note: string | null
           overtime_hours: number
           present: boolean
@@ -2144,6 +2406,7 @@ export type Database = {
           created_by?: string | null
           date?: string
           id?: string
+          is_half_day?: boolean
           note?: string | null
           overtime_hours?: number
           present?: boolean
@@ -2155,6 +2418,7 @@ export type Database = {
           created_by?: string | null
           date?: string
           id?: string
+          is_half_day?: boolean
           note?: string | null
           overtime_hours?: number
           present?: boolean
@@ -2530,7 +2794,11 @@ export type Database = {
         | "transfer"
         | "supplier"
         | "production"
-      opening_kind: "customer_brick_due" | "sardar_payable" | "other_payable"
+      opening_kind:
+        | "customer_brick_due"
+        | "sardar_payable"
+        | "other_payable"
+        | "customer_receivable"
       sale_status: "pending" | "approved" | "rejected"
       sale_type: "advance" | "regular"
     }
@@ -2680,7 +2948,12 @@ export const Constants = {
         "supplier",
         "production",
       ],
-      opening_kind: ["customer_brick_due", "sardar_payable", "other_payable"],
+      opening_kind: [
+        "customer_brick_due",
+        "sardar_payable",
+        "other_payable",
+        "customer_receivable",
+      ],
       sale_status: ["pending", "approved", "rejected"],
       sale_type: ["advance", "regular"],
     },
