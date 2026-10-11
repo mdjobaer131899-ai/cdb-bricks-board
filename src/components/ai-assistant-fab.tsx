@@ -154,11 +154,15 @@ export function AiAssistantFab() {
       ]);
     } catch (err: any) {
       console.error("Chat Error:", err);
+      const errorMessage =
+        err instanceof Error && err.message.trim()
+          ? err.message.trim().slice(0, 240)
+          : "অজানা ত্রুটি";
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: "দুঃখিত, সংযোগে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+          text: `দুঃখিত, AI উত্তর দিতে পারেনি: ${errorMessage}`,
         },
       ]);
     } finally {
