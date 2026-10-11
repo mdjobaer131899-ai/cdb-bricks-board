@@ -155,9 +155,11 @@ export function AiAssistantFab() {
     } catch (err: any) {
       console.error("Chat Error:", err);
       const errorMessage =
-        err instanceof Error && err.message.trim()
-          ? err.message.trim().slice(0, 240)
-          : "অজানা ত্রুটি";
+        err instanceof DOMException && err.name === "TimeoutError"
+          ? "উত্তর তৈরি করতে বেশি সময় লাগছে। প্রশ্নটি ছোট করে আবার চেষ্টা করুন।"
+          : err instanceof Error && err.message.trim()
+            ? err.message.trim().slice(0, 240)
+            : "অজানা ত্রুটি";
       setMessages((prev) => [
         ...prev,
         {
@@ -413,7 +415,7 @@ export function AiAssistantFab() {
               ))}
               {loading && (
                 <div className="flex gap-2 items-center text-slate-600 dark:text-slate-400 text-xs font-medium italic">
-                  <Bot className="h-4 w-4 animate-spin text-orange-600" /> এআই খাতা ও ফাইল স্ক্যান করে হিসাব মেলাচ্ছে...
+                  <Bot className="h-4 w-4 animate-spin text-orange-600" /> আপনার প্রশ্নের সঠিক উত্তর তৈরি হচ্ছে...
                 </div>
               )}
               <div ref={messagesEndRef} />

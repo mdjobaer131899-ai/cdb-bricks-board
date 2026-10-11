@@ -7,6 +7,9 @@ import { buildAssistantTools } from "@/lib/ai-tools.server";
 import { buildComprehensiveAssistantTools } from "@/lib/ai-comprehensive-tools.server";
 import type { Database } from "@/integrations/supabase/types";
 
+const CHAT_TIMEOUT_MS = 45_000;
+const MAX_CHAT_TOOL_STEPS = 4;
+
 const SYSTEM_PROMPT = `
 তুমি "CDB Bricks AI সহকারী" — একটি ইট ভাটার অ্যাডমিনের ব্যবসায়িক সহকারী।
 
@@ -73,6 +76,8 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        let timeoutSignal: AbortSignal | undefined;
+
         try {
           const authHeader = request.headers.get("authorization") ?? "";
           const token = authHeader.startsWith("Bearer ")
@@ -82,6 +87,9 @@ export const Route = createFileRoute("/api/chat")({
           if (!token) {
             return new Response("দয়া করে আবার লগইন করুন (টোকেন নেই)।", { status: 401 });
           }
+
+          timeoutSignal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+          const abortSignal = AbortSignal.any([request.signal, timeoutSignal]);
 
           const supabaseUrl =
             process.env.SUPABASE_URL ||
@@ -100,6 +108,7 @@ export const Route = createFileRoute("/api/chat")({
 
           const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
             global: {
+              fetch: (input, init) => fetch(input, { ...init, signal: abortSignal }),
               headers: {
                 Authorization: `Bearer ${token}`,
               },
@@ -226,8 +235,13 @@ export const Route = createFileRoute("/api/chat")({
 ${JSON.stringify(seasonContext)}`,
               messages: await convertToModelMessages(messages),
               tools,
-              stopWhen: stepCountIs(10),
+              abortSignal,
+              stopWhen: stepCountIs(MAX_CHAT_TOOL_STEPS),
             });
+
+            if (timeoutSignal.aborted) {
+              throw new DOMException("AI request timed out", "TimeoutError");
+            }
 
             if (!result.text.trim()) {
               return new Response("AI কোনো উত্তর তৈরি করতে পারেনি। আবার চেষ্টা করুন।", {
@@ -252,7 +266,8 @@ ${JSON.stringify(seasonContext)}`,
 ${JSON.stringify(seasonContext)}`,
             messages: await convertToModelMessages(messages),
             tools,
-            stopWhen: stepCountIs(50),
+            abortSignal,
+            stopWhen: stepCountIs(MAX_CHAT_TOOL_STEPS),
           });
 
           return result.toUIMessageStreamResponse({
@@ -260,6 +275,17 @@ ${JSON.stringify(seasonContext)}`,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";
+
+          if (
+            timeoutSignal?.aborted ||
+            (error instanceof Error &&
+              (error.name === "TimeoutError" || error.name === "AbortError"))
+          ) {
+            console.error("[/api/chat] request timed out or was cancelled:", message);
+            return new Response("উত্তর তৈরি করতে বেশি সময় লাগছে। ছোট করে প্রশ্নটি আবার করুন।", {
+              status: 504,
+            });
+          }
 
           console.error("[/api/chat] error:", message);
 

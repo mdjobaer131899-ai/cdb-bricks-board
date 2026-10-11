@@ -768,6 +768,7 @@ export const processBrickFieldCommand = async (
 
     const routeRes = await fetch("/api/chat?format=json", {
       method: "POST",
+      signal: AbortSignal.timeout(55_000),
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
