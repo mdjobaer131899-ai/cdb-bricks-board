@@ -172,15 +172,76 @@ const ROLE_TABLE_ACCESS: Record<string, string[]> = {
   ],
 };
 
-function getAllowedDatasetsForRole(userRoles: string[]) {
+const DATASET_PAGE_ACCESS: Record<string, string[]> = {
+  customers: ["/customers"],
+  workers: ["/daily-workers", "/salaries"],
+  sardars: ["/sardars"],
+  suppliers: ["/suppliers", "/purchases"],
+  owners: ["/owners"],
+  brick_types: ["/settings", "/reports"],
+  raw_materials: ["/purchases"],
+  vehicles: ["/cash-book"],
+  seasons: ["/seasons"],
+  sales_entries: ["/challans", "/approvals", "/advance-sales", "/reports"],
+  collections: ["/collections", "/cash-book", "/customers"],
+  expenses: ["/income-expense", "/cash-book"],
+  purchases: ["/purchases"],
+  raw_material_purchases: ["/purchases"],
+  production_entries: [
+    "/production-steps/kacha",
+    "/production-steps/load",
+    "/production-steps/unload",
+  ],
+  deliveries: ["/challans", "/reports"],
+  orders: ["/advance-sales"],
+  contracts: ["/advance-sales", "/reports"],
+  loans: ["/loans"],
+  loan_payments: ["/loans"],
+  sardar_work_entries: ["/sardars"],
+  sardar_payments: ["/sardars"],
+  worker_attendance: ["/daily-workers", "/salaries"],
+  worker_payments: ["/daily-workers", "/salaries"],
+  supplier_payments: ["/suppliers", "/purchases"],
+  owner_transactions: ["/owners"],
+  bank_transactions: ["/cash-book"],
+  transfers: ["/cash-book"],
+  vehicle_expenses: ["/cash-book"],
+  journal_entries: ["/income-expense", "/reports"],
+  opening_balances: ["/opening-balances"],
+  current_stock: ["/reports", "/purchases"],
+  raw_material_stock: ["/purchases", "/reports"],
+  sardar_balances: ["/sardars"],
+  opening_balance_summary: ["/opening-balances"],
+  contract_summary: ["/advance-sales", "/reports"],
+  account_balances: ["/income-expense", "/reports"],
+  trial_balance: ["/income-expense", "/reports"],
+  profit_loss_summary: ["/income-expense", "/reports"],
+};
+
+function getAllowedDatasetsForRole(userRoles: string[], pagePermissions: string[]) {
   const normalizedRoles = new Set(
-    (userRoles || []).map((role) => String(role || "").trim().toLowerCase()).filter(Boolean),
+    (userRoles || [])
+      .map((role) =>
+        String(role || "")
+          .trim()
+          .toLowerCase(),
+      )
+      .filter(Boolean),
   );
+  if (normalizedRoles.has("admin")) {
+    return [...new Set(Object.keys(DATASETS).concat(VIEW_DATASETS))].sort();
+  }
+
   const allowed = new Set<string>();
 
   for (const role of normalizedRoles) {
     const tables = ROLE_TABLE_ACCESS[role] || [];
-    for (const table of tables) allowed.add(table);
+    for (const table of tables) {
+      const requiredPages = DATASET_PAGE_ACCESS[table] ?? [];
+      if (requiredPages.some((page) => pagePermissions.includes(page))) {
+        allowed.add(table);
+      }
+    }
   }
 
   return [...allowed].sort();
@@ -323,8 +384,10 @@ export function buildComprehensiveAssistantTools(
     endDate?: string | null;
   },
   userRoles: string[] = [],
+  pagePermissions: string[] = [],
 ) {
-  const allowedDatasets = getAllowedDatasetsForRole(userRoles);
+  const allowedDatasets = getAllowedDatasetsForRole(userRoles, pagePermissions);
+  const isAdmin = userRoles.some((role) => role.toLowerCase() === "admin");
   const assertDatasetAccess = (dataset: string) => {
     if (!allowedDatasets.includes(dataset)) {
       throw new Error(`এই dataset-এ আপনার access নেই: ${dataset}`);
@@ -363,6 +426,7 @@ export function buildComprehensiveAssistantTools(
         limit: z.number().int().min(1).max(50).default(50),
       }),
       execute: async ({ limit }) => {
+        assertDatasetAccess("seasons");
         const { data, error } = await supabase
           .from("seasons")
           .select("id,name,start_date,end_date,is_active,target_production,note")
@@ -504,37 +568,42 @@ export function buildComprehensiveAssistantTools(
           return { customers: [], workers: [], sardars: [], suppliers: [] };
         }
 
-        const likeTerm = `%${cleanTerm}%`;
+        const likeTerm = `%${cleanTerm.replace(/[%(),]/g, "")}%`;
+        const searchTable = async (table: string, columns: string[], select: string) => {
+          if (!allowedDatasets.includes(table)) return [];
+          const { data, error } = await supabase
+            .from(table)
+            .select(select)
+            .or(columns.map((column) => `${column}.ilike.${likeTerm}`).join(","))
+            .limit(limit);
+          if (error) throw new Error(error.message);
+          return data ?? [];
+        };
+
         const [customers, workers, sardars, suppliers] = await Promise.all([
-          supabase
-            .from("customers")
-            .select("id,name,phone,address,created_at")
-            .or(`name.ilike.${likeTerm},phone.ilike.${likeTerm},address.ilike.${likeTerm}`)
-            .limit(limit),
-          supabase
-            .from("workers")
-            .select("id,name,role,phone,active,created_at")
-            .or(`name.ilike.${likeTerm},role.ilike.${likeTerm},phone.ilike.${likeTerm}`)
-            .limit(limit),
-          supabase
-            .from("sardars")
-            .select("id,name,kind,phone,mill_name,created_at")
-            .or(
-              `name.ilike.${likeTerm},kind.ilike.${likeTerm},phone.ilike.${likeTerm},mill_name.ilike.${likeTerm}`,
-            )
-            .limit(limit),
-          supabase
-            .from("suppliers")
-            .select("id,name,material_type,phone,created_at")
-            .or(`name.ilike.${likeTerm},material_type.ilike.${likeTerm},phone.ilike.${likeTerm}`)
-            .limit(limit),
+          searchTable(
+            "customers",
+            ["name", "phone", "address"],
+            "id,name,phone,address,created_at",
+          ),
+          searchTable("workers", ["name", "role", "phone"], "id,name,role,phone,active,created_at"),
+          searchTable(
+            "sardars",
+            ["name", "kind", "phone", "mill_name"],
+            "id,name,kind,phone,mill_name,created_at",
+          ),
+          searchTable(
+            "suppliers",
+            ["name", "material_type", "phone"],
+            "id,name,material_type,phone,created_at",
+          ),
         ]);
 
         const entitySummaries = {
-          customers: customers.data ?? [],
-          workers: workers.data ?? [],
-          sardars: sardars.data ?? [],
-          suppliers: suppliers.data ?? [],
+          customers,
+          workers,
+          sardars,
+          suppliers,
         };
 
         return {
@@ -655,59 +724,97 @@ export function buildComprehensiveAssistantTools(
         to: z.string().nullable().optional(),
       }),
       execute: async ({ from, to }) => {
+        [
+          "customers",
+          "workers",
+          "sardars",
+          "suppliers",
+          "sales_entries",
+          "collections",
+          "expenses",
+          "current_stock",
+          "sardar_balances",
+        ].forEach(assertDatasetAccess);
+
         const effectiveFrom = from ?? seasonContext?.startDate ?? null;
         const effectiveTo = to ?? seasonContext?.endDate ?? null;
 
-        const [customers, workers, sardars, suppliers, sales, collections, expenses, stock, balances] =
-          await Promise.all([
-            supabase.from("customers").select("id", { count: "exact", head: true }),
-            supabase.from("workers").select("id", { count: "exact", head: true }),
-            supabase.from("sardars").select("id", { count: "exact", head: true }),
-            supabase.from("suppliers").select("id", { count: "exact", head: true }),
-            supabase
-              .from("sales_entries")
-              .select("quantity,total_amount")
-              .gte("sale_date", effectiveFrom ?? "1970-01-01")
-              .lte("sale_date", effectiveTo ?? "2999-12-31"),
-            supabase
-              .from("collections")
-              .select("amount")
-              .gte("payment_date", effectiveFrom ?? "1970-01-01")
-              .lte("payment_date", effectiveTo ?? "2999-12-31"),
-            supabase
-              .from("expenses")
-              .select("amount")
-              .gte("expense_date", effectiveFrom ?? "1970-01-01")
-              .lte("expense_date", effectiveTo ?? "2999-12-31"),
-            supabase.from("current_stock").select("quantity,price_per_unit").limit(200),
-            supabase
-              .from("sardar_balances")
-              .select("total_due,total_paid,total_advance,balance")
-              .limit(200),
-          ]);
+        const [
+          customers,
+          workers,
+          sardars,
+          suppliers,
+          sales,
+          collections,
+          expenses,
+          stock,
+          balances,
+        ] = await Promise.all([
+          supabase.from("customers").select("id", { count: "exact", head: true }),
+          supabase.from("workers").select("id", { count: "exact", head: true }),
+          supabase.from("sardars").select("id", { count: "exact", head: true }),
+          supabase.from("suppliers").select("id", { count: "exact", head: true }),
+          supabase
+            .from("sales_entries")
+            .select("quantity,total_amount")
+            .gte("sale_date", effectiveFrom ?? "1970-01-01")
+            .lte("sale_date", effectiveTo ?? "2999-12-31"),
+          supabase
+            .from("collections")
+            .select("amount")
+            .gte("payment_date", effectiveFrom ?? "1970-01-01")
+            .lte("payment_date", effectiveTo ?? "2999-12-31"),
+          supabase
+            .from("expenses")
+            .select("amount")
+            .gte("expense_date", effectiveFrom ?? "1970-01-01")
+            .lte("expense_date", effectiveTo ?? "2999-12-31"),
+          supabase.from("current_stock").select("quantity,price_per_unit").limit(200),
+          supabase
+            .from("sardar_balances")
+            .select("total_due,total_paid,total_advance,balance")
+            .limit(200),
+        ]);
+
+        for (const result of [
+          customers,
+          workers,
+          sardars,
+          suppliers,
+          sales,
+          collections,
+          expenses,
+          stock,
+          balances,
+        ]) {
+          if (result.error) throw new Error(result.error.message);
+        }
 
         const totalSales = (sales.data ?? []).reduce(
-          (sum, row) => sum + Number(row.total_amount ?? 0),
+          (sum: number, row: { total_amount?: number | null }) =>
+            sum + Number(row.total_amount ?? 0),
           0,
         );
         const totalCollections = (collections.data ?? []).reduce(
-          (sum, row) => sum + Number(row.amount ?? 0),
+          (sum: number, row: { amount?: number | null }) => sum + Number(row.amount ?? 0),
           0,
         );
         const totalExpenses = (expenses.data ?? []).reduce(
-          (sum, row) => sum + Number(row.amount ?? 0),
+          (sum: number, row: { amount?: number | null }) => sum + Number(row.amount ?? 0),
           0,
         );
         const totalStockQty = (stock.data ?? []).reduce(
-          (sum, row) => sum + Number(row.quantity ?? 0),
+          (sum: number, row: { quantity?: number | null }) => sum + Number(row.quantity ?? 0),
           0,
         );
         const totalStockValue = (stock.data ?? []).reduce(
-          (sum, row) => sum + Number(row.quantity ?? 0) * Number(row.price_per_unit ?? 0),
+          (sum: number, row: { quantity?: number | null; price_per_unit?: number | null }) =>
+            sum + Number(row.quantity ?? 0) * Number(row.price_per_unit ?? 0),
           0,
         );
         const totalSardarDue = (balances.data ?? []).reduce(
-          (sum, row) => sum + Number(row.total_due ?? row.balance ?? 0),
+          (sum: number, row: { total_due?: number | null; balance?: number | null }) =>
+            sum + Number(row.total_due ?? row.balance ?? 0),
           0,
         );
 
@@ -763,17 +870,35 @@ export function buildComprehensiveAssistantTools(
         if (dateConfig && effectiveTo) query = query.lte(dateConfig.column, effectiveTo);
         if (search?.trim()) query = applySearch(query, dataset, search);
 
-        const { data, error } = await query.order(dateConfig?.column ?? "id", { ascending: false }).limit(1000);
+        const { data, error } = await query
+          .order(dateConfig?.column ?? "id", { ascending: false })
+          .limit(1000);
         if (error) throw new Error(error.message);
 
         if (metric === "count") {
-          return { dataset, metric, actual: data?.length ?? 0, source: "database", scope: { from: effectiveFrom ?? null, to: effectiveTo ?? null } };
+          return {
+            dataset,
+            metric,
+            actual: data?.length ?? 0,
+            source: "database",
+            scope: { from: effectiveFrom ?? null, to: effectiveTo ?? null },
+          };
         }
 
         if (metric === "sum") {
           const targetField = field || "amount";
-          const actual = (data ?? []).reduce((sum, row) => sum + Number(row?.[targetField] ?? 0), 0);
-          return { dataset, metric, field: targetField, actual, source: "database", scope: { from: effectiveFrom ?? null, to: effectiveTo ?? null } };
+          const actual = (data ?? []).reduce(
+            (sum: number, row: Record<string, unknown>) => sum + Number(row[targetField] ?? 0),
+            0,
+          );
+          return {
+            dataset,
+            metric,
+            field: targetField,
+            actual,
+            source: "database",
+            scope: { from: effectiveFrom ?? null, to: effectiveTo ?? null },
+          };
         }
 
         return {
@@ -802,6 +927,9 @@ export function buildComprehensiveAssistantTools(
           "sardar_payments",
           "worker_payments",
         ];
+        datasets.forEach(assertDatasetAccess);
+        assertDatasetAccess("current_stock");
+        assertDatasetAccess("sardar_balances");
 
         const result: Record<string, unknown> = {};
 
@@ -875,6 +1003,7 @@ export function buildComprehensiveAssistantTools(
       description: "profit_loss_summary view থেকে মোট income, expense এবং net profit দেখায়।",
       inputSchema: z.object({}),
       execute: async () => {
+        assertDatasetAccess("profit_loss_summary");
         const { data, error } = await supabase.from("profit_loss_summary").select("*").limit(1);
 
         if (error) {

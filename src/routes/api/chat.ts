@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, generateText, streamText, stepCountIs, type UIMessage } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createClient } from "@supabase/supabase-js";
 
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { buildAssistantTools } from "@/lib/ai-tools.server";
-import { buildWriteTools } from "@/lib/ai-write-tools.server";
 import { buildComprehensiveAssistantTools } from "@/lib/ai-comprehensive-tools.server";
+import type { Database } from "@/integrations/supabase/types";
 
 const SYSTEM_PROMPT = `
 তুমি "CDB Bricks AI সহকারী" — একটি ইট ভাটার অ্যাডমিনের ব্যবসায়িক সহকারী।
@@ -60,9 +61,8 @@ Dataset নির্বাচন:
 
 লেখার নিয়ম:
 
-- কোনো টাকা দেওয়া, material purchase বা collection record করার আগে সংশ্লিষ্ট ব্যক্তি খুঁজে নিশ্চিত করবে।
-- ব্যবহারকারী স্পষ্টভাবে "হ্যাঁ", "ঠিক আছে" বা "করো" না বলা পর্যন্ত write tool ব্যবহার করবে না।
-- কোনো data delete করবে না।
+- AI chat বর্তমানে শুধু তথ্য পড়তে পারে; কোনো database record তৈরি, পরিবর্তন বা মুছতে পারে না।
+- কোনো record লেখার অনুরোধ এলে সংশ্লিষ্ট website form ব্যবহার করতে বলবে।
 - অস্পষ্ট প্রশ্ন হলে আগে পরিষ্কার করে জিজ্ঞেস করবে।
 - একই নামে একাধিক ব্যক্তি থাকলে ব্যবহারকারীকে জিজ্ঞেস করবে কোন ব্যক্তি।
 
@@ -83,9 +83,34 @@ export const Route = createFileRoute("/api/chat")({
             return new Response("দয়া করে আবার লগইন করুন (টোকেন নেই)।", { status: 401 });
           }
 
-          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+          const supabaseUrl =
+            process.env.SUPABASE_URL ||
+            process.env.VITE_SUPABASE_URL ||
+            import.meta.env.VITE_SUPABASE_URL;
+          const supabaseKey =
+            process.env.SUPABASE_PUBLISHABLE_KEY ||
+            process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+            process.env.VITE_SUPABASE_ANON_KEY ||
+            import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+            import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-          const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+          if (!supabaseUrl || !supabaseKey) {
+            throw new Error("AI chat-এর জন্য Supabase URL ও publishable key কনফিগার করা নেই।");
+          }
+
+          const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+            global: {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+            auth: {
+              persistSession: false,
+              autoRefreshToken: false,
+            },
+          });
+
+          const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
           if (userError || !userData?.user) {
             return new Response("সেশনের মেয়াদ শেষ — পুনরায় লগইন করুন।", { status: 401 });
@@ -93,7 +118,7 @@ export const Route = createFileRoute("/api/chat")({
 
           const userId = userData.user.id;
 
-          const { data: roleRows, error: roleError } = await supabaseAdmin
+          const { data: roleRows, error: roleError } = await supabase
             .from("user_roles")
             .select("role")
             .eq("user_id", userId)
@@ -103,6 +128,12 @@ export const Route = createFileRoute("/api/chat")({
             return new Response("এই ফিচারটি শুধু অ্যাডমিন বা ম্যানেজারের জন্য।", { status: 403 });
           }
           const userRoles = roleRows.map((row) => row.role);
+          const { data: permissionRows, error: permissionError } = await supabase
+            .from("page_permissions")
+            .select("page_key")
+            .eq("user_id", userId);
+          if (permissionError) throw new Error(permissionError.message);
+          const pagePermissions = (permissionRows ?? []).map((row) => row.page_key);
 
           const body = (await request.json()) as {
             messages?: UIMessage[];
@@ -116,12 +147,12 @@ export const Route = createFileRoute("/api/chat")({
             body.format === "json" || new URL(request.url).searchParams.get("format") === "json";
 
           const { data: season } = body.seasonId
-            ? await supabaseAdmin
+            ? await supabase
                 .from("seasons")
                 .select("id,name,start_date,end_date,is_active")
                 .eq("id", body.seasonId)
                 .maybeSingle()
-            : await supabaseAdmin
+            : await supabase
                 .from("seasons")
                 .select("id,name,start_date,end_date,is_active")
                 .eq("is_active", true)
@@ -143,33 +174,52 @@ export const Route = createFileRoute("/api/chat")({
                 endDate: null,
               };
 
-          const apiKey = process.env.LOVABLE_API_KEY;
+          const lovableApiKey = process.env.LOVABLE_API_KEY;
+          const geminiApiKey =
+            process.env.GEMINI_API_KEY ||
+            process.env.VITE_GEMINI_API_KEY ||
+            import.meta.env.VITE_GEMINI_API_KEY;
 
-          if (!apiKey) {
-            return new Response("AI কনফিগার করা হয়নি (LOVABLE_API_KEY নেই)।", { status: 500 });
+          if (!lovableApiKey && !geminiApiKey) {
+            return new Response(
+              "AI কনফিগার করা নেই। LOVABLE_API_KEY অথবা GEMINI_API_KEY সেট করুন।",
+              { status: 500 },
+            );
           }
 
-          const gateway = createLovableAiGatewayProvider(apiKey);
+          const model = lovableApiKey
+            ? createOpenAICompatible({
+                name: "lovable",
+                baseURL: "https://ai.gateway.lovable.dev/v1",
+                headers: {
+                  "Lovable-API-Key": lovableApiKey,
+                  "X-Lovable-AIG-SDK": "vercel-ai-sdk",
+                },
+              })("google/gemini-2.5-flash")
+            : createOpenAICompatible({
+                name: "google",
+                baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+                headers: {
+                  Authorization: `Bearer ${geminiApiKey}`,
+                },
+              })("gemini-2.5-flash");
 
-          const assistantTools = buildAssistantTools(supabaseAdmin);
+          const assistantTools = buildAssistantTools(supabase);
 
           const comprehensiveTools = buildComprehensiveAssistantTools(
-            supabaseAdmin,
+            supabase,
             seasonContext,
             userRoles,
+            pagePermissions,
           );
 
-          const writeTools = buildWriteTools(supabaseAdmin, userId);
-
-          const tools = {
-            ...assistantTools,
-            ...comprehensiveTools,
-            ...writeTools,
-          };
+          const tools = userRoles.includes("admin")
+            ? { ...assistantTools, ...comprehensiveTools }
+            : comprehensiveTools;
 
           if (isJsonResponse) {
             const result = await generateText({
-              model: gateway("google/gemini-2.5-flash"),
+              model,
               system: `${SYSTEM_PROMPT}
 
 বর্তমান মৌসুম:
@@ -195,7 +245,7 @@ ${JSON.stringify(seasonContext)}`,
           }
 
           const result = streamText({
-            model: gateway("google/gemini-2.5-flash"),
+            model,
             system: `${SYSTEM_PROMPT}
 
 বর্তমান মৌসুম:

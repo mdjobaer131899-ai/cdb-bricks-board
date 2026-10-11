@@ -100,7 +100,7 @@ function LiveWeatherWidget() {
           if ("Notification" in window && Notification.permission === "granted") {
             new Notification("CDB Bricks — বৃষ্টির সতর্কবার্তা 🌧️", {
               body: msg,
-              icon: "/cdb-logo.png",
+              icon: "/cdb-logo.svg",
             });
           }
         }

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { UIMessage } from "ai";
 
 // ============================================================
 // ধরন (Types)

@@ -632,8 +632,21 @@ function IncomeDialog({ row, customers, onDone }: {
         if (error) throw new Error(error.message);
         return;
       }
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError) throw new Error(userError.message);
+      if (!user) throw new Error("আয় যোগ করার আগে আবার লগইন করুন।");
+
       const { error } = await sdb.from("collections").insert({
-        customer_id: customerId, contract_id: null, amount: amt, payment_date: date, method: method || null, note: note || null,
+        customer_id: customerId,
+        contract_id: null,
+        amount: amt,
+        payment_date: date,
+        method: method || null,
+        note: note || null,
+        created_by: user.id,
       });
       if (error) throw new Error(error.message);
     },
