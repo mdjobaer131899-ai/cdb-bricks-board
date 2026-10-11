@@ -1,7 +1,8 @@
 import { Outlet, createRootRouteWithContext, HeadContent, Scripts, useRouter } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { KeyboardAware } from "@/components/keyboard-aware";
@@ -54,14 +55,70 @@ function RootShell({ children }: { children: ReactNode }) {
 function AuthSync() {
   const router = useRouter();
   const qc = useQueryClient();
+  const href = useRouterState({ select: (state) => state.location.href });
+  const [userId, setUserId] = useState<string | null>(null);
+  const restoredUserId = useRef<string | null>(null);
+
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      const nextUserId = session?.user.id ?? null;
+      setUserId(nextUserId);
+
+      if (event === "SIGNED_OUT" && nextUserId === null) {
+        restoredUserId.current = null;
+      }
+
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       router.invalidate();
       if (event !== "SIGNED_OUT") qc.invalidateQueries();
     });
     return () => subscription.unsubscribe();
   }, [router, qc]);
+
+  useEffect(() => {
+    if (!userId || href === "/auth") return;
+
+    const storageKey = `cdb:last-route:${userId}`;
+    const navigationEntry = performance.getEntriesByType("navigation")[0];
+    const isBackForwardNavigation =
+      navigationEntry instanceof PerformanceNavigationTiming &&
+      navigationEntry.type === "back_forward";
+
+    if (restoredUserId.current !== userId) {
+      restoredUserId.current = userId;
+
+      if (href === "/") {
+        let savedHref: string | null = null;
+        try {
+          savedHref = localStorage.getItem(storageKey);
+        } catch (error) {
+          console.error("[route-resume] Unable to read the saved route:", error);
+        }
+        if (savedHref && savedHref.startsWith("/") && !savedHref.startsWith("//")) {
+          const savedUrl = new URL(savedHref, window.location.origin);
+          if (
+            !isBackForwardNavigation &&
+            savedUrl.origin === window.location.origin &&
+            savedUrl.pathname !== "/" &&
+            savedUrl.pathname !== "/auth" &&
+            !savedUrl.pathname.startsWith("/api/")
+          ) {
+            router.navigate({ href: savedUrl.pathname + savedUrl.search + savedUrl.hash });
+            return;
+          }
+        }
+      }
+    }
+
+    try {
+      localStorage.setItem(storageKey, href);
+    } catch (error) {
+      console.error("[route-resume] Unable to save the current route:", error);
+    }
+  }, [href, router, userId]);
+
   return null;
 }
 
