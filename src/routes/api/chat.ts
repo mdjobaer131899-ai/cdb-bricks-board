@@ -195,14 +195,14 @@ export const Route = createFileRoute("/api/chat")({
                   "Lovable-API-Key": lovableApiKey,
                   "X-Lovable-AIG-SDK": "vercel-ai-sdk",
                 },
-              })("google/gemini-2.5-flash")
+              })("google/gemini-3.8-flash")
             : createOpenAICompatible({
                 name: "google",
                 baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
                 headers: {
                   Authorization: `Bearer ${geminiApiKey}`,
                 },
-              })("gemini-2.5-flash");
+              })("gemini-3.8-flash");
 
           const assistantTools = buildAssistantTools(supabase);
 
