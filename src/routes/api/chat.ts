@@ -288,6 +288,7 @@ ${JSON.stringify(seasonContext)}`,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";
+          const normalized = message.toLowerCase();
 
           if (
             timeoutSignal?.aborted ||
@@ -303,11 +304,29 @@ ${JSON.stringify(seasonContext)}`,
             });
           }
 
+          if (
+            normalized.includes("too many requests") ||
+            normalized.includes("rate limit") ||
+            normalized.includes("429") ||
+            normalized.includes("model_busy") ||
+            normalized.includes("quota") ||
+            normalized.includes("overloaded") ||
+            normalized.includes("temporarily unavailable") ||
+            normalized.includes("busy")
+          ) {
+            console.error("[/api/chat] rate limited or busy:", { stage: requestStage, message });
+            return new Response(
+              "AI সার্ভিসে এই মুহূর্তে খুব বেশি অনুরোধ হচ্ছে। একটু পরে আবার চেষ্টা করুন।",
+              { status: 429 },
+            );
+          }
+
           console.error("[/api/chat] error:", message);
 
-          return new Response(`AI error: ${message}`, {
-            status: 500,
-          });
+          return new Response(
+            "AI সার্ভিস সাময়িকভাবে ব্যস্ত আছে। একটু পরে আবার চেষ্টা করুন।",
+            { status: 503 },
+          );
         }
       },
     },

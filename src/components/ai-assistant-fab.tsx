@@ -154,17 +154,31 @@ export function AiAssistantFab() {
       ]);
     } catch (err: any) {
       console.error("Chat Error:", err);
-      const errorMessage =
+      const rawMessage =
         err instanceof DOMException && err.name === "TimeoutError"
-          ? "উত্তর তৈরি করতে বেশি সময় লাগছে। প্রশ্নটি ছোট করে আবার চেষ্টা করুন।"
+          ? "TimeoutError"
           : err instanceof Error && err.message.trim()
-            ? err.message.trim().slice(0, 240)
+            ? err.message.trim()
             : "অজানা ত্রুটি";
+      const normalized = rawMessage.toLowerCase();
+      const errorMessage =
+        normalized.includes("too many requests") ||
+        normalized.includes("rate limit") ||
+        normalized.includes("quota") ||
+        normalized.includes("429") ||
+        normalized.includes("overloaded") ||
+        normalized.includes("temporarily unavailable")
+          ? "AI সার্ভিসে এই মুহূর্তে খুব বেশি অনুরোধ হচ্ছে। একটু পরে আবার চেষ্টা করুন।"
+          : normalized.includes("timeout") || normalized.includes("timed out")
+            ? "উত্তর তৈরি করতে বেশি সময় লাগছে। প্রশ্নটি ছোট করে আবার চেষ্টা করুন।"
+            : normalized.includes("model_busy") || normalized.includes("busy")
+              ? "AI সার্ভিস এখন ব্যস্ত। একটু পরে আবার চেষ্টা করুন।"
+              : "দুঃখিত, AI উত্তর দিতে পারেনি। কিছুক্ষণ পরে আবার চেষ্টা করুন।";
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          text: `দুঃখিত, AI উত্তর দিতে পারেনি: ${errorMessage}`,
+          text: errorMessage,
         },
       ]);
     } finally {

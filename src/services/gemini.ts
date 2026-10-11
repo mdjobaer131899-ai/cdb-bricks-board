@@ -787,7 +787,33 @@ export const processBrickFieldCommand = async (
 
     if (!routeRes.ok) {
       const errorMessage = await routeRes.text();
-      throw new Error(errorMessage || `AI request failed (${routeRes.status})`);
+      const normalized = (errorMessage || "").toLowerCase();
+      const isRateLimited =
+        routeRes.status === 429 ||
+        normalized.includes("too many requests") ||
+        normalized.includes("rate limit") ||
+        normalized.includes("quota") ||
+        normalized.includes("429");
+      const isTimeout =
+        routeRes.status === 504 ||
+        normalized.includes("timeout") ||
+        normalized.includes("timed out");
+      const isBusy =
+        routeRes.status >= 500 ||
+        normalized.includes("model_busy") ||
+        normalized.includes("temporarily unavailable") ||
+        normalized.includes("busy") ||
+        normalized.includes("overloaded");
+
+      const friendlyMessage = isRateLimited
+        ? "AI সার্ভিসে এই মুহূর্তে খুব বেশি অনুরোধ হচ্ছে। একটু পরে আবার চেষ্টা করুন।"
+        : isTimeout
+          ? "উত্তর তৈরি করতে বেশি সময় লাগছে। ছোট করে প্রশ্নটি আবার করুন।"
+          : isBusy
+            ? "AI সার্ভিস সাময়িকভাবে ব্যস্ত আছে। একটু পরে আবার চেষ্টা করুন।"
+            : errorMessage || `AI request failed (${routeRes.status})`;
+
+      throw new Error(friendlyMessage);
     }
 
     const json = await routeRes.json();
