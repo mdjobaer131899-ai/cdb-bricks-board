@@ -105,7 +105,10 @@ function AuthSync() {
             savedUrl.pathname !== "/auth" &&
             !savedUrl.pathname.startsWith("/api/")
           ) {
-            router.navigate({ href: savedUrl.pathname + savedUrl.search + savedUrl.hash });
+            router.navigate({
+              href: savedUrl.pathname + savedUrl.search + savedUrl.hash,
+              replace: true,
+            });
             return;
           }
         }
