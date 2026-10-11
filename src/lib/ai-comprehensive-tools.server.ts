@@ -852,7 +852,7 @@ export function buildComprehensiveAssistantTools(
 
     verifyDatabaseAnswer: tool({
       description:
-        "একটি reported count/total/summary সত্যি ডাটাবেস থেকে এসেছে কিনা তা পুনরায় query করে যাচাই করে। AI-কে 'আমি নিশ্চিত করছি' বা 'কত' প্রশ্নের উত্তর finalize করার আগে এই tool ব্যবহার করতে হবে।",
+        "ব্যবহারকারী যখন স্পষ্টভাবে কোনো আগের count, total, বা summary যাচাই/মিলিয়ে দেখতে বলে তখন database থেকে পুনরায় query করে। countRecords বা getBusinessData ইতিমধ্যে যে প্রশ্নের উত্তর দিয়েছে, সেটি আবার যাচাই করতে এই tool ব্যবহার করবে না।",
       inputSchema: z.object({
         dataset: z.string(),
         metric: z.enum(["count", "sum", "latest"]).default("count"),
