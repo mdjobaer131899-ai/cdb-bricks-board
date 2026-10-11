@@ -182,8 +182,8 @@ export const Route = createFileRoute("/api/chat")({
 
           if (!lovableApiKey && !geminiApiKey) {
             return new Response(
-              "AI কনফিগার করা নেই। LOVABLE_API_KEY অথবা GEMINI_API_KEY সেট করুন।",
-              { status: 500 },
+              "AI সেবা কনফিগার করা নেই। Vercel-এর Production Environment Variables-এ LOVABLE_API_KEY অথবা GEMINI_API_KEY যোগ করে নতুন deployment দিন।",
+              { status: 503 },
             );
           }
 
