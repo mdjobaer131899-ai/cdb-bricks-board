@@ -102,6 +102,7 @@ export const Route = createFileRoute("/api/chat")({
           if (roleError || !roleRows?.length) {
             return new Response("এই ফিচারটি শুধু অ্যাডমিন বা ম্যানেজারের জন্য।", { status: 403 });
           }
+          const userRoles = roleRows.map((row) => row.role);
 
           const body = (await request.json()) as {
             messages?: UIMessage[];
@@ -152,7 +153,11 @@ export const Route = createFileRoute("/api/chat")({
 
           const assistantTools = buildAssistantTools(supabaseAdmin);
 
-          const comprehensiveTools = buildComprehensiveAssistantTools(supabaseAdmin, seasonContext);
+          const comprehensiveTools = buildComprehensiveAssistantTools(
+            supabaseAdmin,
+            seasonContext,
+            userRoles,
+          );
 
           const writeTools = buildWriteTools(supabaseAdmin, userId);
 
@@ -171,13 +176,20 @@ export const Route = createFileRoute("/api/chat")({
 ${JSON.stringify(seasonContext)}`,
               messages: await convertToModelMessages(messages),
               tools,
+              stopWhen: stepCountIs(10),
             });
+
+            if (!result.text.trim()) {
+              return new Response("AI কোনো উত্তর তৈরি করতে পারেনি। আবার চেষ্টা করুন।", {
+                status: 502,
+              });
+            }
 
             return Response.json({
               type: "QUERY",
               action: "QUERY",
-              reply: result.text || "দুঃখিত, এই তথ্যটি খুঁজে পাইনি।",
-              reply_bn: result.text || "দুঃখিত, এই তথ্যটি খুঁজে পাইনি।",
+              reply: result.text,
+              reply_bn: result.text,
               data: {},
             });
           }

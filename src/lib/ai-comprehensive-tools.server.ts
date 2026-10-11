@@ -325,6 +325,11 @@ export function buildComprehensiveAssistantTools(
   userRoles: string[] = [],
 ) {
   const allowedDatasets = getAllowedDatasetsForRole(userRoles);
+  const assertDatasetAccess = (dataset: string) => {
+    if (!allowedDatasets.includes(dataset)) {
+      throw new Error(`এই dataset-এ আপনার access নেই: ${dataset}`);
+    }
+  };
 
   return {
     getRoleAccessSummary: tool({
@@ -385,6 +390,8 @@ export function buildComprehensiveAssistantTools(
         search: z.string().nullable().optional(),
       }),
       execute: async ({ dataset, from, to, search }) => {
+        assertDatasetAccess(dataset);
+
         if (!DATASETS[dataset] && !VIEW_DATASETS.includes(dataset)) {
           throw new Error(`অনুমোদিত dataset নয়: ${dataset}`);
         }
@@ -433,6 +440,8 @@ export function buildComprehensiveAssistantTools(
         "প্রশ্ন অনুযায়ী অনুমোদিত table বা view থেকে প্রকৃত data, record count এবং totals দেয়। কোনো তথ্য অনুমান করবে না।",
       inputSchema: DataInput,
       execute: async ({ dataset, from, to, search, limit }) => {
+        assertDatasetAccess(dataset);
+
         if (!DATASETS[dataset] && !VIEW_DATASETS.includes(dataset)) {
           throw new Error(`অনুমোদিত dataset নয়: ${dataset}`);
         }

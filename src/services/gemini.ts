@@ -749,102 +749,60 @@ export const processBrickFieldCommand = async (
   attachment?: AIAttachment | null,
 ): Promise<AIResponse> => {
   try {
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
     const token = sessionData.session?.access_token;
-    if (token) {
-      const routePayload = {
+    if (!token) throw new Error("আপনার সেশন শেষ হয়েছে। আবার লগইন করুন।");
+
+    const userText = userMessage || "এই সংযুক্ত ছবিটি স্ক্যান করে এর হিসাব বাংলায় বলুন।";
+    const parts: UIMessage["parts"] = [{ type: "text", text: userText }];
+    if (attachment?.base64Data) {
+      parts.push({
+        type: "file",
+        mediaType: attachment.mimeType || "image/jpeg",
+        filename: attachment.fileName,
+        url: `data:${attachment.mimeType || "image/jpeg"};base64,${attachment.base64Data}`,
+      });
+    }
+
+    const routeRes = await fetch("/api/chat?format=json", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
         format: "json",
         messages: [
           {
             id: `user-${Date.now()}`,
             role: "user",
-            parts: [
-              {
-                type: "text",
-                text: userMessage || "এই সংযুক্ত ছবিটি স্ক্যান করে এর হিসাব বাংলায় বলুন।",
-              },
-            ],
+            parts,
           },
         ],
-      };
+      }),
+    });
 
-      const routeRes = await fetch("/api/chat?format=json", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(routePayload),
-      });
-
-      if (routeRes.ok) {
-        const json = await routeRes.json();
-        if (json?.reply) {
-          return {
-            type: json.type || json.action || "QUERY",
-            action: json.type || json.action || "QUERY",
-            reply:
-              json.reply || json.reply_bn || json.message || "আপনার অনুরোধটি প্রস্তুত করা হয়েছে।",
-            reply_bn: json.reply_bn || json.reply || "আপনার অনুরোধটি প্রস্তুত করা হয়েছে।",
-            data: json.data || {},
-          };
-        }
-      }
+    if (!routeRes.ok) {
+      const errorMessage = await routeRes.text();
+      throw new Error(errorMessage || `AI request failed (${routeRes.status})`);
     }
-  } catch {
-    // Ignore route failures and continue with local fallback logic.
-  }
 
-  const ctx = await fetchKilnContext();
-
-  try {
-    const systemPrompt = `আপনি "CDB Bricks" (সি ডি বি ব্রিকস, কাপাসিয়া, গাজীপুর) ইটভাটার প্রধান এআই হিসাবরক্ষক ও রসিদ স্ক্যানার।
-আজকের তারিখ: ${ctx.today}
-
-হিসাবের সবচেয়ে গুরুত্বপূর্ণ নিয়ম (১০০% মেনে চলবেন):
-১. যদি কোনো গ্রাহকের "totalCashDeposited" তার "currentSeasonBrickAmount" থেকে বেশি হয়, তবে তার "customerWillGetFromUs" > 0 হবে। এর মানে ওই গ্রাহক আমাদের (ভাটার) কাছে টাকা বা ইট পাবে (অগ্রিম জমা দিয়েছে)!
-২. পূর্বের বকেয়া ও জের (openingBalances) হলো ভাটার পূর্বের দায়। একে চলতি মৌসুমের জমার সাথে বিয়োগ করবেন না।
-
-ভাটার লাইভ ডাটাবেস:
-১. মূল ক্যাশ: ${JSON.stringify(ctx.cashSummary)}
-২. যেসব গ্রাহক পাবে (customersWeOweAdvance): ${JSON.stringify(ctx.customersWeOweAdvance)}
-৩. যাদের কাছে আমরা পাবো (customersWhoOweUs): ${JSON.stringify(ctx.customersWhoOweUs)}
-৪. আজকের সারসংক্ষেপ: ${JSON.stringify(ctx.summary)}
-
-ছবি বা ফাইল দিলে OCR করে সঠিক "type" নির্বাচন করুন এবং JSON উত্তর দিন:
-SALE_CHALLAN, EXPENSE, COLLECTION, SARDAR_PAYMENT, KACHA_BRICK, SUPPLIER_PAYMENT, QUERY.
-
-JSON ফরম্যাট:
-{
-  "type": "QUERY",
-  "reply": "বাংলায় স্পষ্ট ও শতভাগ সঠিক উত্তর",
-  "data": { }
-}`;
-
-    const promptToSend =
-      systemPrompt +
-      "\n\nইউজারের মেসেজ: " +
-      (userMessage || "এই সংযুক্ত ছবিটি স্ক্যান করে এর হিসাব বাংলায় বলুন।");
-
-    const result = await callGeminiFast(promptToSend, attachment);
-    const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-    const cleanJson = rawText
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-    const parsed = JSON.parse(cleanJson);
-
+    const json = await routeRes.json();
+    const reply = json?.reply || json?.reply_bn || json?.message;
+    if (typeof reply !== "string" || !reply.trim()) {
+      throw new Error("AI সার্ভার কোনো উত্তর দেয়নি।");
+    }
     return {
-      type: parsed.type || parsed.action || "QUERY",
-      action: parsed.type || parsed.action || "QUERY",
-      reply:
-        parsed.reply || parsed.reply_bn || parsed.message || "আপনার অনুরোধটি প্রস্তুত করা হয়েছে।",
-      reply_bn: parsed.reply || parsed.reply_bn || "আপনার অনুরোধটি প্রস্তুত করা হয়েছে।",
-      data: parsed.data || {},
+      type: json.type || json.action || "QUERY",
+      action: json.type || json.action || "QUERY",
+      reply,
+      reply_bn: json.reply_bn || reply,
+      data: json.data || {},
     };
   } catch (error) {
-    console.warn("Using instant database reply:", error);
-    return buildLocalSmartReply(userMessage, ctx);
+    console.error("AI chat request failed:", error);
+    throw error;
   }
 };
 
