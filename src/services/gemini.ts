@@ -1287,14 +1287,15 @@ ${hasAttachment ? "৭. সংযুক্ত ছবি/ফাইলটি ম�
 শুধু এই JSON ফেরত দেবে:
 {"type":"SALE_CHALLAN"|"EXPENSE"|"COLLECTION"|"SARDAR_PAYMENT"|"KACHA_BRICK"|"SUPPLIER_PAYMENT"|"QUERY","reply":"বাংলা উত্তর","data":{...}}
 data-এর ফিল্ড:
-- SALE_CHALLAN: customerName, brickType, quantity, totalAmount, paidAmount, dueAmount, vehicleNumber, date
+- SALE_CHALLAN: customerName, brickType, quantity, rate (প্রতি পিস দাম), totalAmount, paidAmount, dueAmount, vehicleNumber, driverName, date
 - EXPENSE: expenseCategory, amount, description, date
 - COLLECTION: customerName, amount, description, date
-- SARDAR_PAYMENT: sardarName, amount, description, date
-- KACHA_BRICK: sardarName, quantity, amount, description, date
+- SARDAR_PAYMENT: sardarName, amount, paymentType ("advance" = দাদন/অগ্রিম, "payment" = মজুরি/পাওনা পরিশোধ), description, date
+- KACHA_BRICK: sardarName, quantity, rate (প্রতি পিস মজুরি, বললে), description, date
 - SUPPLIER_PAYMENT: supplierName, expenseCategory, amount, description, date
 - QUERY: data খালি রাখবে
 date সবসময় YYYY-MM-DD; না বললে আজকের তারিখ।
+customerName, sardarName, supplierName খাতার তালিকার নামের সাথে হুবহু মিলিয়ে লিখবে। খাতায় নেই এমন নাম হলে reply-তে জানাবে যে আগে সেই নাম যোগ করতে হবে।
 
 ========== লাইভ খাতা ==========
 ${buildAiContext(s, w)}
@@ -1455,233 +1456,267 @@ function resolveDate(d: any, fallback: string): string {
 
 function requirePositive(value: number, label: string) {
   if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${label} ঠিকমতো পাওয়া যায়নি। আবার চেষ্টা করুন বা কার্ডটি যাচাই করুন।`);
+    throw new Error(`${label} ঠিকমতো পাওয়া যায়নি। আবার বলুন বা কার্ডটি যাচাই করুন।`);
   }
 }
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => "\\" + m);
 
-async function findPartyId(table: "customers" | "suppliers" | "sardars", name: string): Promise<string | null> {
-  const cleanName = name.trim();
-  if (!cleanName) return null;
+const PAGE_FOR: Record<"customers" | "suppliers" | "sardars", string> = {
+  customers: "গ্রাহক",
+  suppliers: "সাপ্লায়ার",
+  sardars: "সর্দার",
+};
+
+/**
+ * নাম দিয়ে খাতার মানুষ খোঁজা। না পেলে বা একাধিক মিললে পরিষ্কার বাংলা বার্তা দিয়ে থামে,
+ * কখনো নিজে থেকে নতুন গ্রাহক/সাপ্লায়ার বানায় না (যাতে একই মানুষের দুটো খাতা না হয়)।
+ */
+async function requireParty(
+  table: "customers" | "suppliers" | "sardars",
+  name: string,
+  givenId?: string | null,
+): Promise<{ id: string; name: string; kind?: string }> {
+  const db = supabase as any;
+  const cols = table === "sardars" ? "id, name, kind" : "id, name";
+  if (givenId) {
+    const { data } = await db.from(table).select(cols).eq("id", givenId).maybeSingle();
+    if (data) return data;
+  }
+  const cleanName = String(name || "").trim();
+  if (!cleanName) throw new Error(`${PAGE_FOR[table]}ের নাম পাওয়া যায়নি। নাম সহ আবার বলুন।`);
   const safe = escapeLike(cleanName);
 
-  const { data: exact } = await (supabase as any).from(table).select("id, name").ilike("name", safe).limit(5);
-  if (exact && exact.length === 1) return exact[0].id;
-  if (exact && exact.length > 1) {
-    throw new Error(`"${cleanName}" নামে একাধিক জন আছে: ${exact.map((p: any) => p.name).join(", ")}। আলাদা করে চেনা যায় এমন পুরো নাম দিয়ে আবার বলুন।`);
+  const { data: exact } = await db.from(table).select(cols).ilike("name", safe).limit(5);
+  if (exact?.length === 1) return exact[0];
+  if (exact?.length > 1) {
+    throw new Error(`"${cleanName}" নামে একাধিক ${PAGE_FOR[table]} আছে: ${exact.map((p: any) => p.name).join(", ")}। পুরো নাম দিয়ে আবার বলুন।`);
   }
 
-  const { data: partial } = await (supabase as any).from(table).select("id, name").ilike("name", `%${safe}%`).limit(5);
-  if (!partial || partial.length === 0) return null;
-  if (partial.length === 1) return partial[0].id;
-  throw new Error(`"${cleanName}" নামের সাথে একাধিক নাম মিলেছে: ${partial.map((p: any) => p.name).join(", ")}। পুরো নাম দিয়ে আবার বলুন।`);
+  const { data: partial } = await db.from(table).select(cols).ilike("name", `%${safe}%`).limit(6);
+  if (partial?.length === 1) return partial[0];
+  if (partial?.length > 1) {
+    throw new Error(`"${cleanName}" নামের সাথে একাধিক ${PAGE_FOR[table]} মিলেছে: ${partial.map((p: any) => p.name).join(", ")}। পুরো নাম দিয়ে আবার বলুন।`);
+  }
+  throw new Error(`"${cleanName}" নামে কোনো ${PAGE_FOR[table]} খাতায় নেই। আগে ${PAGE_FOR[table]} পাতায় নামটি যোগ করুন, তারপর আবার "খাতায় সেভ" চাপুন।`);
 }
 
-async function resolveCustomerId(d: any, userId: string | null, defaultName: string): Promise<string | null> {
-  const given = d.customerId || d.customer_id;
-  if (given) return given;
+async function resolveBrickType(nameHint: string, givenId?: string | null): Promise<{ id: string; name: string; price: number }> {
+  const { data } = await (supabase as any).from("brick_types").select("id, name, default_unit_price, is_active");
+  const all = ((data ?? []) as Row[]).filter((b) => b.is_active !== false);
+  if (!all.length) throw new Error("খাতায় কোনো ইটের ধরন নেই। সেটিংস পাতায় ইটের ধরন ও দাম যোগ করুন।");
+  const pick = (b: Row) => ({ id: b.id, name: String(b.name), price: num(b.default_unit_price) });
+  if (givenId) {
+    const found = all.find((b) => b.id === givenId);
+    if (found) return pick(found);
+  }
+  if (all.length === 1) return pick(all[0]);
+  const hint = clean(nameHint);
+  if (hint) {
+    const exact = all.find((b) => clean(b.name) === hint);
+    if (exact) return pick(exact);
+    const partial = all.filter((b) => clean(b.name).includes(hint) || hint.includes(clean(b.name)));
+    if (partial.length === 1) return pick(partial[0]);
+  }
+  throw new Error(`কোন ইট তা বোঝা যায়নি। এগুলোর একটি বলুন: ${all.map((b) => b.name).join(", ")}`);
+}
 
-  const name = String(d.customerName || d.customer_name || defaultName).trim();
-  const found = await findPartyId("customers", name);
-  if (found) return found;
-
-  const { data: created, error } = await supabase
-    .from("customers")
-    .insert({ name, phone: "", created_by: userId } as any)
-    .select("id")
-    .single();
-  if (error) throw new Error(error.message);
-  return created?.id || null;
+async function nextChallanNo(date: string): Promise<string | null> {
+  try {
+    const { data, error } = await (supabase.rpc as any)("next_challan_number", { _date: date });
+    if (!error && data) return String(data);
+  } catch {
+    // খালি রাখলে ডাটাবেস নিজেই নম্বর বসায়
+  }
+  return null;
 }
 
 // ============================================================
 // ৭. ডাটাবেসে সেভ করার মূল ফাংশন (চ্যাটের "খাতায় সেভ করুন" বাটন)
+// ওয়েবসাইটের নিজের ফর্মের নিয়ম হুবহু মানা হয়।
 // ============================================================
 
 export const saveAiActionToDatabase = async (
   actionType: string,
   entryData?: any,
 ): Promise<{ success: boolean; challanNo?: string; message: string }> => {
-  clearAiCache();
   const type = typeof actionType === "string" ? actionType : (actionType as any)?.type || (actionType as any)?.action;
   const d = entryData || (actionType as any)?.data || {};
-  const today = dhakaDate(0);
-  const entryDate = resolveDate(d, today);
+  const entryDate = resolveDate(d, dhakaDate(0));
 
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData?.user?.id || null;
+  if (!userId) throw new Error("দয়া করে আবার লগইন করুন।");
 
-  if (type === "SALE_CHALLAN") {
-    const customerId = await resolveCustomerId(d, userId, "নগদ ক্রেতা");
+  try {
+    // ---------- বিক্রি / চালান ----------
+    if (type === "SALE_CHALLAN") {
+      const customer = await requireParty("customers", d.customerName || d.customer_name, d.customerId || d.customer_id);
+      const brick = await resolveBrickType(String(d.brickType || d.brick_name || ""), d.brickTypeId || d.brick_type_id);
 
-    let brickTypeId = d.brickTypeId || d.brick_type_id || null;
-    if (!brickTypeId) {
-      const { data: bt } = await supabase
-        .from("brick_types")
-        .select("id")
-        .ilike("name", `%${escapeLike(String(d.brickType || "১"))}%`)
-        .limit(1)
-        .maybeSingle();
-      if (bt?.id) brickTypeId = bt.id;
-      else {
-        const { data: firstBt } = await supabase.from("brick_types").select("id").limit(1).maybeSingle();
-        brickTypeId = firstBt?.id || null;
-      }
-    }
+      const qty = Math.round(num(d.quantity));
+      requirePositive(qty, "ইটের পরিমাণ");
+      const givenTotal = num(d.totalAmount ?? d.total_amount);
+      const rate = num(d.rate) || (givenTotal ? givenTotal / qty : 0) || brick.price;
+      requirePositive(rate, "ইটের দাম");
+      const total = Math.round(qty * rate * 100) / 100;
+      const paid = Math.min(num(d.paidAmount ?? d.paid_amount), total);
 
-    const qty = Number(d.quantity || 0);
-    const total = Number(d.totalAmount ?? d.total_amount ?? 0);
-    const paid = Number(d.paidAmount ?? d.paid_amount ?? 0);
-    requirePositive(qty, "ইটের পরিমাণ");
-    requirePositive(total, "মোট টাকা");
-
-    const challanNo = "CH-" + Date.now().toString().slice(-5);
-
-    const { data: sale, error } = await supabase
-      .from("sales_entries")
-      .insert({
-        challan_no: challanNo,
-        customer_id: customerId,
-        brick_type_id: brickTypeId,
-        quantity: qty,
-        total_amount: total,
-        vehicle_number: d.vehicleNumber || d.vehicle_number || "",
-        sale_date: entryDate,
-        status: "approved",
-        sale_type: paid >= total ? "cash" : "credit",
-        created_by: userId,
-      } as any)
-      .select("id")
-      .single();
-
-    if (error) throw new Error(error.message);
-
-    if (paid > 0 && customerId) {
-      const { error: colError } = await supabase.from("collections").insert({
-        customer_id: customerId,
-        amount: paid,
-        payment_date: entryDate,
-        method: "cash",
-        note: `চালান #${challanNo} বাবদ নগদ জমা`,
-        created_by: userId,
-      } as any);
-
-      if (colError) {
-        const { error: delError } = await supabase.from("sales_entries").delete().eq("id", (sale as any).id);
-        if (delError) {
-          throw new Error(`চালান #${challanNo} সেভ হয়েছে কিন্তু জমা সেভ হয়নি। খাতায় ৳${paid} জমা নিজে এন্ট্রি দিন। (${colError.message})`);
-        }
-        throw new Error(`জমা সেভ করা যায়নি, তাই চালানও সেভ হয়নি। আবার চেষ্টা করুন। (${colError.message})`);
-      }
-    }
-
-    return { success: true, challanNo, message: "চালান সফলভাবে সেভ হয়েছে!" };
-  }
-
-  if (type === "EXPENSE") {
-    const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
-    requirePositive(amount, "খরচের টাকা");
-
-    const { error } = await supabase.from("expenses").insert({
-      category: d.expenseCategory || d.category || "আনুষাঙ্গিক",
-      amount,
-      note: d.description || d.note || "ভাটার খরচ",
-      expense_date: entryDate,
-      created_by: userId,
-    } as any);
-    if (error) throw new Error(error.message);
-    return { success: true, message: "খরচ খাতায় সেভ হয়েছে!" };
-  }
-
-  if (type === "SUPPLIER_PAYMENT") {
-    const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
-    requirePositive(amount, "পেমেন্টের টাকা");
-
-    const supplierName = String(d.supplierName || "সাপ্লায়ার").trim();
-    let supplierId = await findPartyId("suppliers", supplierName);
-
-    if (!supplierId) {
-      const { data: newSup, error: supError } = await supabase
-        .from("suppliers")
-        .insert({ name: supplierName, material_type: d.expenseCategory || "অন্যান্য" } as any)
-        .select("id")
+      const challanNo = await nextChallanNo(entryDate);
+      const { data: sale, error } = await (supabase as any)
+        .from("sales_entries")
+        .insert({
+          ...(challanNo ? { challan_no: challanNo } : {}),
+          customer_id: customer.id,
+          brick_type_id: brick.id,
+          quantity: qty,
+          unit_price: rate,
+          total_amount: total,
+          sale_type: "regular",
+          status: "pending",
+          sale_date: entryDate,
+          vehicle_number: d.vehicleNumber || d.vehicle_number || null,
+          driver_name: d.driverName || d.driver_name || null,
+          notes: "AI সহকারী থেকে",
+          created_by: userId,
+        })
+        .select("id, challan_no")
         .single();
-      if (supError) throw new Error(supError.message);
-      supplierId = (newSup as any)?.id || null;
+      if (error) throw new Error(error.message);
+      const savedNo = String(sale?.challan_no ?? challanNo ?? "");
+
+      if (paid > 0) {
+        const { error: colError } = await supabase.from("collections").insert({
+          customer_id: customer.id,
+          amount: paid,
+          payment_date: entryDate,
+          method: "cash",
+          note: `চালান #${savedNo} বাবদ নগদ জমা`,
+          created_by: userId,
+        } as any);
+        if (colError) {
+          await (supabase as any).from("sales_entries").delete().eq("id", sale.id);
+          throw new Error(`জমা সেভ করা যায়নি, তাই চালানও সেভ করা হয়নি। আবার চেষ্টা করুন। (${colError.message})`);
+        }
+      }
+
+      return {
+        success: true,
+        challanNo: savedNo,
+        message: `চালান #${savedNo} সেভ হয়েছে (${customer.name}, ${brick.name} ${bn(qty)} পিস × ${tk(rate)} = ${tk(total)})। অনুমোদন পাতায় অনুমোদন দিলে স্টক ও হিসাবে যোগ হবে।`,
+      };
     }
 
-    const { error } = await supabase.from("supplier_payments").insert({
-      supplier_id: supplierId,
-      amount,
-      payment_date: entryDate,
-      note: d.description || `${supplierName}-কে পেমেন্ট`,
-      created_by: userId,
-    } as any);
-    if (error) throw new Error(error.message);
-    return { success: true, message: "সাপ্লায়ার পেমেন্ট সেভ হয়েছে!" };
-  }
-
-  if (type === "COLLECTION") {
-    const amount = Number(d.amount || d.paidAmount || 0);
-    requirePositive(amount, "জমার টাকা");
-
-    const customerName = String(d.customerName || d.customer_name || "গ্রাহক").trim();
-    const customerId = await resolveCustomerId(d, userId, "গ্রাহক");
-
-    const { error } = await supabase.from("collections").insert({
-      customer_id: customerId,
-      amount,
-      payment_date: entryDate,
-      method: "cash",
-      note: d.description || `${customerName} হতে নগদ আদায়`,
-      created_by: userId,
-    } as any);
-    if (error) throw new Error(error.message);
-    return { success: true, message: "কালেকশন সফলভাবে সেভ হয়েছে!" };
-  }
-
-  if (type === "SARDAR_PAYMENT" || type === "KACHA_BRICK") {
-    const amount = Number(d.amount || d.paidAmount || d.totalAmount || 0);
-    const sardarName = String(d.sardarName || d.sardar_name || "সর্দার").trim();
-
-    let sardarId: string | null = d.sardarId || null;
-    if (!sardarId) sardarId = await findPartyId("sardars", sardarName);
-
-    if (!sardarId) {
-      throw new Error(`"${sardarName}" নামে কোনো সর্দার খুঁজে পাওয়া যায়নি। সর্দারের নাম যাচাই করুন।`);
-    }
-
-    if (type === "SARDAR_PAYMENT") {
-      requirePositive(amount, "পেমেন্টের টাকা");
-      const { error } = await supabase.from("sardar_payments").insert({
-        sardar_id: sardarId,
+    // ---------- সাধারণ খরচ ----------
+    if (type === "EXPENSE") {
+      const amount = num(d.amount || d.paidAmount || d.totalAmount);
+      requirePositive(amount, "খরচের টাকা");
+      const { error } = await supabase.from("expenses").insert({
+        category: d.expenseCategory || d.category || "অন্যান্য",
         amount,
-        payment_date: entryDate,
-        payment_type: "advance",
-        method: "cash",
-        note: d.description || `${sardarName}-কে দাদন/পেমেন্ট`,
+        note: d.description || d.note || null,
+        expense_date: entryDate,
         created_by: userId,
       } as any);
       if (error) throw new Error(error.message);
-    } else {
-      const quantity = Number(d.quantity || 0);
+      return { success: true, message: `খরচ ${tk(amount)} খাতায় সেভ হয়েছে।` };
+    }
+
+    // ---------- গ্রাহকের জমা ----------
+    if (type === "COLLECTION") {
+      const amount = num(d.amount || d.paidAmount);
+      requirePositive(amount, "জমার টাকা");
+      const customer = await requireParty("customers", d.customerName || d.customer_name, d.customerId || d.customer_id);
+      const { error } = await supabase.from("collections").insert({
+        customer_id: customer.id,
+        amount,
+        payment_date: entryDate,
+        method: d.method || "cash",
+        note: d.description || `${customer.name} হতে নগদ জমা`,
+        created_by: userId,
+      } as any);
+      if (error) throw new Error(error.message);
+      return { success: true, message: `${customer.name}-এর ${tk(amount)} জমা খাতায় সেভ হয়েছে।` };
+    }
+
+    // ---------- সাপ্লায়ার পেমেন্ট ----------
+    if (type === "SUPPLIER_PAYMENT") {
+      const amount = num(d.amount || d.paidAmount || d.totalAmount);
+      requirePositive(amount, "পেমেন্টের টাকা");
+      const supplier = await requireParty("suppliers", d.supplierName || d.supplier_name, d.supplierId);
+      const { error } = await supabase.from("supplier_payments").insert({
+        supplier_id: supplier.id,
+        amount,
+        payment_date: entryDate,
+        note: d.description || `${supplier.name}-কে পেমেন্ট`,
+        created_by: userId,
+      } as any);
+      if (error) throw new Error(error.message);
+      return { success: true, message: `${supplier.name}-কে ${tk(amount)} পেমেন্ট খাতায় সেভ হয়েছে।` };
+    }
+
+    // ---------- সর্দারকে টাকা ----------
+    if (type === "SARDAR_PAYMENT") {
+      const amount = num(d.amount || d.paidAmount || d.totalAmount);
+      requirePositive(amount, "পেমেন্টের টাকা");
+      const sardar = await requireParty("sardars", d.sardarName || d.sardar_name, d.sardarId);
+      const text = clean(`${d.paymentType ?? ""} ${d.description ?? ""}`);
+      const isAdvance = d.paymentType === "advance" || hasAny(text, ["দাদন", "অগ্রিম", "advance"]);
+      const { error } = await supabase.from("sardar_payments").insert({
+        sardar_id: sardar.id,
+        amount,
+        payment_date: entryDate,
+        payment_type: isAdvance ? "advance" : "payment",
+        method: "cash",
+        note: d.description || (isAdvance ? `${sardar.name}-কে দাদন` : `${sardar.name}-কে মজুরি পরিশোধ`),
+        created_by: userId,
+      } as any);
+      if (error) throw new Error(error.message);
+      return { success: true, message: `${sardar.name}-কে ${tk(amount)} ${isAdvance ? "দাদন" : "পেমেন্ট"} খাতায় সেভ হয়েছে।` };
+    }
+
+    // ---------- কাঁচা ইট ----------
+    if (type === "KACHA_BRICK") {
+      const quantity = Math.round(num(d.quantity));
       requirePositive(quantity, "কাঁচা ইটের পরিমাণ");
-      const { error } = await supabase.from("kacha_brick_entries").insert({
-        sardar_id: sardarId,
+      const sardar = await requireParty("sardars", d.sardarName || d.sardar_name, d.sardarId);
+      if (sardar.kind && sardar.kind !== "mill") {
+        throw new Error(`${sardar.name} কাঁচা ইটের (মিল) সর্দার নন। কাঁচা ইটের এন্ট্রি শুধু মিল সর্দারের নামে হয়।`);
+      }
+      let rate = num(d.rate);
+      if (!rate) {
+        // এই সর্দারের শেষ এন্ট্রির রেট
+        const { data: last } = await (supabase as any)
+          .from("kacha_brick_entries")
+          .select("rate")
+          .eq("sardar_id", sardar.id)
+          .eq("entry_type", "production")
+          .gt("rate", 0)
+          .order("entry_date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        rate = num(last?.rate);
+      }
+      if (!rate) throw new Error(`${sardar.name}-এর প্রতি পিস রেট জানা নেই। রেটসহ বলুন, যেমন: "${sardar.name} ১০০০০ ইট, রেট ০.৯০"।`);
+      const amount = Math.round(quantity * rate * 100) / 100;
+      const { error } = await (supabase as any).from("kacha_brick_entries").insert({
+        sardar_id: sardar.id,
         quantity,
+        rate,
         amount,
         entry_type: "production",
         entry_date: entryDate,
-        note: d.description || "কাঁচা ইট এন্ট্রি",
+        note: d.description || "AI সহকারী থেকে",
         created_by: userId,
-      } as any);
+      });
       if (error) throw new Error(error.message);
+      return { success: true, message: `${sardar.name}: ${bn(quantity)} কাঁচা ইট × ${tk(rate)} = ${tk(amount)} খাতায় সেভ হয়েছে।` };
     }
-    return { success: true, message: "সর্দারের হিসাব খাতায় সেভ হয়েছে!" };
-  }
 
-  return { success: false, message: "এই ধরনের এন্ট্রি সেভ করা যায় না।" };
+    return { success: false, message: "এই ধরনের এন্ট্রি সেভ করা যায় না।" };
+  } finally {
+    clearAiCache();
+  }
 };
 
 export const processMessageWithAI = processBrickFieldCommand;
