@@ -9,15 +9,15 @@ const json = (body: unknown, status = 200) =>
 
 type Part = { text: string } | { inlineData: { mimeType: string; data: string } };
 
-// মডেলগুলো থামিয়ে থামিয়ে শুরু হবে। যেটা আগে উত্তর দেবে, সেটাই নেওয়া হবে।
+// দ্রুত ও কম ভিড়ের মডেল আগে। যেটা আগে উত্তর দেবে, সেটাই নেওয়া হবে।
 const MODELS: { name: string; delay: number }[] = [
-  { name: process.env.GEMINI_MODEL || "gemini-3.8-flash", delay: 0 },
+  { name: "gemini-3.5-flash-lite", delay: 0 },
+  { name: "gemini-3.1-flash-lite", delay: 2000 },
   { name: "gemini-3.5-flash", delay: 4000 },
-  { name: "gemini-3.5-flash-lite", delay: 8000 },
-  { name: "gemini-3.1-flash-lite", delay: 12000 },
+  { name: process.env.GEMINI_MODEL || "gemini-3.8-flash", delay: 6000 },
 ];
 
-const OVERALL_TIMEOUT_MS = 32000;
+const OVERALL_TIMEOUT_MS = 25000;
 
 export const Route = createFileRoute("/api/gemini-call")({
   server: {
@@ -108,7 +108,9 @@ export const Route = createFileRoute("/api/gemini-call")({
                   } catch (e) {
                     lastError = e;
                     const status = (e as { status?: number })?.status;
-                    console.warn(`[/api/gemini-call] মডেল ${m.name} কাজ করেনি (status: ${status ?? "?"})`);
+                    console.warn(
+                      `[/api/gemini-call] মডেল ${m.name} কাজ করেনি (status: ${status ?? "?"}) ${Date.now() - started}ms`,
+                    );
                   } finally {
                     pending--;
                     if (pending <= 0 && !finished) {
