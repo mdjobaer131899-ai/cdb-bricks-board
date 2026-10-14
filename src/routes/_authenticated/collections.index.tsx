@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
-import { bn, bnDate } from "@/lib/format";
+import { bn, bnDate, todayBD } from "@/lib/format";
 import { createCollection, deleteCollection } from "@/lib/collections.functions";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -150,7 +150,7 @@ function CollectionsPage() {
 
   const totals = useMemo(() => {
     const rows = list.data ?? [];
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayBD();
     const monthStart = today.slice(0, 8) + "01";
     const todaySum = rows.filter((r) => r.payment_date === today).reduce((a, b) => a + Number(b.amount), 0);
     const monthSum = rows.filter((r) => r.payment_date >= monthStart).reduce((a, b) => a + Number(b.amount), 0);
@@ -387,7 +387,7 @@ function AddCollectionDialog() {
   const [customerId, setCustomerId] = useState<string>("");
   const [contractId, setContractId] = useState<string>("none");
   const [amount, setAmount] = useState<string>("");
-  const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState<string>(todayBD());
   const [method, setMethod] = useState<string>("cash");
   const [note, setNote] = useState<string>("");
 
@@ -412,7 +412,7 @@ function AddCollectionDialog() {
       toast.success("কালেকশন যোগ করা হয়েছে");
       setOpen(false);
       setCustomerId(""); setContractId("none"); setAmount(""); setNote(""); setMethod("cash");
-      setDate(new Date().toISOString().slice(0, 10));
+      setDate(todayBD());
     },
     onError: (e: Error) => toast.error(e.message),
   });

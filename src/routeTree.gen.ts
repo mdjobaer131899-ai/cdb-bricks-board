@@ -32,7 +32,6 @@ import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
-import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiGeminiCallRouteImport } from './routes/api/gemini-call'
 import { Route as AuthenticatedChallansIndexRouteImport } from './routes/_authenticated/challans.index'
 import { Route as AuthenticatedChallansIdRouteImport } from './routes/_authenticated/challans.$id'
@@ -164,11 +163,6 @@ const AuthenticatedUsersRoute = AuthenticatedUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiChatRoute = ApiChatRouteImport.update({
-  id: '/api/chat',
-  path: '/api/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiGeminiCallRoute = ApiGeminiCallRouteImport.update({
   id: '/api/gemini-call',
   path: '/api/gemini-call',
@@ -256,7 +250,6 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
-  '/api/chat': typeof ApiChatRoute
   '/api/gemini-call': typeof ApiGeminiCallRoute
   '/challans/$id': typeof AuthenticatedChallansIdRoute
   '/customers/$id': typeof AuthenticatedCustomersIdRoute
@@ -289,7 +282,6 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
-  '/api/chat': typeof ApiChatRoute
   '/api/gemini-call': typeof ApiGeminiCallRoute
   '/': typeof AuthenticatedIndexRoute
   '/challans/$id': typeof AuthenticatedChallansIdRoute
@@ -327,7 +319,6 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
-  '/api/chat': typeof ApiChatRoute
   '/api/gemini-call': typeof ApiGeminiCallRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/challans/$id': typeof AuthenticatedChallansIdRoute
@@ -366,7 +357,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/suppliers'
     | '/users'
-    | '/api/chat'
     | '/api/gemini-call'
     | '/challans/$id'
     | '/customers/$id'
@@ -399,7 +389,6 @@ export interface FileRouteTypes {
     | '/settings'
     | '/suppliers'
     | '/users'
-    | '/api/chat'
     | '/api/gemini-call'
     | '/'
     | '/challans/$id'
@@ -436,7 +425,6 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/suppliers'
     | '/_authenticated/users'
-    | '/api/chat'
     | '/api/gemini-call'
     | '/_authenticated/'
     | '/_authenticated/challans/$id'
@@ -455,7 +443,6 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
-  ApiChatRoute: typeof ApiChatRoute
   ApiGeminiCallRoute: typeof ApiGeminiCallRoute
 }
 
@@ -621,13 +608,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/users'
       preLoaderRoute: typeof AuthenticatedUsersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/api/chat': {
-      id: '/api/chat'
-      path: '/api/chat'
-      fullPath: '/api/chat'
-      preLoaderRoute: typeof ApiChatRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/api/gemini-call': {
       id: '/api/gemini-call'
@@ -807,7 +787,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
-  ApiChatRoute: ApiChatRoute,
   ApiGeminiCallRoute: ApiGeminiCallRoute,
 }
 export const routeTree = rootRouteImport

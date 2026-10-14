@@ -11,7 +11,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { bn, bnDate } from "@/lib/format";
+import { bn, bnDate, isoDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { deleteExpense } from "@/lib/expenses.functions";
 import { deleteCollection } from "@/lib/collections.functions";
@@ -31,7 +31,7 @@ async function fetchDailyData(days: number): Promise<DayBucket[]> {
   const end = new Date();
   const start = new Date();
   start.setDate(end.getDate() - days + 1);
-  const startIso = start.toISOString().slice(0, 10);
+  const startIso = isoDate(start);
 
   const [colRes, expRes] = await Promise.all([
     supabase
@@ -73,7 +73,7 @@ export function DailyIncomeExpenseFolders() {
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
   const qc = useQueryClient();
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayIso = useMemo(() => todayBD(), []);
   const [opened, setOpened] = useState<Set<string>>(new Set([todayIso]));
 
   const q = useQuery({ queryKey: ["daily-folders", 30], queryFn: () => fetchDailyData(30) });

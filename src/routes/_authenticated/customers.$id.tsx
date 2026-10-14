@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { useCurrentUser } from "@/lib/use-current-user";
-import { bn, bnDate } from "@/lib/format";
+import { bn, bnDate, todayBD } from "@/lib/format";
 import { CustomerLedger } from "@/components/customer-ledger";
 import { InvoiceDocument, type InvoiceData } from "@/components/invoice-document";
 import { shareNodeAsImage, downloadNodeAsImage, printNode } from "@/lib/share-invoice";
@@ -126,7 +126,7 @@ function CustomerDetailPage() {
 
   const invoiceData: InvoiceData = {
     invoiceNo: `CUST-${customer.id.slice(0, 6).toUpperCase()}`,
-    date: selectedDate || (filteredRows[filteredRows.length - 1]?.sale_date ?? new Date().toISOString().slice(0, 10)),
+    date: selectedDate || (filteredRows[filteredRows.length - 1]?.sale_date ?? todayBD()),
     customerRef: customer.phone ?? null,
     salesPerson: "—",
     paymentTerms: selectedDate ? `তারিখ: ${bnDate(selectedDate)}` : "সম্পূর্ণ লেনদেন",

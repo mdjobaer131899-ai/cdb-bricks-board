@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
-import { bn, bnDate } from "@/lib/format";
+import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
 
@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_authenticated/sardars")({
 
 type SardarForm = { id?: string; name: string; phone: string; address: string; group_id: string; note: string; is_active: boolean; kind: string; mill_name: string; monthly_salary: string; join_date: string };
 const NO_GROUP = "__none__";
-const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "", monthly_salary: "", join_date: new Date().toISOString().slice(0, 10) };
+const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "", monthly_salary: "", join_date: todayBD() };
 const KINDS: Record<string, string> = { mill: "মিল (কাঁচা ইট)", load: "লোড (ঢোকানো)", unload: "আনলোড (বের করা)", burn: "পুড়াই মেস্তুরি (মাসিক বেতন)" };
 const monthsSince = (d?: string | null) => accruedMonths(d);
 type GroupForm = { id?: string; name: string; note: string };
@@ -311,7 +311,7 @@ function SardarsPage() {
                               <div className="flex justify-end gap-1">
                                 <Button size="sm" variant="ghost" onClick={() => setDlg({
                                   open: true, mode: "edit",
-                                  form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "", monthly_salary: String(s.monthly_salary ?? ""), join_date: s.join_date ?? new Date().toISOString().slice(0, 10) },
+                                  form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "", monthly_salary: String(s.monthly_salary ?? ""), join_date: s.join_date ?? todayBD() },
                                 })}><Pencil className="h-3.5 w-3.5" /></Button>
                                 <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${s.name}" মুছে ফেলবেন?`)) delSardar.mutate(s.id); }}>
                                   <Trash2 className="h-3.5 w-3.5 text-destructive" />
