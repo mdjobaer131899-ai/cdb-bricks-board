@@ -34,3 +34,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+supabase/.temp/
+cdb-code.txt
+repomix-output.xml
+tmp_small.png
