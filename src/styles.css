@@ -4,12 +4,21 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* =========================================================
+   CDB BRICKS — থিম
+   হালকা পটভূমি, সাদা কার্ড, ইটের লাল শুধু মূল জিনিসে।
+   রঙের নিয়ম: সবুজ = টাকা এসেছে, লাল = গেছে/দেনা,
+   হলুদ = অপেক্ষায়/পাওনা, নীল = গ্রাহকের অগ্রিম।
+   ========================================================= */
+
 @theme inline {
-  --font-sans: "Noto Sans Bengali", "Hind Siliguri", system-ui, sans-serif;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --font-sans: "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;
+  --font-display: "Baloo Da 2", "Hind Siliguri", "Noto Sans Bengali", sans-serif;
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 6px);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -32,6 +41,8 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -43,117 +54,216 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --shadow-elegant: 0 10px 30px -12px color-mix(in oklab, var(--primary) 25%, transparent);
-  --gradient-primary: linear-gradient(135deg, var(--primary), color-mix(in oklab, var(--primary) 60%, var(--info)));
-  --gradient-card: linear-gradient(180deg, var(--card), color-mix(in oklab, var(--card) 92%, var(--primary)));
+  --shadow-elegant: 0 1px 2px rgba(28, 25, 23, 0.05);
+  --gradient-primary: linear-gradient(0deg, var(--primary), var(--primary));
+  --gradient-card: linear-gradient(0deg, var(--card), var(--card));
 }
 
 :root {
-  --radius: 0.75rem;
-  /* Classic Brick — Brick Red + Clay Orange + Charcoal + Warm White */
-  --background: oklch(0.98 0.005 60);
-  --foreground: oklch(0.22 0.02 30);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.02 30);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.02 30);
-  --primary: oklch(0.45 0.16 30);
-  --primary-foreground: oklch(0.99 0.005 60);
-  --secondary: oklch(0.95 0.018 50);
-  --secondary-foreground: oklch(0.28 0.05 30);
-  --muted: oklch(0.95 0.012 50);
-  --muted-foreground: oklch(0.5 0.025 40);
-  --accent: oklch(0.93 0.04 45);
-  --accent-foreground: oklch(0.3 0.08 35);
-  --destructive: oklch(0.55 0.22 27);
-  --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.6 0.14 165);
-  --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.7 0.17 55);
-  --warning-foreground: oklch(0.22 0.04 35);
-  --info: oklch(0.55 0.14 235);
-  --info-foreground: oklch(0.99 0 0);
-  --border: oklch(0.9 0.012 50);
-  --input: oklch(0.93 0.012 50);
-  --ring: oklch(0.45 0.16 30);
-  --sidebar: oklch(0.24 0.03 30);
-  --sidebar-foreground: oklch(0.96 0.012 50);
-  --sidebar-primary: oklch(0.62 0.18 35);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.3 0.04 30);
-  --sidebar-accent-foreground: oklch(0.97 0.01 50);
-  --sidebar-border: oklch(0.32 0.04 30);
-  --sidebar-ring: oklch(0.62 0.18 35);
+  --radius: 1rem;
+
+  --background: #f3f2ef;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+
+  /* ইটের লাল: লোগো, মূল বাটন, নির্বাচিত মেনু */
+  --primary: #a63a1c;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f5f5f4;
+  --secondary-foreground: #292524;
+  --muted: #f5f5f4;
+  --muted-foreground: #57534e;
+  --accent: #fbeee9;
+  --accent-foreground: #7c2a13;
+
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --success: #047857;
+  --success-foreground: #ffffff;
+  --warning: #d97706;
+  --warning-foreground: #1c1917;
+  --info: #1d4ed8;
+  --info-foreground: #ffffff;
+
+  /* গাঢ় কার্ড (হাতে নগদ ইত্যাদি) */
+  --ink: #1c1917;
+  --ink-foreground: #fafaf9;
+
+  --border: #e7e5e4;
+  --input: #e7e5e4;
+  --ring: #a63a1c;
+
+  /* বড় পর্দার পাশের মেনু */
+  --sidebar: #1c1917;
+  --sidebar-foreground: #f5f5f4;
+  --sidebar-primary: #e2643c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #292524;
+  --sidebar-accent-foreground: #fafaf9;
+  --sidebar-border: #2e2a27;
+  --sidebar-ring: #e2643c;
 }
 
 .dark {
-  --background: oklch(0.18 0.018 255);
-  --foreground: oklch(0.96 0.005 250);
-  --card: oklch(0.22 0.022 255);
-  --card-foreground: oklch(0.96 0.005 250);
-  --popover: oklch(0.22 0.022 255);
-  --popover-foreground: oklch(0.96 0.005 250);
-  --primary: oklch(0.62 0.17 250);
-  --primary-foreground: oklch(0.15 0.02 255);
-  --secondary: oklch(0.27 0.022 255);
-  --secondary-foreground: oklch(0.96 0.005 250);
-  --muted: oklch(0.26 0.02 255);
-  --muted-foreground: oklch(0.72 0.02 250);
-  --accent: oklch(0.32 0.045 255);
-  --accent-foreground: oklch(0.96 0.01 250);
-  --destructive: oklch(0.65 0.2 27);
-  --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.7 0.16 165);
-  --success-foreground: oklch(0.15 0.02 255);
-  --warning: oklch(0.78 0.15 75);
-  --warning-foreground: oklch(0.2 0.04 60);
-  --info: oklch(0.68 0.15 235);
-  --info-foreground: oklch(0.15 0.02 255);
-  --border: oklch(0.32 0.02 255);
-  --input: oklch(0.3 0.02 255);
-  --ring: oklch(0.62 0.17 250);
-  --sidebar: oklch(0.2 0.022 255);
-  --sidebar-foreground: oklch(0.95 0.005 250);
-  --sidebar-primary: oklch(0.62 0.17 250);
-  --sidebar-primary-foreground: oklch(0.15 0.02 255);
-  --sidebar-accent: oklch(0.28 0.025 255);
-  --sidebar-accent-foreground: oklch(0.95 0.005 250);
-  --sidebar-border: oklch(0.3 0.025 255);
-  --sidebar-ring: oklch(0.62 0.17 250);
+  --background: #141210;
+  --foreground: #f5f5f4;
+  --card: #1f1c1a;
+  --card-foreground: #f5f5f4;
+  --popover: #1f1c1a;
+  --popover-foreground: #f5f5f4;
+
+  --primary: #e2643c;
+  --primary-foreground: #ffffff;
+
+  --secondary: #292524;
+  --secondary-foreground: #f5f5f4;
+  --muted: #292524;
+  --muted-foreground: #a8a29e;
+  --accent: #3a2a24;
+  --accent-foreground: #fdba74;
+
+  --destructive: #f87171;
+  --destructive-foreground: #1c1917;
+  --success: #34d399;
+  --success-foreground: #1c1917;
+  --warning: #fbbf24;
+  --warning-foreground: #1c1917;
+  --info: #93c5fd;
+  --info-foreground: #1c1917;
+
+  --ink: #0c0a09;
+  --ink-foreground: #fafaf9;
+
+  --border: #2e2a27;
+  --input: #2e2a27;
+  --ring: #e2643c;
+
+  --sidebar: #0c0a09;
+  --sidebar-foreground: #f5f5f4;
+  --sidebar-primary: #e2643c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1f1c1a;
+  --sidebar-accent-foreground: #fafaf9;
+  --sidebar-border: #2e2a27;
+  --sidebar-ring: #e2643c;
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
   }
-  html, body {
+  html,
+  body {
     font-family: var(--font-sans);
   }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-feature-settings: "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2 {
+    letter-spacing: -0.01em;
   }
 }
 
-/* ---------- On-screen keyboard handling (iPad / tablet / phone) ---------- */
+/* ---------- নিজস্ব ছোট উপকরণ ---------- */
+
+/* বড় সংখ্যা ও শিরোনামের মোটা বাংলা ফন্ট: className="font-display" */
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* সংখ্যা যেন কলামে সোজা থাকে */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ছোট সেকশন শিরোনাম: "আজকের হিসাব" ধরনের */
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--color-muted-foreground);
+}
+
+/* ইটের গাঁথুনির হালকা নকশা (গাঢ় কার্ডের পেছনে) */
+.bg-brick-pattern {
+  background-image:
+    linear-gradient(rgba(250, 250, 249, 0.07) 1.4px, transparent 1.4px),
+    linear-gradient(90deg, rgba(250, 250, 249, 0.07) 1.4px, transparent 1.4px),
+    linear-gradient(90deg, rgba(250, 250, 249, 0.07) 1.4px, transparent 1.4px);
+  background-size: 56px 14px, 56px 28px, 56px 28px;
+  background-position: 0 0, 0 0, 28px 14px;
+}
+
+/* ---------- টেবিল: হালকা, পরিষ্কার শিরোনাম ---------- */
+thead tr {
+  background-color: var(--color-muted);
+}
+th {
+  color: var(--color-muted-foreground);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* ---------- ডায়ালগ ও ড্রপডাউন যেন কখনো স্বচ্ছ না হয় ---------- */
+[role="dialog"],
+[data-radix-popper-content-wrapper] > div {
+  background-color: var(--color-popover);
+  color: var(--color-popover-foreground);
+}
+[data-state="open"].fixed.inset-0 {
+  background-color: rgba(12, 10, 9, 0.6);
+  backdrop-filter: blur(3px);
+}
+
+/* ---------- নিচের মেনুবার ---------- */
+nav.fixed.bottom-0,
+div.fixed.bottom-0 {
+  background: color-mix(in srgb, var(--color-card) 96%, transparent);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ---------- তারিখের বক্স যেন কেটে না যায় ---------- */
+input[type="date"] {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+/* ---------- মোট আয় ও মোট ব্যয় পাশাপাশি, নিট নিচে পুরো চওড়া ---------- */
+.grid:has(> [class*="emerald"]):has(> [class*="rose"]),
+.grid:has(> [class*="green"]):has(> [class*="red"]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.grid:has(> [class*="emerald"]):has(> [class*="rose"]) > :nth-child(3),
+.grid:has(> [class*="green"]):has(> [class*="red"]) > :nth-child(3) {
+  grid-column: span 2 / span 2;
+}
+
+/* ---------- মোবাইল কিবোর্ড খোলা থাকলে ---------- */
 :root {
   --kb-inset: 0px;
 }
-
-/* Keep the last fields reachable when the keyboard is open */
 .keyboard-open main {
   padding-bottom: calc(var(--kb-inset) + 5rem) !important;
   scroll-padding-bottom: calc(var(--kb-inset) + 5rem);
 }
-
-/* Bottom nav must not sit on top of the keyboard */
 .keyboard-open nav.fixed.bottom-0 {
   transform: translateY(120%);
   transition: transform 0.18s ease-out;
 }
-
-/* Dialogs and sheets shrink instead of hiding fields behind the keyboard */
 .keyboard-open [role="dialog"] {
   max-height: calc(100dvh - var(--kb-inset) - 2rem);
   overflow-y: auto;
@@ -164,7 +274,7 @@ html {
   scroll-padding-bottom: calc(var(--kb-inset) + 4rem);
 }
 
-/* iOS: never zoom on focus — needs >= 16px font size on fields */
+/* iOS: ফর্মে চাপলে যেন জুম না হয় */
 @media (max-width: 1180px) {
   input,
   select,
@@ -173,12 +283,11 @@ html {
   }
 }
 
-/* ---------- Tablet / iPad layout ---------- */
+/* ---------- ট্যাবলেট ---------- */
 @media (min-width: 768px) and (max-width: 1180px) {
   main {
     padding: 1.25rem !important;
   }
-  /* Comfortable touch targets on tablets */
   button,
   [role="button"],
   a[data-slot],
@@ -188,156 +297,4 @@ html {
   table {
     font-size: 0.9rem;
   }
-}
-/* =========================================================
-   CDB BRICKS - INDUSTRIAL COMMERCIAL ERP THEME OVERRIDES
-   ========================================================= */
-
-:root {
-  /* Deep Kiln Terracotta & Industrial Slate Palette */
-  --primary: 16 78% 38% !important;          /* গাঢ় পোড়া ইটের রঙ (#ae3a15) */
-  --primary-foreground: 0 0% 100% !important;
-  --background: 210 20% 97% !important;      /* করপোরেট স্টিল-হোয়াইট ব্যাকগ্রাউন্ড */
-  --card: 0 0% 100% !important;
-  --border: 214 22% 84% !important;          /* স্পষ্ট ও শার্প ইন্ডাস্ট্রিয়াল বর্ডার */
-  --radius: 0.5rem !important;               /* প্রফেশনাল শার্প এজ */
-}
-
-.dark {
-  --background: 222 47% 9% !important;
-  --card: 222 40% 13% !important;
-  --border: 217 25% 22% !important;
-}
-
-/* মেইন বডি ও ফন্ট শার্পনেস */
-body {
-  background-color: hsl(var(--background));
-  background-image: radial-gradient(#cbd5e1 0.6px, transparent 0.6px);
-  background-size: 18px 18px;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  -webkit-font-smoothing: antialiased;
-}
-
-/* সকল কার্ডকে ইন্ডাস্ট্রিয়াল স্টিল-ফ্রেম লুক দেওয়া */
-.rounded-xl, .rounded-2xl, [class*="Card"] {
-  border-color: rgba(15, 23, 42, 0.12) !important;
-  box-shadow: 0 2px 6px -1px rgba(15, 23, 42, 0.07), 0 1px 2px -1px rgba(15, 23, 42, 0.05) !important;
-}
-
-/* উপরের হেডার ও মেনুবারকে সলিড কমার্শিয়াল রূপ দেওয়া */
-header {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
-  border-bottom: 2px solid #cbd5e1 !important;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04) !important;
-}
-
-.dark header {
-  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%) !important;
-  border-bottom: 2px solid #334155 !important;
-}
-
-/* টেবিল হেডারগুলোকে প্রফেশনাল একাউন্টিং লেজার লুক দেওয়া */
-thead tr, th {
-  background-color: #1e293b !important;
-  color: #f8fafc !important;
-  font-weight: 700 !important;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-/* বাটনগুলোর কমার্শিয়াল গ্রেডিয়েন্ট */
-button.bg-orange-600, .bg-primary {
-  background: linear-gradient(135deg, #c2410c 0%, #9a3412 100%) !important;
-  border: 1px solid #7c2d12 !important;
-  box-shadow: 0 2px 4px rgba(154, 52, 18, 0.25) !important;
-  font-weight: 600 !important;
-}/* =========================================================
-   FIX CLIPPING & 50/50 INCOME-EXPENSE INDUSTRIAL CARDS
-   ========================================================= */
-
-/* ১. তারিখের বক্স (Date Input) যেন কখনো কেটে না যায় */
-input[type="date"] {
-  min-width: 0 !important;
-  width: 100% !important;
-  padding-right: 6px !important;
-  padding-left: 8px !important;
-  font-size: 13px !important;
-  font-weight: 600 !important;
-  box-sizing: border-box !important;
-}
-
-input[type="date"]::-webkit-calendar-picker-indicator {
-  margin-left: 2px !important;
-  padding: 2px !important;
-  cursor: pointer;
-}
-
-/* ২. অ্যাক্টিভ বাটনে কালো লেখার বদলে উজ্জ্বল সাদা লেখা */
-.bg-primary, button.bg-primary, [class*="bg-orange-"] {
-  color: #ffffff !important;
-}
-
-/* ৩. মোট আয় ও মোট ব্যয় বক্স পাশাপাশি অর্ধেক (50% - 50%) এবং বড় করা */
-.grid.gap-3:has(> .bg-emerald-500\/10),
-.grid.gap-4:has(> .bg-emerald-500\/10),
-.grid:has(> [class*="emerald"]):has(> [class*="rose"]),
-.grid:has(> [class*="green"]):has(> [class*="red"]) {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 10px !important;
-}
-
-/* ৩য় বক্স (নিট ব্যালেন্স) যেন নিচে পুরো স্ক্রিন জুড়ে বড় থাকে */
-.grid:has(> [class*="emerald"]):has(> [class*="rose"]) > :nth-child(3),
-.grid:has(> [class*="green"]):has(> [class*="red"]) > :nth-child(3) {
-  grid-column: span 2 / span 2 !important;
-}/* =========================================================
-   TOP HEADER, HERO BANNER & BOTTOM NAV INDUSTRIAL POLISH
-   ========================================================= */
-
-/* ১. উপরের টপ বারের লোগো ও সিজন বাটনের মাঝখানে ফাঁকা জায়গা ও বর্ডার */
-header {
-  padding-left: 10px !important;
-  padding-right: 10px !important;
-  gap: 8px !important;
-}
-
-/* ২. নিচের নেভিগেশন বারকে (Bottom Bar) সলিড ও স্পষ্ট করা */
-nav.fixed.bottom-0,
-footer.fixed.bottom-0,
-div.fixed.bottom-0 {
-  background: rgba(255, 255, 255, 0.96) !important;
-  backdrop-filter: blur(10px) !important;
-  border-top: 2px solid #cbd5e1 !important;
-  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.06) !important;
-}
-
-.dark nav.fixed.bottom-0,
-.dark div.fixed.bottom-0 {
-  background: rgba(15, 23, 42, 0.96) !important;
-  border-top: 2px solid #334155 !important;
-}
-
-/* ৩. হোম পেজের মেইন ব্যানারে "সি ডি বি ব্রিকস" লেখা যেন ভেঙে না যায় */
-h1, h2 {
-  letter-spacing: -0.01em;
-}/* Fix transparent modal and dropdown background */
-[role="dialog"],
-[data-radix-popper-content-wrapper] > div {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border: 1px solid #cbd5e1 !important;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
-}
-
-.dark [role="dialog"],
-.dark [data-radix-popper-content-wrapper] > div {
-  background-color: #0f172a !important;
-  color: #f8fafc !important;
-  border: 1px solid #1e293b !important;
-}
-
-[data-state="open"].fixed.inset-0 {
-  background-color: rgba(0, 0, 0, 0.75) !important;
-  backdrop-filter: blur(4px) !important;
 }

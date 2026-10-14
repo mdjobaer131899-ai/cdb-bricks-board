@@ -1,87 +1,98 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, ClipboardCheck, Users, BarChart3, Sparkles } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { BarChart3, FileCheck2, Home, Settings, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { bn } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { supabase } from "@/integrations/supabase/client";
 import { OPEN_AI_CHAT_EVENT } from "@/components/ai-assistant-fab";
 
-const ALL = [
-  { title: "হোম", url: "/", icon: LayoutDashboard, roles: ["admin", "manager"] as const },
-  { title: "চালান", url: "/challans", icon: FileText, roles: ["admin", "manager"] as const },
-  { title: "আয়-ব্যয়", url: "/income-expense", icon: ClipboardCheck, roles: ["admin"] as const },
-  { title: "গ্রাহক", url: "/customers", icon: Users, roles: ["admin", "manager"] as const },
-  { title: "রিপোর্ট", url: "/reports", icon: BarChart3, roles: ["admin", "manager"] as const },
-];
-
+/**
+ * মোবাইলের নিচের মেনু: হোম · চালান · AI (মাঝে, বড়) · রিপোর্ট · সেটিংস
+ * চালানের কোণায় অনুমোদন বাকি চালানের সংখ্যা ভাসে।
+ */
 export function MobileBottomNav() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { data } = useCurrentUser();
   const role = data?.role;
-  if (!role) return null;
-  const items = ALL.filter((i) => (i.roles as readonly string[]).includes(role));
   const isAdmin = role === "admin";
-  const count = items.length + (isAdmin ? 1 : 0);
 
-  const openAiChat = () => window.dispatchEvent(new CustomEvent(OPEN_AI_CHAT_EVENT));
+  const pendingQ = useQuery({
+    queryKey: ["pending-challans-count"],
+    enabled: !!role,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("sales_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 
-  const aiButton = isAdmin ? (
-    <button
-      key="ai-assistant"
-      type="button"
-      onClick={openAiChat}
-      aria-label="CDB AI সহকারী"
-      className="group relative flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <span className="grid h-[18px] w-[18px] place-items-center">
-        <Sparkles className="h-[18px] w-[18px] text-primary transition-transform group-active:scale-95" strokeWidth={1.75} />
-      </span>
-      <span className="tracking-tight">AI সহকারী</span>
-    </button>
-  ) : null;
+  if (!role) return null;
+  const pending = pendingQ.data ?? 0;
 
-  // Insert AI assistant in the middle of the nav.
-  const mid = Math.ceil(items.length / 2);
-  const left = items.slice(0, mid);
-  const right = items.slice(mid);
+  // অ্যাডমিন চালান অনুমোদন দেন, ম্যানেজার চালানের তালিকা দেখেন
+  const challanUrl = isAdmin ? "/approvals" : "/challans";
+  const left = [
+    { title: "হোম", url: "/", icon: Home, badge: 0 },
+    { title: "চালান", url: challanUrl, icon: FileCheck2, badge: pending },
+  ];
+  const right = [
+    { title: "রিপোর্ট", url: "/reports", icon: BarChart3, badge: 0 },
+    { title: "সেটিংস", url: "/preferences", icon: Settings, badge: 0 },
+  ];
 
-  const renderLink = (it: (typeof ALL)[number]) => {
-    const active = path === it.url;
+  const isActive = (url: string) => (url === "/" ? path === "/" : path === url || path.startsWith(url + "/"));
+
+  const renderLink = (it: (typeof left)[number]) => {
+    const active = isActive(it.url) || (it.title === "চালান" && (path.startsWith("/challans") || path.startsWith("/approvals")));
     return (
       <Link
-        key={it.url}
-        to={it.url}
+        key={it.title}
+        to={it.url as never}
         className={cn(
-          "group relative flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
-          active ? "text-primary" : "text-muted-foreground hover:text-foreground",
+          "relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[12px] transition-colors",
+          active ? "font-bold text-primary" : "font-semibold text-muted-foreground",
         )}
       >
-        <span
-          className={cn(
-            "absolute top-0 h-0.5 w-8 rounded-full transition-all",
-            active ? "bg-primary opacity-100" : "opacity-0",
+        <span className="relative">
+          <it.icon className="h-6 w-6" strokeWidth={active ? 2.3 : 2} aria-hidden="true" />
+          {it.badge > 0 && (
+            <span
+              className="absolute -right-3 -top-2 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-card bg-destructive px-1 text-[10px] font-bold leading-none text-white"
+              aria-label={`${bn(it.badge)}টি চালান অনুমোদন বাকি`}
+            >
+              {it.badge > 99 ? "৯৯+" : bn(it.badge)}
+            </span>
           )}
-        />
-        <it.icon
-          className={cn("h-[18px] w-[18px] transition-transform", active ? "scale-105" : "group-active:scale-95")}
-          strokeWidth={active ? 2.25 : 1.75}
-        />
-        <span className={cn("tracking-tight", active ? "font-semibold" : "font-normal")}>{it.title}</span>
+        </span>
+        <span>{it.title}</span>
       </Link>
     );
   };
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-background/85 backdrop-blur-xl md:hidden"
+      aria-label="প্রধান মেনু"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t bg-card md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div
-        className={cn(
-          "grid",
-          count === 6 ? "grid-cols-6" : count === 5 ? "grid-cols-5" : "grid-cols-4",
-        )}
-      >
+      <div className="grid grid-cols-5 items-end px-1 pb-1.5 pt-1">
         {left.map(renderLink)}
-        {aiButton}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent(OPEN_AI_CHAT_EVENT))}
+          aria-label="AI সহকারী খুলুন"
+          className="flex flex-col items-center gap-1"
+        >
+          <span className="-mt-7 grid h-[60px] w-[60px] place-items-center rounded-[20px] border-4 border-background bg-ink shadow-lg transition active:scale-95">
+            <Sparkles className="h-7 w-7 text-orange-400" strokeWidth={2} aria-hidden="true" />
+          </span>
+          <span className="text-[12px] font-bold text-foreground">AI</span>
+        </button>
         {right.map(renderLink)}
       </div>
     </nav>

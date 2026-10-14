@@ -1,10 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+
+type ReportKey = "daily" | "range" | "customer" | "advance" | "profit" | "season" | "annual";
+const REPORT_KEYS: ReportKey[] = ["daily", "range", "customer", "advance", "profit", "season", "annual"];
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarIcon, FileDown, Loader2 } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarIcon, CalendarRange, ChevronRight, FileDown, FileText, Layers, Loader2, PieChart, Users, Wallet } from "lucide-react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
@@ -20,11 +22,12 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { toast } from "sonner";
+import { BusinessBook } from "@/components/business-book";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({
     meta: [
-      { title: "রিপোর্ট — CDB Bricks" },
+      { title: "ব্যবসার খাতা ও রিপোর্ট — CDB Bricks" },
       { name: "description", content: "তারিখভিত্তিক বিক্রয় রিপোর্ট তৈরি করুন, গ্রাহক ও ইটের ধরন অনুযায়ী বিশ্লেষণ দেখুন এবং PDF এক্সপোর্ট করুন।" },
       { property: "og:title", content: "রিপোর্ট — CDB Bricks" },
       { property: "og:description", content: "তারিখভিত্তিক বিক্রয় রিপোর্ট তৈরি করুন, গ্রাহক ও ইটের ধরন অনুযায়ী বিশ্লেষণ দেখুন এবং PDF এক্সপোর্ট করুন।" },
@@ -32,34 +35,102 @@ export const Route = createFileRoute("/_authenticated/reports")({
     ],
     links: [{ rel: "canonical", href: "/reports" }],
   }),
+  // কোন বিস্তারিত রিপোর্ট খোলা তা ঠিকানায় থাকে (?r=daily), তাই ফোনের
+  // "পেছনে" চাপলে রিপোর্ট বন্ধ হয়ে খাতায় ফেরে, রিফ্রেশেও একই রিপোর্ট থাকে
+  validateSearch: (search: Record<string, unknown>): { r?: ReportKey } => {
+    const r = search.r;
+    return REPORT_KEYS.includes(r as ReportKey) ? { r: r as ReportKey } : {};
+  },
   component: ReportsPage,
 });
 
+
+const REPORTS: { key: ReportKey; title: string; hint: string; icon: typeof FileText }[] = [
+  { key: "daily", title: "দৈনিক বিক্রি", hint: "একদিনের সব চালান", icon: CalendarIcon },
+  { key: "range", title: "তারিখ অনুযায়ী বিক্রি", hint: "যেকোনো দুই তারিখের মধ্যে", icon: CalendarRange },
+  { key: "customer", title: "গ্রাহক সারাংশ", hint: "প্রতি গ্রাহকের বিক্রি, আদায়, বাকি", icon: Users },
+  { key: "advance", title: "অগ্রিম চালান", hint: "অগ্রিম নেওয়া গ্রাহকদের হিসাব", icon: Wallet },
+  { key: "profit", title: "গ্রাহকভিত্তিক বিশ্লেষণ", hint: "কোন গ্রাহক থেকে কত বিক্রি", icon: PieChart },
+  { key: "season", title: "মৌসুম তুলনা", hint: "আগের মৌসুমের সাথে মিলিয়ে দেখা", icon: Layers },
+  { key: "annual", title: "বার্ষিক", hint: "বছরের মাসভিত্তিক হিসাব", icon: BarChart3 },
+];
+
+function ReportBody({ k }: { k: ReportKey }) {
+  switch (k) {
+    case "daily": return <DailyReport />;
+    case "range": return <RangeReport />;
+    case "customer": return <CustomerReport />;
+    case "advance": return <AdvanceReport />;
+    case "profit": return <CustomerProfitReport />;
+    case "season": return <SeasonReport />;
+    case "annual": return <AnnualReport />;
+  }
+}
+
 function ReportsPage() {
-  return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight md:text-2xl">রিপোর্ট সেন্টার</h2>
-        <p className="text-sm text-muted-foreground">বিক্রয় বিশ্লেষণ ও PDF এক্সপোর্ট</p>
+  const { r: open } = Route.useSearch();
+  const navigate = useNavigate();
+
+  function go(k: ReportKey | null) {
+    if (k) {
+      navigate({ to: "/reports", search: { r: k } });
+    } else if (typeof window !== "undefined" && window.history.length > 1) {
+      window.history.back();
+    } else {
+      navigate({ to: "/reports", search: {}, replace: true });
+    }
+  }
+
+  // একটি বিস্তারিত রিপোর্ট খোলা থাকলে
+  if (open) {
+    const r = REPORTS.find((x) => x.key === open)!;
+    return (
+      <div className="mx-auto w-full max-w-5xl space-y-4">
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => go(null)}
+            aria-label="ব্যবসার খাতায় ফিরে যান"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border bg-card transition active:scale-95"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <div className="min-w-0">
+            <h1 className="font-display truncate text-xl font-extrabold leading-tight">{r.title}</h1>
+            <p className="truncate text-xs font-semibold text-muted-foreground">{r.hint}</p>
+          </div>
+        </div>
+        <ReportBody k={open} />
       </div>
-      <Tabs defaultValue="daily">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
-          <TabsTrigger value="daily">দৈনিক</TabsTrigger>
-          <TabsTrigger value="range">তারিখ পরিসীমা</TabsTrigger>
-          <TabsTrigger value="customer">গ্রাহক সারাংশ</TabsTrigger>
-          <TabsTrigger value="advance">অগ্রিম চালান</TabsTrigger>
-          <TabsTrigger value="profit">গ্রাহকভিত্তিক বিশ্লেষণ</TabsTrigger>
-          <TabsTrigger value="season">মৌসুম</TabsTrigger>
-          <TabsTrigger value="annual">বার্ষিক</TabsTrigger>
-        </TabsList>
-        <TabsContent value="daily" className="mt-4"><DailyReport /></TabsContent>
-        <TabsContent value="range" className="mt-4"><RangeReport /></TabsContent>
-        <TabsContent value="customer" className="mt-4"><CustomerReport /></TabsContent>
-        <TabsContent value="advance" className="mt-4"><AdvanceReport /></TabsContent>
-        <TabsContent value="profit" className="mt-4"><CustomerProfitReport /></TabsContent>
-        <TabsContent value="season" className="mt-4"><SeasonReport /></TabsContent>
-        <TabsContent value="annual" className="mt-4"><AnnualReport /></TabsContent>
-      </Tabs>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-5 pb-4">
+      <BusinessBook />
+
+      <section className="space-y-2">
+        <h2 className="section-label px-1">বিস্তারিত রিপোর্ট</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {REPORTS.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => go(r.key)}
+              className="flex min-h-[64px] items-center gap-3 rounded-2xl border bg-card px-4 py-2.5 text-left transition hover:bg-muted/60 active:scale-[0.99]"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
+                <r.icon className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-bold">{r.title}</span>
+                <span className="block truncate text-xs text-muted-foreground">{r.hint}</span>
+              </span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

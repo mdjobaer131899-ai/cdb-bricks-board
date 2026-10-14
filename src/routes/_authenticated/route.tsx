@@ -12,15 +12,19 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { PendingRoleState } from "@/components/pending-role-state";
 import { BrandLogo } from "@/components/brand-logo";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AiAssistantFab } from "@/components/ai-assistant-fab";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) {
+    // getSession ফোনে রাখা লগইন পড়ে, নেট লাগে না। আগে getUser ছিল — নেট দুর্বল
+    // হলে (যেমন অ্যাপ মিনিমাইজ থেকে ফেরার মুহূর্তে) ভুল করে লগইন পাতায় পাঠিয়ে দিত।
+    const { data } = await supabase.auth.getSession();
+    const user = data.session?.user;
+    if (!user) {
       throw redirect({ to: "/auth" });
     }
-    return { user: data.user };
+    return { user };
   },
   component: AuthedLayout,
   errorComponent: ({ error }) => {
@@ -54,7 +58,9 @@ function GuardedOutlet() {
   const { can, loading, isAdmin } = usePageAccess();
   if (loading) return <Skeleton className="h-32 w-full rounded-xl" />;
   const adminOnly = path.startsWith("/users") || path.startsWith("/settings");
-  if (adminOnly ? !isAdmin : !can(path)) {
+  // সেটিংস হাব (/preferences) সবার জন্য খোলা: থিম, মৌসুম, লগ আউট সেখানে
+  const openToAll = path === "/preferences";
+  if (!openToAll && (adminOnly ? !isAdmin : !can(path))) {
     return <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">এই পাতা দেখার অনুমতি নেই। এডমিনের সাথে যোগাযোগ করুন।</div>;
   }
   return <Outlet />;
@@ -73,7 +79,8 @@ function AuthedLayout() {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  if (!ready || loading) {
+  // শুধু প্রথমবার খোলার সময় কঙ্কাল দেখায়; পরে কখনো পুরো পাতা মুছে যায় না
+  if (!ready || (loading && !me)) {
     return (
       <div className="flex min-h-screen w-full flex-col bg-background">
         <header className="flex h-14 items-center border-b px-4 md:px-6">
@@ -122,7 +129,10 @@ function AuthedLayout() {
             <AppSidebar />
           </div>
           <SidebarInset className="flex min-w-0 flex-1 flex-col">
-            <AppHeader />
+            {/* মোবাইলে উপরের বার নেই: খোঁজা, থিম, লগ আউট সব নিচের "সেটিংস"-এ */}
+            <div className="hidden md:block">
+              <AppHeader />
+            </div>
             <TopMenubar />
             <main className="flex-1 p-3 pb-20 md:p-6 md:pb-6">
               <GuardedOutlet />
@@ -130,6 +140,7 @@ function AuthedLayout() {
           </SidebarInset>
         </div>
         <MobileBottomNav />
+        <AiAssistantFab />
       </SidebarProvider>
     </SeasonProvider>
   );

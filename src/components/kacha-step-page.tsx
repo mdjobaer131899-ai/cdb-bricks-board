@@ -55,7 +55,6 @@ interface Props {
   title: string;
   subtitle: string;
   icon: LucideIcon;
-  /** স্ট্যাট কার্ডের লেবেল */
   totalLabel: string;
   qtyLabel?: string;
   showMoney?: boolean;
@@ -110,7 +109,7 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
       const qty = Number(f.quantity || 0);
       if (!(qty > 0)) throw new Error("পরিমাণ দিন");
       const rate = Number(f.rate || 0);
-      const amount = f.amount !== "" ? Number(f.amount) : qty * rate;
+      const amount = f.amount !== "" ? Number(f.amount) : Math.round((qty / 1000) * rate);
       const payload = {
         entry_date: f.entry_date,
         entry_type: step,
@@ -151,7 +150,7 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
   });
 
   const f = dlg.form;
-  const autoAmount = f.amount !== "" ? Number(f.amount) : Number(f.quantity || 0) * Number(f.rate || 0);
+  const autoAmount = f.amount !== "" ? Number(f.amount) : Math.round((Number(f.quantity || 0) / 1000) * Number(f.rate || 0));
 
   return (
     <div className="space-y-5">
@@ -189,7 +188,7 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
                   <TableHead>তারিখ</TableHead>
                   <TableHead>সরদার</TableHead>
                   <TableHead className="text-right">পরিমাণ</TableHead>
-                  <TableHead className="text-right">রেট</TableHead>
+                  <TableHead className="text-right">রেট (প্রতি হাজার)</TableHead>
                   <TableHead className="text-right">টাকা</TableHead>
                   <TableHead>মন্তব্য</TableHead>
                   <TableHead></TableHead>
@@ -254,7 +253,7 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
                 <Input type="number" inputMode="numeric" value={f.quantity} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, quantity: e.target.value } }))} />
               </div>
               <div className="space-y-1.5">
-                <Label>রেট (প্রতি হাজার/পিস)</Label>
+                <Label>রেট (প্রতি হাজার ইট)</Label>
                 <Input type="number" inputMode="decimal" value={f.rate} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, rate: e.target.value } }))} />
               </div>
             </div>
@@ -267,7 +266,7 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
               <Textarea rows={2} value={f.note} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, note: e.target.value } }))} />
             </div>
             <div className="rounded-md bg-muted/50 p-3 text-sm flex justify-between font-semibold">
-              <span>মোট টাকা</span><span className="tabular-nums">৳ {bn(Math.round(autoAmount))}</span>
+              <span>মোট টাকা ({bn(Number(f.quantity || 0) / 1000)} হাজার)</span><span className="tabular-nums">৳ {bn(Math.round(autoAmount))}</span>
             </div>
           </div>
           <DialogFooter>

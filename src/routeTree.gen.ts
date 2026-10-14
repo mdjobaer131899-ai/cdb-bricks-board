@@ -23,6 +23,7 @@ import { Route as AuthenticatedIncomeExpenseRouteImport } from './routes/_authen
 import { Route as AuthenticatedLoansRouteImport } from './routes/_authenticated/loans'
 import { Route as AuthenticatedOpeningBalancesRouteImport } from './routes/_authenticated/opening-balances'
 import { Route as AuthenticatedOwnersRouteImport } from './routes/_authenticated/owners'
+import { Route as AuthenticatedPreferencesRouteImport } from './routes/_authenticated/preferences'
 import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authenticated/purchases'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedSalariesRouteImport } from './routes/_authenticated/salaries'
@@ -117,6 +118,12 @@ const AuthenticatedOwnersRoute = AuthenticatedOwnersRouteImport.update({
   path: '/owners',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPreferencesRoute =
+  AuthenticatedPreferencesRouteImport.update({
+    id: '/preferences',
+    path: '/preferences',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPurchasesRoute = AuthenticatedPurchasesRouteImport.update({
   id: '/purchases',
   path: '/purchases',
@@ -241,6 +248,7 @@ export interface FileRoutesByFullPath {
   '/loans': typeof AuthenticatedLoansRoute
   '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/owners': typeof AuthenticatedOwnersRoute
+  '/preferences': typeof AuthenticatedPreferencesRoute
   '/purchases': typeof AuthenticatedPurchasesRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/salaries': typeof AuthenticatedSalariesRoute
@@ -273,6 +281,7 @@ export interface FileRoutesByTo {
   '/loans': typeof AuthenticatedLoansRoute
   '/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/owners': typeof AuthenticatedOwnersRoute
+  '/preferences': typeof AuthenticatedPreferencesRoute
   '/purchases': typeof AuthenticatedPurchasesRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/salaries': typeof AuthenticatedSalariesRoute
@@ -310,6 +319,7 @@ export interface FileRoutesById {
   '/_authenticated/loans': typeof AuthenticatedLoansRoute
   '/_authenticated/opening-balances': typeof AuthenticatedOpeningBalancesRoute
   '/_authenticated/owners': typeof AuthenticatedOwnersRoute
+  '/_authenticated/preferences': typeof AuthenticatedPreferencesRoute
   '/_authenticated/purchases': typeof AuthenticatedPurchasesRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/salaries': typeof AuthenticatedSalariesRoute
@@ -348,6 +358,7 @@ export interface FileRouteTypes {
     | '/loans'
     | '/opening-balances'
     | '/owners'
+    | '/preferences'
     | '/purchases'
     | '/reports'
     | '/salaries'
@@ -380,6 +391,7 @@ export interface FileRouteTypes {
     | '/loans'
     | '/opening-balances'
     | '/owners'
+    | '/preferences'
     | '/purchases'
     | '/reports'
     | '/salaries'
@@ -416,6 +428,7 @@ export interface FileRouteTypes {
     | '/_authenticated/loans'
     | '/_authenticated/opening-balances'
     | '/_authenticated/owners'
+    | '/_authenticated/preferences'
     | '/_authenticated/purchases'
     | '/_authenticated/reports'
     | '/_authenticated/salaries'
@@ -544,6 +557,13 @@ declare module '@tanstack/react-router' {
       path: '/owners'
       fullPath: '/owners'
       preLoaderRoute: typeof AuthenticatedOwnersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/preferences': {
+      id: '/_authenticated/preferences'
+      path: '/preferences'
+      fullPath: '/preferences'
+      preLoaderRoute: typeof AuthenticatedPreferencesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/purchases': {
@@ -731,6 +751,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedLoansRoute: typeof AuthenticatedLoansRoute
   AuthenticatedOpeningBalancesRoute: typeof AuthenticatedOpeningBalancesRoute
   AuthenticatedOwnersRoute: typeof AuthenticatedOwnersRoute
+  AuthenticatedPreferencesRoute: typeof AuthenticatedPreferencesRoute
   AuthenticatedPurchasesRoute: typeof AuthenticatedPurchasesRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSalariesRoute: typeof AuthenticatedSalariesRoute
@@ -760,6 +781,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedLoansRoute: AuthenticatedLoansRoute,
   AuthenticatedOpeningBalancesRoute: AuthenticatedOpeningBalancesRoute,
   AuthenticatedOwnersRoute: AuthenticatedOwnersRoute,
+  AuthenticatedPreferencesRoute: AuthenticatedPreferencesRoute,
   AuthenticatedPurchasesRoute: AuthenticatedPurchasesRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSalariesRoute: AuthenticatedSalariesRoute,

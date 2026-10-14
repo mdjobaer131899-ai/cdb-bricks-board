@@ -65,7 +65,7 @@ export interface AIResponse {
 
 type Row = Record<string, any>;
 
-interface CustomerLine {
+export interface CustomerLine {
   id: string;
   name: string;
   phone: string;
@@ -75,7 +75,7 @@ interface CustomerLine {
   balance: number; // > 0 গ্রাহকের কাছে পাবো, < 0 গ্রাহক অগ্রিম দিয়েছে
 }
 
-interface SardarLine {
+export interface SardarLine {
   id: string;
   name: string;
   phone: string;
@@ -89,7 +89,7 @@ interface SardarLine {
   due: number; // > 0 সর্দার পাবে, < 0 সর্দারের কাছে অগ্রিম
 }
 
-interface WorkerLine {
+export interface WorkerLine {
   id: string;
   name: string;
   phone: string;
@@ -103,7 +103,7 @@ interface WorkerLine {
   paidSeason: number;
 }
 
-interface SupplierLine {
+export interface SupplierLine {
   id: string;
   name: string;
   phone: string;
@@ -121,7 +121,7 @@ interface CashSummary {
   incomeBreakdown: Record<string, number>;
 }
 
-interface KilnSnapshot {
+export interface KilnSnapshot {
   today: string;
   yesterday: string;
   monthStart: string;
@@ -283,7 +283,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     safeRows("গ্রাহকের জমা", failed,
       db.from("collections").select("customer_id,amount").is("contract_id", null).limit(20000)),
     safeRows("চালান", failed,
-      sdbx.from("sales_entries").select("challan_no,customer_id,brick_type_id,quantity,total_amount,sale_date,status,sale_type").limit(20000)),
+      sdbx.from("sales_entries").select("id,challan_no,customer_id,brick_type_id,quantity,total_amount,sale_date,status,sale_type").limit(20000)),
     safeRows("কালেকশন", failed,
       sdbx.from("collections").select("customer_id,amount,payment_date,method,contract_id").limit(20000)),
     safeRows("খরচ", failed, sdbx.from("expenses").select("category,amount,expense_date,note").limit(20000)),
@@ -473,12 +473,26 @@ async function getSnapshot(force = false): Promise<KilnSnapshot> {
   return snapshotInFlight;
 }
 
+/** ড্যাশবোর্ড ও অন্য পাতা একই খাতা ব্যবহার করে, যাতে AI আর পাতার সংখ্যা সবসময় মেলে */
+export function getKilnSnapshot(force = false): Promise<KilnSnapshot> {
+  return getSnapshot(force);
+}
+
 // লগইন হলেই আগে থেকে খাতা পড়ে রাখা, যাতে প্রথম প্রশ্নেও দেরি না হয়
 if (typeof window !== "undefined") {
   try {
-    supabase.auth.onAuthStateChange((_event: unknown, session: unknown) => {
-      if (session) setTimeout(() => void getSnapshot(true).catch(() => undefined), 500);
-      else clearAiCache();
+    // শুধু নতুন লগইনে একবার পড়ে; ব্রাউজারে ফিরে আসা বা টোকেন নবায়নে নয়
+    let warmedFor: string | null = null;
+    supabase.auth.onAuthStateChange((_event: unknown, session: any) => {
+      const id: string | null = session?.user?.id ?? null;
+      if (!id) {
+        warmedFor = null;
+        clearAiCache();
+        return;
+      }
+      if (id === warmedFor) return;
+      warmedFor = id;
+      setTimeout(() => void getSnapshot(true).catch(() => undefined), 500);
     });
   } catch {
     // উপেক্ষা
@@ -489,7 +503,7 @@ if (typeof window !== "undefined") {
 // ২. আবহাওয়া (কাপাসিয়া, গাজীপুর — Open-Meteo, ১০ মিনিট মনে রাখে)
 // ============================================================
 
-interface WeatherInfo {
+export interface WeatherInfo {
   temp: number;
   feels: number;
   humidity: number;
@@ -617,6 +631,13 @@ async function getWeather(): Promise<WeatherInfo | null> {
     clearTimeout(timer);
   }
 }
+
+/** কাপাসিয়ার আবহাওয়া (১০ মিনিট মনে রাখে) */
+export function getKilnWeather(): Promise<WeatherInfo | null> {
+  return getWeather();
+}
+
+export { weatherText as kilnWeatherText, bnTime as kilnBnTime };
 
 function weatherReply(w: WeatherInfo, msg: string): string {
   const wantsTomorrow = hasAny(msg, ["আগামীকাল", "আগামী কাল", "কালকে", "কাল কি", "কাল কেমন", "tomorrow"]);

@@ -1,283 +1,446 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Package,
-  CheckCircle2,
-  MapPin,
-  CalendarDays,
-  Building2,
-  CloudRain,
-  Sun,
-  Cloud,
-  CloudLightning,
-  BellRing,
-  Droplets,
-} from "lucide-react";
-import { DateRangeFilter, type DateRange } from "@/components/date-range-filter";
-import { RecentSalesTable } from "@/components/recent-sales-table";
-import { Badge } from "@/components/ui/badge";
-import { fetchSales } from "@/lib/sales-queries";
-import { bn, isoDate } from "@/lib/format";
-import { AiAssistantFab } from "@/components/ai-assistant-fab";
-import { StockSummaryCard } from "@/components/stock-summary-card";
-import { DashboardToday } from "@/components/dashboard-today";
-import { BrandLogo } from "@/components/brand-logo";
-import { CashBalanceChip } from "@/components/cash-balance-chip";
+import { Link } from "@tanstack/react-router";
+import { Banknote, ChevronRight, Cloud, CloudLightning, CloudRain, FilePlus2, Layers, Receipt, Sun } from "lucide-react";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/brand-logo";
+import { Skeleton } from "@/components/ui/skeleton";
+import { bn, isoDate } from "@/lib/format";
+import { fetchCashHistory } from "@/lib/cash-queries";
+import {
+  getKilnSnapshot,
+  getKilnWeather,
+  kilnBnTime,
+  type KilnSnapshot,
+  type WeatherInfo,
+} from "@/services/gemini";
 
-interface WeatherData {
-  temp: number;
-  rainProb: number;
-  weatherCode: number;
-  nextRainHour: string | null;
-  isRainingNow: boolean;
-}
+/* =========================================================
+   অ্যাডমিন ড্যাশবোর্ড
+   সব সংখ্যা আসে একই খাতা থেকে (services/gemini.ts → getKilnSnapshot),
+   তাই AI সহকারী আর এই পাতা সবসময় একই হিসাব দেখায়।
+   ========================================================= */
 
-/**
- * কাপাসিয়া, গাজীপুরের (24.1023° N, 90.5694° E) লাইভ আবহাওয়া ও বৃষ্টির পূর্বাভাস
- */
-function LiveWeatherWidget() {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [notifEnabled, setNotifEnabled] = useState(false);
+const tk = (n: number) => `৳${bn(Math.round(n))}`;
+const sum = <T,>(rows: T[], pick: (r: T) => number) => rows.reduce((a, r) => a + (Number(pick(r)) || 0), 0);
+const LOW_STOCK = 10000;
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      setNotifEnabled(Notification.permission === "granted");
-    }
-
-    async function loadWeather() {
-      try {
-        // কাপাসিয়া, গাজীপুরের জিপিএস কোঅর্ডিনেট
-        const url =
-          "https://api.open-meteo.com/v1/forecast?latitude=24.1023&longitude=90.5694&current=temperature_2m,precipitation,weather_code&hourly=precipitation_probability,precipitation&timezone=Asia%2FDhaka&forecast_days=1";
-        const res = await fetch(url);
-        const data = await res.json();
-
-        const currentTemp = Math.round(data?.current?.temperature_2m ?? 30);
-        const currentCode = data?.current?.weather_code ?? 0;
-        const currentPrecip = data?.current?.precipitation ?? 0;
-
-        const nowHour = new Date().getHours();
-        const probs: number[] = data?.hourly?.precipitation_probability ?? [];
-        const times: string[] = data?.hourly?.time ?? [];
-
-        // পরবর্তী ১২ ঘণ্টার মধ্যে সর্বোচ্চ বৃষ্টির সম্ভাবনা ও সময় বের করা
-        let maxProb = probs[nowHour] ?? 0;
-        let rainTimeStr: string | null = null;
-
-        for (let i = nowHour; i < Math.min(nowHour + 12, probs.length); i++) {
-          if (probs[i] > maxProb) maxProb = probs[i];
-          if (!rainTimeStr && probs[i] >= 50) {
-            const dt = new Date(times[i]);
-            rainTimeStr = dt.toLocaleTimeString("bn-BD", {
-              hour: "numeric",
-              minute: "2-digit",
-            });
-          }
-        }
-
-        const isRaining = currentPrecip > 0 || currentCode >= 51;
-
-        const wInfo: WeatherData = {
-          temp: currentTemp,
-          rainProb: maxProb,
-          weatherCode: currentCode,
-          nextRainHour: rainTimeStr,
-          isRainingNow: isRaining,
-        };
-        setWeather(wInfo);
-
-        // যদি বৃষ্টির সম্ভাবনা ৫০% বা তার বেশি হয়, তবে মোবাইলে সতর্কবার্তা পাঠানো
-        const alertKey = `cdb-rain-alert-${new Date().toDateString()}-${nowHour}`;
-        if ((isRaining || maxProb >= 50) && !sessionStorage.getItem(alertKey)) {
-          sessionStorage.setItem(alertKey, "1");
-          const msg = isRaining
-            ? `⚠️ কাপাসিয়ায় এখন বৃষ্টি হচ্ছে! কাঁচা ইট দ্রুত পলিথিন দিয়ে ঢেকে দিন।`
-            : `🌧️ সতর্কতা: আজ ${rainTimeStr || "শীঘ্রই"} বৃষ্টির সম্ভাবনা ${bn(maxProb)}%! কাঁচা ইট নিরাপদে রাখুন।`;
-
-          toast.warning(msg, { duration: 10000 });
-
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("CDB Bricks — বৃষ্টির সতর্কবার্তা 🌧️", {
-              body: msg,
-              icon: "/cdb-logo.svg",
-            });
-          }
-        }
-      } catch (e) {
-        console.warn("Weather load error:", e);
-      }
-    }
-
-    loadWeather();
-    const timer = setInterval(loadWeather, 15 * 60 * 1000); // প্রতি ১৫ মিনিটে লাইভ আপডেট
-    return () => clearInterval(timer);
-  }, []);
-
-  const enableNotifications = async () => {
-    if (!("Notification" in window)) {
-      toast.info("আপনার ব্রাউজারে পপ-আপ অ্যালার্ট চালু আছে!");
-      return;
-    }
-    const perm = await Notification.requestPermission();
-    if (perm === "granted") {
-      setNotifEnabled(true);
-      toast.success("বৃষ্টির লাইভ নোটিফিকেশন চালু হয়েছে!");
-      new Notification("CDB Bricks আবহাওয়া সতর্কতা চালু হয়েছে ✅", {
-        body: "বৃষ্টির সম্ভাবনা দেখা দিলেই আপনার মোবাইলে অ্যালার্ট চলে আসবে।",
-      });
-    } else {
-      toast.info("অ্যাপের ভেতর অটোমেটিক বৃষ্টির সতর্কবার্তা চালু আছে!");
-    }
-  };
-
-  if (!weather) {
-    return (
-      <div className="rounded-xl bg-white/5 border border-white/10 px-2.5 py-1.5 text-[11px] text-slate-300 animate-pulse">
-        আবহাওয়া লোড হচ্ছে...
-      </div>
-    );
-  }
-
-  const isDanger = weather.isRainingNow || weather.rainProb >= 50;
-
+function SectionCard({ title, action, children, className = "" }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <button
-      type="button"
-      onClick={enableNotifications}
-      title="বৃষ্টির নোটিফিকেশন চালু করতে ট্যাপ করুন"
-      className={`flex flex-col items-end justify-center rounded-xl border px-2.5 py-1.5 text-right transition-all active:scale-95 ${
-        isDanger
-          ? "bg-rose-950/80 border-rose-500/60 text-rose-100 shadow-md shadow-rose-950/50 animate-pulse"
-          : "bg-slate-950/70 border-amber-500/30 text-slate-100 hover:border-amber-400"
-      }`}
-    >
-      {/* তাপমাত্রা ও আইকন */}
-      <div className="flex items-center gap-1.5">
-        {weather.isRainingNow ? (
-          <CloudLightning className="h-4 w-4 text-rose-400 shrink-0" />
-        ) : weather.rainProb >= 40 ? (
-          <CloudRain className="h-4 w-4 text-sky-400 shrink-0" />
-        ) : weather.weatherCode >= 2 ? (
-          <Cloud className="h-4 w-4 text-slate-300 shrink-0" />
-        ) : (
-          <Sun className="h-4 w-4 text-amber-400 shrink-0" />
-        )}
-        <span className="text-sm font-black tracking-tight text-white">
-          {bn(weather.temp)}°C
-        </span>
-        {!notifEnabled && (
-          <BellRing className="h-3 w-3 text-amber-400 ml-0.5" />
-        )}
+    <section className={`rounded-2xl border bg-card p-4 ${className}`}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="section-label">{title}</h2>
+        {action}
       </div>
-
-      {/* বৃষ্টির সম্ভাবনা */}
-      <div className="flex items-center gap-1 text-[10px] font-bold mt-0.5">
-        <Droplets className="h-2.5 w-2.5 text-sky-400 shrink-0" />
-        <span className={isDanger ? "text-rose-300" : "text-sky-300"}>
-          বৃষ্টি: {bn(weather.rainProb)}%
-        </span>
-      </div>
-
-      {/* কখন বৃষ্টি হতে পারে */}
-      <div className="text-[9.5px] font-medium text-amber-200/90 leading-tight mt-0.5">
-        {weather.isRainingNow
-          ? "⚠️ এখন বৃষ্টি হচ্ছে!"
-          : weather.nextRainHour
-          ? `🌧️ সম্ভাব্য: ${weather.nextRainHour}`
-          : "☀️ ভাটার আবহাওয়া অনুকূল"}
-      </div>
-    </button>
+      {children}
+    </section>
   );
 }
 
-export function AdminDashboard({ navGrid }: { navGrid?: React.ReactNode }) {
-  const today = useMemo(() => new Date(), []);
-  const [range, setRange] = useState<DateRange>({ from: today, to: today });
-  const from = isoDate(range.from);
-  const to = isoDate(range.to);
+function MoreLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to as never} className="inline-flex items-center gap-0.5 text-sm font-bold text-primary hover:underline">
+      {children}
+      <ChevronRight className="h-4 w-4" />
+    </Link>
+  );
+}
 
-  const salesQ = useQuery({
-    queryKey: ["sales", "admin", from, to],
-    queryFn: () => fetchSales({ from, to }),
+/* ---------- হাতে নগদ (গাঢ় কার্ড) ---------- */
+function CashHero({ s, weather }: { s: KilnSnapshot; weather: WeatherInfo | null }) {
+  const today = s.today;
+  const weekAgo = isoDate(new Date(Date.now() - 6 * 86400000));
+  const histQ = useQuery({
+    queryKey: ["dash-cash-history", weekAgo, today],
+    queryFn: () => fetchCashHistory({ from: weekAgo, to: today }),
   });
 
-  const sales = salesQ.data ?? [];
+  const net = s.cashSeason?.net ?? 0;
+  const todayIn = s.cashToday?.income ?? 0;
+  const todayOut = s.cashToday?.expense ?? 0;
+
+  // গত ৭ দিনের দিনশেষের ক্যাশ: আজকের ক্যাশ থেকে পেছনে হিসাব
+  const points = useMemo(() => {
+    const rows = histQ.data ?? [];
+    const days: string[] = [];
+    for (let i = 6; i >= 0; i--) days.push(isoDate(new Date(Date.now() - i * 86400000)));
+    const dayNet = new Map<string, number>();
+    for (const r of rows) dayNet.set(r.date, (dayNet.get(r.date) ?? 0) + (r.dir === "in" ? r.amount : -r.amount));
+    const closing: number[] = new Array(7).fill(0);
+    let running = net;
+    for (let i = 6; i >= 0; i--) {
+      closing[i] = running;
+      running -= dayNet.get(days[i]) ?? 0;
+    }
+    return closing;
+  }, [histQ.data, net]);
+
+  const spark = useMemo(() => {
+    const min = Math.min(...points);
+    const max = Math.max(...points);
+    const span = max - min || 1;
+    return points.map((v, i) => `${2 + i * 15.3},${36 - ((v - min) / span) * 30}`).join(" ");
+  }, [points]);
+  const last = spark.split(" ").pop()?.split(",") ?? ["94", "6"];
+  const rising = points[6] >= points[0];
+
+  const WeatherIcon = !weather
+    ? Sun
+    : weather.precipNow > 0 || weather.code >= 95
+      ? CloudLightning
+      : weather.todayRainProb >= 40
+        ? CloudRain
+        : weather.code >= 2
+          ? Cloud
+          : Sun;
 
   return (
-    <div className="space-y-5">
-      {/* ইন্ডাস্ট্রিয়াল কমার্শিয়াল এক্সিকিউটিভ ব্যানার */}
-      <div className="relative overflow-hidden rounded-2xl border-2 border-slate-800/80 bg-gradient-to-br from-slate-950 via-[#261008] to-slate-950 p-3.5 sm:p-4 text-white shadow-xl">
-        <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-orange-500/15 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-10 -left-10 h-36 w-36 rounded-full bg-amber-500/10 blur-2xl" />
+    <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold tracking-[0.12em] text-stone-300">হাতে নগদ · মূল ক্যাশ</span>
+        <span className="flex items-center gap-1.5 rounded-full bg-amber-200/10 px-2.5 py-0.5 text-xs font-semibold text-amber-200">
+          <WeatherIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          {weather ? `${bn(weather.temp)}° · বৃষ্টি ${bn(weather.todayRainProb)}%` : "আবহাওয়া…"}
+        </span>
+      </div>
 
-        <div className="relative space-y-3">
-          {/* উপরের সারি: বামে লোগো ও নাম, ডানে লাইভ আবহাওয়া ও বৃষ্টির অ্যালার্ট */}
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-3 min-w-0">
-              <BrandLogo size="lg" className="shrink-0 ring-2 ring-orange-500/50 rounded-xl" />
-              <div className="min-w-0">
-                <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 border border-amber-400/30 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-amber-300">
-                  <Building2 className="h-2.5 w-2.5" /> Industrial ERP
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <Link to="/cash-book" className="font-display num text-[42px] font-extrabold leading-[0.95] tracking-tight text-ink-foreground">
+          {tk(net)}
+        </Link>
+        <svg width="96" height="40" viewBox="0 0 96 40" role="img" aria-label={rising ? "গত ৭ দিনে ক্যাশ বেড়েছে" : "গত ৭ দিনে ক্যাশ কমেছে"} className="shrink-0">
+          <polyline points={spark} fill="none" stroke={rising ? "#FB923C" : "#FCA5A5"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={last[0]} cy={last[1]} r="3.5" fill={rising ? "#FB923C" : "#FCA5A5"} />
+        </svg>
+      </div>
+
+      <div className="mt-3.5 grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
+          <div className="text-xs font-semibold text-emerald-200">আজ এসেছে</div>
+          <div className="num text-lg font-bold text-emerald-300">+{tk(todayIn)}</div>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
+          <div className="text-xs font-semibold text-red-200">আজ গেছে</div>
+          <div className="num text-lg font-bold text-red-300">−{tk(todayOut)}</div>
+        </div>
+      </div>
+      {net < 0 && (
+        <p className="mt-2 text-xs font-semibold text-red-200">ক্যাশ ঋণাত্মক দেখাচ্ছে, ক্যাশ বইয়ের এন্ট্রি একবার মিলিয়ে নিন।</p>
+      )}
+    </section>
+  );
+}
+
+/* ---------- বৃষ্টির সতর্কতা ---------- */
+function RainAlert({ weather }: { weather: WeatherInfo | null }) {
+  const raining = !!weather && (weather.precipNow > 0 || (weather.code >= 51 && weather.code <= 99));
+  const show = !!weather && (raining || weather.todayRainProb >= 50 || !!weather.nextRainTime);
+
+  useEffect(() => {
+    if (!show || !weather) return;
+    const key = `cdb-rain-alert-${new Date().toDateString()}-${new Date().getHours()}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch {
+      /* উপেক্ষা */
+    }
+    const msg = raining ? "এখন বৃষ্টি হচ্ছে! কাঁচা ইট দ্রুত ঢেকে দিন।" : "আজ বৃষ্টির সম্ভাবনা আছে, কাঁচা ইট নিরাপদে রাখুন।";
+    toast.warning(msg, { duration: 8000 });
+  }, [show, raining, weather]);
+
+  if (!show || !weather) return null;
+  return (
+    <section className="flex items-center gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 dark:border-amber-700/60 dark:bg-amber-950/40">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 dark:bg-amber-900/50">
+        <CloudRain className="h-5 w-5 text-amber-800 dark:text-amber-300" aria-hidden="true" />
+      </span>
+      <p className="text-sm leading-snug text-amber-900 dark:text-amber-100">
+        <b className="font-bold">
+          {raining
+            ? "এখন বৃষ্টি হচ্ছে"
+            : weather.nextRainTime
+              ? `${kilnBnTime(weather.nextRainTime)} নাগাদ বৃষ্টির সম্ভাবনা`
+              : `আজ বৃষ্টির সম্ভাবনা ${bn(weather.todayRainProb)}%`}
+        </b>{" "}
+        · কাঁচা ইট ঢেকে রাখুন
+      </p>
+    </section>
+  );
+}
+
+/* ---------- দ্রুত কাজের বাটন ---------- */
+function QuickActions() {
+  const items = [
+    { to: "/entries/new", label: "নতুন চালান", icon: FilePlus2, primary: true, chip: "bg-white/15", color: "text-white" },
+    { to: "/collections", label: "জমা নিন", icon: Banknote, chip: "bg-emerald-50 dark:bg-emerald-950/50", color: "text-emerald-700 dark:text-emerald-300" },
+    { to: "/cash-book", label: "খরচ", icon: Receipt, chip: "bg-red-50 dark:bg-red-950/50", color: "text-red-700 dark:text-red-300" },
+    { to: "/production-steps/kacha", label: "কাঁচা ইট", icon: Layers, chip: "bg-stone-100 dark:bg-stone-800", color: "text-stone-700 dark:text-stone-200" },
+  ];
+  return (
+    <section className="grid grid-cols-4 gap-2">
+      {items.map((it) => (
+        <Link
+          key={it.to}
+          to={it.to as never}
+          className={`flex min-h-[84px] flex-col items-center justify-center gap-1.5 rounded-2xl px-1 py-2.5 text-center transition active:scale-95 ${
+            it.primary ? "bg-primary text-primary-foreground" : "border bg-card text-foreground"
+          }`}
+        >
+          <span className={`grid h-9 w-9 place-items-center rounded-[11px] ${it.chip}`}>
+            <it.icon className={`h-5 w-5 ${it.color}`} aria-hidden="true" />
+          </span>
+          <span className="text-[13px] font-bold leading-tight">{it.label}</span>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+/* ---------- আজকের হিসাব ---------- */
+function TodayStrip({ s }: { s: KilnSnapshot }) {
+  const t = s.today;
+  const sales = s.sales.filter((r) => r.sale_date === t && r.status !== "rejected");
+  const pendingAll = s.sales.filter((r) => r.status === "pending").length;
+  const exp = s.expenses.filter((r) => r.expense_date === t);
+  const customers = new Set(sales.map((r) => r.customer_id)).size;
+  const cats = new Set(exp.map((r) => r.category || "অন্যান্য")).size;
+
+  return (
+    <SectionCard
+      title="আজকের হিসাব"
+      action={
+        pendingAll > 0 ? (
+          <Link to="/approvals" className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+            {bn(pendingAll)}টি অনুমোদন বাকি
+          </Link>
+        ) : undefined
+      }
+    >
+      <div className="grid grid-cols-3">
+        <div className="flex flex-col gap-0.5 border-r pr-2.5">
+          <span className="text-[13px] text-muted-foreground">বিক্রি</span>
+          <span className="font-display num text-[22px] font-bold leading-tight">{tk(sum(sales, (r) => r.total_amount))}</span>
+          <span className="text-xs text-muted-foreground">{bn(sum(sales, (r) => r.quantity))} পিস</span>
+        </div>
+        <div className="flex flex-col gap-0.5 border-r px-2.5">
+          <span className="text-[13px] text-muted-foreground">চালান</span>
+          <span className="font-display num text-[22px] font-bold leading-tight">{bn(sales.length)}টি</span>
+          <span className="text-xs text-muted-foreground">{bn(customers)} জন গ্রাহক</span>
+        </div>
+        <div className="flex flex-col gap-0.5 pl-2.5">
+          <span className="text-[13px] text-muted-foreground">খরচ</span>
+          <span className="font-display num text-[22px] font-bold leading-tight text-destructive">{tk(sum(exp, (r) => r.amount))}</span>
+          <span className="text-xs text-muted-foreground">{bn(cats)}টি খাতে</span>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+/* ---------- উৎপাদন লাইন ---------- */
+function ProductionLine({ s }: { s: KilnSnapshot }) {
+  const rows = s.kacha.filter((r) => r.entry_date === s.today);
+  const q = (type: string) => sum(rows.filter((r) => r.entry_type === type), (r) => r.quantity);
+  const steps = [
+    { n: "১", label: "কাঁচা ইট", value: q("production"), ring: "border-stone-400 bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200", to: "/production-steps/kacha" },
+    { n: "২", label: "ভাটায় ঢোকানো", value: q("load"), ring: "border-orange-600 bg-orange-50 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300", to: "/production-steps/load" },
+    { n: "৩", label: "পাকা বের", value: q("unload"), ring: "border-primary bg-primary text-primary-foreground", to: "/production-steps/unload" },
+  ];
+  return (
+    <SectionCard title="উৎপাদন লাইন · আজ" action={<MoreLink to="/production-steps/kacha">বিস্তারিত</MoreLink>}>
+      <div className="flex items-start">
+        {steps.map((st, i) => (
+          <div key={st.n} className="contents">
+            {i > 0 && <div className="mt-5 h-0.5 w-5 shrink-0 bg-border" aria-hidden="true" />}
+            <Link to={st.to as never} className="flex flex-1 flex-col items-center gap-1.5 text-center">
+              <span className={`grid h-10 w-10 place-items-center rounded-full border-2 text-[13px] font-bold ${st.ring}`}>{st.n}</span>
+              <span className="font-display num text-lg font-bold leading-none">{bn(st.value)}</span>
+              <span className="text-xs font-semibold text-muted-foreground">{st.label}</span>
+            </Link>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+/* ---------- পাওনা-দেনা ---------- */
+function MoneyTiles({ s }: { s: KilnSnapshot }) {
+  const dues = s.customers.filter((c) => c.balance > 0.5);
+  const adv = s.customers.filter((c) => c.balance < -0.5);
+  const sardarOwed = s.sardars.filter((x) => x.due > 0.5);
+  const supplierOwed = s.suppliers.filter((x) => x.due > 0.5);
+  const tiles = [
+    { label: "গ্রাহকের বাকি", dot: "bg-amber-600", color: "text-amber-700 dark:text-amber-400", value: sum(dues, (c) => c.balance), sub: `${bn(dues.length)} জন · আমরা পাবো`, to: "/collections" },
+    { label: "গ্রাহকের অগ্রিম", dot: "bg-blue-600", color: "text-blue-700 dark:text-blue-300", value: sum(adv, (c) => -c.balance), sub: `${bn(adv.length)} জন · ইট দেওয়া বাকি`, to: "/advance-sales" },
+    { label: "সর্দার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(sardarOwed, (x) => x.due), sub: `${bn(sardarOwed.length)} জন সর্দার`, to: "/sardars" },
+    { label: "সাপ্লায়ার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(supplierOwed, (x) => x.due), sub: `${bn(supplierOwed.length)} জন সাপ্লায়ার`, to: "/purchases" },
+  ];
+  return (
+    <section className="grid grid-cols-2 gap-2.5">
+      {tiles.map((t) => (
+        <Link key={t.label} to={t.to as never} className="flex flex-col gap-1 rounded-2xl border bg-card p-3.5 transition active:scale-[0.98]">
+          <span className="flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground">
+            <span className={`h-2 w-2 rounded-full ${t.dot}`} aria-hidden="true" />
+            {t.label}
+          </span>
+          <span className={`font-display num text-2xl font-extrabold leading-tight ${t.color}`}>{tk(t.value)}</span>
+          <span className="text-xs text-muted-foreground">{t.sub}</span>
+        </Link>
+      ))}
+    </section>
+  );
+}
+
+/* ---------- পাকা ইটের স্টক ---------- */
+const STOCK_COLORS = ["bg-primary", "bg-amber-500", "bg-stone-400", "bg-teal-600", "bg-sky-600", "bg-rose-400"];
+
+function StockCard({ s }: { s: KilnSnapshot }) {
+  const items = s.stock.filter((x) => x.qty > 0).sort((a, b) => b.qty - a.qty);
+  const total = sum(items, (x) => x.qty);
+  return (
+    <SectionCard title="পাকা ইটের স্টক" action={<span className="font-display num text-lg font-bold">{bn(total)} পিস</span>}>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">স্টকে এখন কোনো পাকা ইট নেই।</p>
+      ) : (
+        <>
+          <div className="flex h-3.5 gap-[3px] overflow-hidden rounded-full" aria-hidden="true">
+            {items.map((x, i) => (
+              <div key={x.name} className={STOCK_COLORS[i % STOCK_COLORS.length]} style={{ width: `${(x.qty / total) * 100}%` }} />
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {items.map((x, i) => (
+              <div key={x.name} className="flex flex-col">
+                <span className="flex items-center gap-1.5 text-[13px] font-semibold">
+                  <span className={`h-2.5 w-2.5 rounded-[3px] ${STOCK_COLORS[i % STOCK_COLORS.length]}`} aria-hidden="true" />
+                  {x.name}
                 </span>
-                <h1 className="mt-0.5 whitespace-nowrap bg-gradient-to-r from-white via-amber-200 to-orange-400 bg-clip-text text-xl sm:text-3xl font-black tracking-tight text-transparent">
-                  সি ডি বি ব্রিকস
-                </h1>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-300">
-                  <span className="inline-flex items-center gap-1 font-semibold text-amber-200/90">
-                    <MapPin className="h-3 w-3 text-orange-400" /> কাপাসিয়া, গাজীপুর
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-[10.5px] text-slate-300">
-                    <CalendarDays className="h-3 w-3 text-amber-400" />
-                    {today.toLocaleDateString("bn-BD", { day: "2-digit", month: "long", year: "numeric" })}
-                  </span>
-                </div>
+                <span className={`num text-[15px] font-bold ${x.qty < LOW_STOCK ? "text-destructive" : ""}`}>
+                  {bn(x.qty)}
+                  {x.qty < LOW_STOCK ? " · কম" : ""}
+                </span>
               </div>
-            </div>
-
-            {/* ডান পাশের উপরের খালি জায়গায় লাইভ আবহাওয়া বক্স */}
-            <div className="shrink-0">
-              <LiveWeatherWidget />
-            </div>
+            ))}
           </div>
+        </>
+      )}
+    </SectionCard>
+  );
+}
 
-          {/* নিচের সারি: পুরো চওড়া হাতে নগদ ব্যালেন্স */}
-          <div className="w-full pt-2 border-t border-white/10 flex justify-end [&>*]:w-full [&>*]:justify-between">
-            <CashBalanceChip />
-          </div>
+/* ---------- সাম্প্রতিক চালান ---------- */
+const STATUS: Record<string, { label: string; cls: string }> = {
+  approved: { label: "অনুমোদিত", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" },
+  pending: { label: "অপেক্ষায়", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200" },
+  rejected: { label: "বাতিল", cls: "bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300" },
+};
+
+function RecentChallans({ s }: { s: KilnSnapshot }) {
+  const nameOf = (id: string) => s.customers.find((c) => c.id === id)?.name ?? "অজানা গ্রাহক";
+  const brickOf = (id: string) => s.brickTypes.find((b) => b.id === id)?.name ?? "ইট";
+  const rows = [...s.sales]
+    .sort((a, b) => String(b.sale_date).localeCompare(String(a.sale_date)) || String(b.challan_no).localeCompare(String(a.challan_no)))
+    .slice(0, 5);
+  return (
+    <SectionCard title="সাম্প্রতিক চালান" action={<MoreLink to="/challans">সব দেখুন</MoreLink>} className="pb-1">
+      {rows.length === 0 ? (
+        <p className="pb-3 text-sm text-muted-foreground">এখনো কোনো চালান নেই।</p>
+      ) : (
+        <ul className="divide-y">
+          {rows.map((r) => {
+            const name = nameOf(r.customer_id);
+            const st = STATUS[r.status] ?? STATUS.pending;
+            return (
+              <li key={r.id ?? r.challan_no}>
+                <Link to="/challans/$id" params={{ id: String(r.id) }} className="flex items-center gap-3 py-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted text-[15px] font-bold text-muted-foreground">
+                    {name.trim().charAt(0).toUpperCase()}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-[15px] font-bold">{name}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {brickOf(r.brick_type_id)} · {bn(r.quantity)} পিস{r.challan_no ? ` · ${r.challan_no}` : ""}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="num text-[15px] font-bold">{Number(r.total_amount) > 0 ? tk(Number(r.total_amount)) : "—"}</span>
+                    <span className={`rounded-full px-2 text-[11px] font-bold ${st.cls}`}>{st.label}</span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
+
+/* ---------- মূল পাতা ---------- */
+export function AdminDashboard({ navGrid }: { navGrid?: ReactNode }) {
+  const snapQ = useQuery({
+    queryKey: ["kiln-snapshot"],
+    queryFn: () => getKilnSnapshot(true),
+    refetchInterval: 60_000,
+  });
+  const weatherQ = useQuery({
+    queryKey: ["kiln-weather"],
+    queryFn: () => getKilnWeather(),
+    refetchInterval: 15 * 60_000,
+  });
+
+  const s = snapQ.data;
+  const weather = weatherQ.data ?? null;
+  const dateLabel = new Date().toLocaleDateString("bn-BD", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Dhaka" });
+
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-3.5">
+      <div className="flex items-center gap-3 px-0.5 pt-1">
+        <BrandLogo size="sm" className="shrink-0" />
+        <div className="min-w-0">
+          <h1 className="font-display text-xl font-extrabold leading-tight">সি ডি বি ব্রিকস</h1>
+          <p className="truncate text-xs font-semibold text-muted-foreground">কাপাসিয়া, গাজীপুর · {dateLabel}</p>
         </div>
       </div>
 
-      {/* মোবাইল ইন্ডাস্ট্রিয়াল নেভিগেশন গ্রিড */}
-      {navGrid}
-
-      {/* আজকের সারসংক্ষেপ */}
-      <DashboardToday />
-
-      {/* ইটের স্টক সামারি */}
-      <StockSummaryCard />
-
-      {/* নির্বাচিত পরিসরের বিক্রয় তালিকা */}
-      <section className="space-y-3 rounded-2xl border-2 border-slate-200 dark:border-slate-800 bg-card p-3.5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
-          <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-orange-600 text-white">
-              <Package className="h-4 w-4" />
-            </span>
-            <h2 className="text-sm font-extrabold uppercase tracking-wide text-foreground">
-              নির্বাচিত পরিসরের বিক্রয়
-            </h2>
-            <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
-              <CheckCircle2 className="h-3 w-3" />
-              {bn(sales.length)} চালান
-            </Badge>
+      {!s ? (
+        <div className="space-y-3.5">
+          <Skeleton className="h-[188px] rounded-[20px]" />
+          <div className="grid grid-cols-4 gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[84px] rounded-2xl" />
+            ))}
           </div>
-          <DateRangeFilter value={range} onChange={setRange} />
+          <Skeleton className="h-28 rounded-2xl" />
+          <Skeleton className="h-36 rounded-2xl" />
         </div>
-        <RecentSalesTable entries={sales} loading={salesQ.isLoading} isAdmin />
-      </section>
+      ) : (
+        <div className="grid gap-3.5 lg:grid-cols-2 lg:items-start">
+          <div className="space-y-3.5">
+            <CashHero s={s} weather={weather} />
+            <RainAlert weather={weather} />
+            <QuickActions />
+            <TodayStrip s={s} />
+            <ProductionLine s={s} />
+          </div>
+          <div className="space-y-3.5">
+            <MoneyTiles s={s} />
+            <StockCard s={s} />
+            <RecentChallans s={s} />
+          </div>
+        </div>
+      )}
 
-      <AiAssistantFab />
+      {navGrid && (
+        <div className="pt-2">
+          <h2 className="section-label mb-3 px-1 lg:hidden">সব মেনু</h2>
+          {navGrid}
+        </div>
+      )}
+
     </div>
   );
 }

@@ -18,10 +18,11 @@ export function SeasonProgressCard() {
       if (!s) return null;
       const to = isoDate(new Date());
       const { data: prod } = await supabase
-        .from("production_entries")
+        .from("kacha_brick_entries")
         .select("quantity")
-        .gte("production_date", s.start_date)
-        .lte("production_date", to);
+        .eq("entry_type", "production")
+        .gte("entry_date", s.start_date)
+        .lte("entry_date", to);
       const actual = (prod ?? []).reduce((a, r: any) => a + Number(r.quantity || 0), 0);
       const target = Number(s.target_production || 0);
       const days = Math.max(0, Math.floor((new Date(to).getTime() - new Date(s.start_date).getTime()) / 86400000)) + 1;

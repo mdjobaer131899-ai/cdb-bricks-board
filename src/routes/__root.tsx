@@ -27,7 +27,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@300;400;500;600;700;800&family=Hind+Siliguri:wght@300;400;500;600;700&display=swap" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Baloo+Da+2:wght@600;700;800&family=Noto+Sans+Bengali:wght@400;600;700&display=swap" },
       { rel: "stylesheet", href: appCss },
     ],
   }),
@@ -58,6 +58,7 @@ function AuthSync() {
   const href = useRouterState({ select: (state) => state.location.href });
   const [userId, setUserId] = useState<string | null>(null);
   const restoredUserId = useRef<string | null>(null);
+  const knownUserId = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     const {
@@ -70,7 +71,14 @@ function AuthSync() {
         restoredUserId.current = null;
       }
 
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      // ব্রাউজারে ফিরে আসলে Supabase আবার "SIGNED_IN" পাঠায় — একই ইউজার হলে
+      // কিছুই নতুন করে লোড করা হয় না, তাই পাতা যেমন ছিল তেমনই থাকে।
+      const firstTime = knownUserId.current === undefined;
+      const changed = !firstTime && knownUserId.current !== nextUserId;
+      knownUserId.current = nextUserId;
+      if (firstTime || !changed) {
+        if (event !== "USER_UPDATED") return;
+      }
       router.invalidate();
       if (event !== "SIGNED_OUT") qc.invalidateQueries();
     });
