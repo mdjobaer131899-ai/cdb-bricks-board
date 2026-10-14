@@ -176,15 +176,24 @@ function bnDate(iso: string): string {
 
 const sumBy = (rows: Row[], key: string) => rows.reduce((a, r) => a + num(r[key]), 0);
 
-function clean(s: string): string {
+/** একই বাংলা অক্ষর দুইভাবে টাইপ হতে পারে (য় = য+় ইত্যাদি), তাই এক রকম করে নেওয়া */
+function normBn(s: string): string {
   return (s || "")
+    .replace(/\u09AF\u09BC/g, "\u09DF")
+    .replace(/\u09A1\u09BC/g, "\u09DC")
+    .replace(/\u09A2\u09BC/g, "\u09DD")
+    .replace(/[\u200C\u200D]/g, "");
+}
+
+function clean(s: string): string {
+  return normBn(s || "")
     .toLowerCase()
     .replace(/[?？!！।,.;:'"()\[\]{}]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-const hasAny = (text: string, words: string[]) => words.some((w) => text.includes(w));
+const hasAny = (text: string, words: string[]) => words.some((w) => text.includes(normBn(w)));
 
 function listLines<T>(items: T[], render: (item: T, i: number) => string, max = 25): string {
   const shown = items.slice(0, max).map((it, i) => render(it, i));
@@ -1170,7 +1179,9 @@ function looksLikeEntry(rawMsg: string): boolean {
   const isQuestion =
     hasAny(padded, [" কত", " কি ", " কী ", " কে ", " কার", " কারা", " কেমন", " কোন", " নাকি "]) || /[?？]\s*$/.test(rawMsg.trim());
   if (hasAny(msg, W.entryVerbs) && !isQuestion) return true;
-  return hasNumber && hasAny(msg, W.entryVerbs);
+  if (hasNumber && hasAny(msg, W.entryVerbs)) return true;
+  // সংখ্যা + টাকা/ইট ধরনের শব্দ, কিন্তু প্রশ্ন নয় → নতুন এন্ট্রি (যেমন "রহিম ২০০০ ইট", "মাটি ৩০০০ টাকা")
+  return hasNumber && !isQuestion && hasAny(msg, ["টাকা", "৳", "ইট", "পিস", "হাজার", "দাদন", "পেমেন্ট", "খরচ", "জমা", "বিল", "চালান", "tk", "taka"]);
 }
 
 // ============================================================
