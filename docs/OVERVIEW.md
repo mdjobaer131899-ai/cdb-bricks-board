@@ -19,7 +19,7 @@
 | সার্ভার ফাংশন | `createServerFn` (`src/lib/*.functions.ts`), `/api/gemini-call` রুট |
 | AI | Google Gemini (`@google/genai`), প্রথমে Supabase ফাংশন `ai-brain`, না পেলে `/api/gemini-call` |
 | বিল্ড | Vite 7 + Nitro (`@lovable.dev/vite-tanstack-config`) |
-| উৎস | Lovable-এ তৈরি; GitHub `main`-এ push করলে Lovable-এ সিঙ্ক হয় |
+| কাজ ও চালানো | VS Code-এ Claude Code দিয়ে কোড লেখা হয়; GitHub `main`-এ push করলে Vercel-এ চলে |
 
 **ফোল্ডার কাঠামো:**
 
@@ -430,7 +430,9 @@ supabase/
 
 ## ৯. AGENTS.md-এর সাথে কোডের অমিল
 
-| AGENTS.md যা বলে | কোডে আসলে যা আছে |
+> ২০২৬-১০-১৬: নিচের তিনটি অমিল AGENTS.md-এ ঠিক করা হয়েছে। এখন AGENTS.md কোডের সাথে মেলে। টেবিলটা ইতিহাস হিসেবে রাখা হলো।
+
+| AGENTS.md আগে যা বলত | কোডে আসলে যা আছে |
 |---|---|
 | React Query staleTime ৬০ সেকেন্ড, ফোকাসে refetch নয় | [router.tsx](../src/router.tsx): staleTime ৩০ সেকেন্ড, `refetchOnWindowFocus: true`। আর যেকোনো mutation সফল হলে **সব** query invalidate হয় (`MutationCache.onSuccess`) |
 | AI লেখার টুল `src/lib/ai-write-tools.server.ts`-এ | এই ফাইল নেই। AI ব্রাউজার থেকে সরাসরি লেখে: `saveAiActionToDatabase` ([gemini.ts:1571](../src/services/gemini.ts#L1571))। "খাতায় সেভ" বোতাম চাপলে তবেই চলে |
@@ -450,4 +452,3 @@ supabase/
 8. RLS-এ পাতার অনুমতি আর চালান INSERT-এর স্ট্যাটাস যাচাই যোগ করা (নতুন migration দিয়ে)।
 9. `log_audit`-এর অনুমতি ফেরত দেওয়া, নয়তো ডাকা বন্ধ করা।
 10. "অন্যান্য" ইট আর আদলার দশমিক পরিমাণ ঠিক করা, আর manager-এর চালান এডিটের অনুমতি ঠিক করা।
-11. AGENTS.md হালনাগাদ করা।

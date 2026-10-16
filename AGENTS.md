@@ -1,7 +1,7 @@
 - Manager page access is governed by public.page_permissions (page_key = route URL) checked in the _authenticated layout guard and sidebar via src/lib/page-permissions.ts; admins bypass. Why: admin assigns per-page access.
 - Hand-cash/income-expense totals all come from fetchCashSummary in src/lib/cash-queries.ts; any new money table must be added there. Why: one consistent account across dashboard and reports.
 - Staff (daily workers, mestri, managers) share the workers table by role; daily pay = present days × daily_wage, salaried pay = months since join × monthly_salary. Why: reuse one payment ledger.
-- Global React Query defaults (staleTime 60s, no refetch on focus) and router preload 'intent' live in src/router.tsx; mutations must invalidateQueries to refresh. Why: instant page switching.
-- AI assistant write tools live in src/lib/ai-write-tools.server.ts and must only run after the user confirms in chat; they insert into the same tables the pages use. Why: AI entries must appear everywhere like manual ones.
-- Material/parts expenses go to purchases + supplier_payments (not expenses). Why: they must show on the supplier/material page.
+- Global React Query defaults (staleTime 30s, refetchOnWindowFocus true) and router preload 'intent' live in src/router.tsx; a MutationCache onSuccess there invalidates all queries (and clears the AI cache) after any useMutation succeeds, so writes made outside useMutation must call invalidateQueries themselves. Why: instant page switching.
+- AI assistant writes live in saveAiActionToDatabase in src/services/gemini.ts; it runs in the browser only after the user taps "খাতায় সেভ" in chat, and inserts into the same tables the pages use. Why: AI entries must appear everywhere like manual ones.
+- Material/parts expenses go to purchases + supplier_payments (not expenses); exception: the cash-book expense form (AddExpenseDialog) saves parts bought without a supplier name to expenses. Why: they must show on the supplier/material page.
 - Navigation: sidebar on tablet (md), top dropdown menubar on desktop (lg+), big NavGrid on dashboard for phone/tablet; all read NAV_GROUPS. Why: one menu source.
