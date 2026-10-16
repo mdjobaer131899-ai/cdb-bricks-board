@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck , CloudSun } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from "@/components/ui/sidebar";
@@ -32,6 +32,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "সরদার খাতা", url: "/sardars", icon: Users2 },
       { title: "ডেলি শ্রমিক", url: "/daily-workers", icon: CalendarCheck },
       { title: "মেস্তুরি ও ম্যানেজার বেতন", url: "/salaries", icon: BadgeDollarSign },
+      { title: "আবহাওয়া ও সতর্কতা", url: "/weather", icon: CloudSun, adminOnly: true },
     ],
   },
   {

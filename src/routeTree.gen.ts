@@ -30,6 +30,7 @@ import { Route as AuthenticatedSalariesRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedSardarLedgerRouteImport } from './routes/_authenticated/sardar-ledger'
 import { Route as AuthenticatedSardarsRouteImport } from './routes/_authenticated/sardars'
 import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticated/seasons'
+import { Route as AuthenticatedWeatherRouteImport } from './routes/_authenticated/weather'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSuppliersRouteImport } from './routes/_authenticated/suppliers'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
@@ -155,6 +156,11 @@ const AuthenticatedSeasonsRoute = AuthenticatedSeasonsRouteImport.update({
   path: '/seasons',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedWeatherRoute = AuthenticatedWeatherRouteImport.update({
+  id: '/weather',
+  path: '/weather',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -255,6 +261,7 @@ export interface FileRoutesByFullPath {
   '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
+  '/weather': typeof AuthenticatedWeatherRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -288,6 +295,7 @@ export interface FileRoutesByTo {
   '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
+  '/weather': typeof AuthenticatedWeatherRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/suppliers': typeof AuthenticatedSuppliersRoute
   '/users': typeof AuthenticatedUsersRoute
@@ -326,6 +334,7 @@ export interface FileRoutesById {
   '/_authenticated/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
   '/_authenticated/sardars': typeof AuthenticatedSardarsRoute
   '/_authenticated/seasons': typeof AuthenticatedSeasonsRoute
+  '/_authenticated/weather': typeof AuthenticatedWeatherRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/suppliers': typeof AuthenticatedSuppliersRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
@@ -365,6 +374,7 @@ export interface FileRouteTypes {
     | '/sardar-ledger'
     | '/sardars'
     | '/seasons'
+    | '/weather'
     | '/settings'
     | '/suppliers'
     | '/users'
@@ -398,6 +408,7 @@ export interface FileRouteTypes {
     | '/sardar-ledger'
     | '/sardars'
     | '/seasons'
+    | '/weather'
     | '/settings'
     | '/suppliers'
     | '/users'
@@ -435,6 +446,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sardar-ledger'
     | '/_authenticated/sardars'
     | '/_authenticated/seasons'
+    | '/_authenticated/weather'
     | '/_authenticated/settings'
     | '/_authenticated/suppliers'
     | '/_authenticated/users'
@@ -608,6 +620,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSeasonsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/weather': {
+      id: '/_authenticated/weather'
+      path: '/weather'
+      fullPath: '/weather'
+      preLoaderRoute: typeof AuthenticatedWeatherRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
       path: '/settings'
@@ -758,6 +777,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSardarLedgerRoute: typeof AuthenticatedSardarLedgerRoute
   AuthenticatedSardarsRoute: typeof AuthenticatedSardarsRoute
   AuthenticatedSeasonsRoute: typeof AuthenticatedSeasonsRoute
+  AuthenticatedWeatherRoute: typeof AuthenticatedWeatherRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSuppliersRoute: typeof AuthenticatedSuppliersRoute
   AuthenticatedUsersRoute: typeof AuthenticatedUsersRoute
@@ -788,6 +808,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSardarLedgerRoute: AuthenticatedSardarLedgerRoute,
   AuthenticatedSardarsRoute: AuthenticatedSardarsRoute,
   AuthenticatedSeasonsRoute: AuthenticatedSeasonsRoute,
+  AuthenticatedWeatherRoute: AuthenticatedWeatherRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSuppliersRoute: AuthenticatedSuppliersRoute,
   AuthenticatedUsersRoute: AuthenticatedUsersRoute,

@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { WeatherSignalBanner } from "@/components/weather-signals";
 import { Banknote, ChevronRight, Cloud, CloudLightning, CloudRain, FilePlus2, Layers, Receipt, Sun } from "lucide-react";
 import { toast } from "sonner";
 import { BrandLogo } from "@/components/brand-logo";
@@ -99,10 +100,10 @@ function CashHero({ s, weather }: { s: KilnSnapshot; weather: WeatherInfo | null
     <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-bold tracking-[0.12em] text-stone-300">হাতে নগদ · মূল ক্যাশ</span>
-        <span className="flex items-center gap-1.5 rounded-full bg-amber-200/10 px-2.5 py-0.5 text-xs font-semibold text-amber-200">
+        <Link to={"/weather" as never} className="flex items-center gap-1.5 rounded-full bg-amber-200/10 px-2.5 py-0.5 text-xs font-semibold text-amber-200">
           <WeatherIcon className="h-3.5 w-3.5" aria-hidden="true" />
           {weather ? `${bn(weather.temp)}° · বৃষ্টি ${bn(weather.todayRainProb)}%` : "আবহাওয়া…"}
-        </span>
+        </Link>
       </div>
 
       <div className="mt-3 flex items-end justify-between gap-3">
@@ -128,44 +129,6 @@ function CashHero({ s, weather }: { s: KilnSnapshot; weather: WeatherInfo | null
       {net < 0 && (
         <p className="mt-2 text-xs font-semibold text-red-200">ক্যাশ ঋণাত্মক দেখাচ্ছে, ক্যাশ বইয়ের এন্ট্রি একবার মিলিয়ে নিন।</p>
       )}
-    </section>
-  );
-}
-
-/* ---------- বৃষ্টির সতর্কতা ---------- */
-function RainAlert({ weather }: { weather: WeatherInfo | null }) {
-  const raining = !!weather && (weather.precipNow > 0 || (weather.code >= 51 && weather.code <= 99));
-  const show = !!weather && (raining || weather.todayRainProb >= 50 || !!weather.nextRainTime);
-
-  useEffect(() => {
-    if (!show || !weather) return;
-    const key = `cdb-rain-alert-${new Date().toDateString()}-${new Date().getHours()}`;
-    try {
-      if (sessionStorage.getItem(key)) return;
-      sessionStorage.setItem(key, "1");
-    } catch {
-      /* উপেক্ষা */
-    }
-    const msg = raining ? "এখন বৃষ্টি হচ্ছে! কাঁচা ইট দ্রুত ঢেকে দিন।" : "আজ বৃষ্টির সম্ভাবনা আছে, কাঁচা ইট নিরাপদে রাখুন।";
-    toast.warning(msg, { duration: 8000 });
-  }, [show, raining, weather]);
-
-  if (!show || !weather) return null;
-  return (
-    <section className="flex items-center gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 dark:border-amber-700/60 dark:bg-amber-950/40">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 dark:bg-amber-900/50">
-        <CloudRain className="h-5 w-5 text-amber-800 dark:text-amber-300" aria-hidden="true" />
-      </span>
-      <p className="text-sm leading-snug text-amber-900 dark:text-amber-100">
-        <b className="font-bold">
-          {raining
-            ? "এখন বৃষ্টি হচ্ছে"
-            : weather.nextRainTime
-              ? `${kilnBnTime(weather.nextRainTime)} নাগাদ বৃষ্টির সম্ভাবনা`
-              : `আজ বৃষ্টির সম্ভাবনা ${bn(weather.todayRainProb)}%`}
-        </b>{" "}
-        · কাঁচা ইট ঢেকে রাখুন
-      </p>
     </section>
   );
 }
@@ -421,7 +384,7 @@ export function AdminDashboard({ navGrid }: { navGrid?: ReactNode }) {
         <div className="grid gap-3.5 lg:grid-cols-2 lg:items-start">
           <div className="space-y-3.5">
             <CashHero s={s} weather={weather} />
-            <RainAlert weather={weather} />
+            <WeatherSignalBanner />
             <QuickActions />
             <TodayStrip s={s} />
             <ProductionLine s={s} />

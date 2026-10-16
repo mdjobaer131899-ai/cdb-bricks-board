@@ -110,6 +110,7 @@ supabase/
 | `/loans` | ঋণ | ঋণ নেওয়া/দেওয়া ও পরিশোধ | `loans`, `loan_payments` |
 | `/opening-balances` | পূর্বের বকেয়া ও জের | গত বছরের পাওনা-দেনা আর তার পরিশোধ | `opening_balances`, `opening_payments` |
 | `/income-expense` | লাভ-ক্ষতি ও দেনা-পাওনা | লাভ-ক্ষতি (বাকিতে কেনা মাল কেনার দিনেই খরচ), সাপ্লায়ারের দেনা (সব সময়), আর নগদ আয়-ব্যয়ের ট্যাব | `fetchProfitLoss`, `fetchSupplierDues` ([pl-queries.ts](../src/lib/pl-queries.ts)), `fetchCashSummary` |
+| `/weather` | আবহাওয়া ও সতর্কতা (শুধু admin) | এখনকার অবস্থা, জরুরি/সতর্কতা/দৈনিক সংকেত, আগামী ২৪ ঘণ্টার বৃষ্টি, ৩ দিনের পূর্বাভাস আর কাঁচা ইট শুকানোর দিন। নিয়ম `KILN_WEATHER_RULES` ([kiln-weather.ts](../src/lib/kiln-weather.ts)); ড্যাশবোর্ডে `WeatherSignalBanner` | Open-Meteo |
 | `/reports` | রিপোর্ট | দৈনিক, তারিখ-সীমা, গ্রাহক, অগ্রিম, গ্রাহক বিশ্লেষণ, মৌসুম, বার্ষিক; PDF/প্রিন্ট | বিভিন্ন |
 | `/reports`-এর উপরের অংশ | ব্যবসার খাতা | মৌসুম/মাস/আজ/নিজের বাছাই করা সময়ের বিক্রি, খরচ, পাওনা-দেনা, প্রবণতা | [business-book.tsx](../src/components/business-book.tsx) |
 
