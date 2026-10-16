@@ -175,7 +175,7 @@ function QuickActions() {
   const items = [
     { to: "/entries/new", label: "নতুন চালান", icon: FilePlus2, primary: true, chip: "bg-white/15", color: "text-white" },
     { to: "/collections", label: "জমা নিন", icon: Banknote, chip: "bg-emerald-50 dark:bg-emerald-950/50", color: "text-emerald-700 dark:text-emerald-300" },
-    { to: "/cash-book", label: "খরচ", icon: Receipt, chip: "bg-red-50 dark:bg-red-950/50", color: "text-red-700 dark:text-red-300" },
+    { to: "/cash-book", label: "ক্যাশ বই", icon: Receipt, chip: "bg-red-50 dark:bg-red-950/50", color: "text-red-700 dark:text-red-300" },
     { to: "/production-steps/kacha", label: "কাঁচা ইট", icon: Layers, chip: "bg-stone-100 dark:bg-stone-800", color: "text-stone-700 dark:text-stone-200" },
   ];
   return (

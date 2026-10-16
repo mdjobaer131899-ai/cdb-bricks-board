@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowDownCircle, ArrowUpCircle, Plus, Receipt, Trash2, Wallet } from "lucide-react";
@@ -350,10 +350,23 @@ function AddIncomeDialog({ onDone }: { onDone: () => void }) {
   );
 }
 
-export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
+export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initialHead }: {
+  onDone: () => void;
+  /** When given, the dialog is controlled by the parent and renders no trigger button */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Pre-selects the expense head each time the dialog opens */
+  initialHead?: string;
+}) {
   const { data: me } = useCurrentUser();
-  const [open, setOpen] = useState(false);
+  const controlled = openProp !== undefined;
+  const [openState, setOpenState] = useState(false);
+  const open = controlled ? !!openProp : openState;
+  const setOpen = (v: boolean) => { if (controlled) onOpenChange?.(v); else setOpenState(v); };
   const [head, setHead] = useState<string>("");
+  useEffect(() => {
+    if (open && initialHead) setHead(initialHead);
+  }, [open, initialHead]);
   const [item, setItem] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(isoDate(new Date()));
@@ -606,11 +619,13 @@ export function AddExpenseDialog({ onDone }: { onDone: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="destructive" className="gap-1">
-          <Plus className="h-3.5 w-3.5" />ব্যয় যোগ
-        </Button>
-      </DialogTrigger>
+      {!controlled && (
+        <DialogTrigger asChild>
+          <Button size="sm" variant="destructive" className="gap-1">
+            <Plus className="h-3.5 w-3.5" />ব্যয় যোগ
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>নতুন ব্যয় এন্ট্রি</DialogTitle>
