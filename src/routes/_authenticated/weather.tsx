@@ -1,5 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, CloudSun, Droplets, RefreshCw, Sunrise, Sunset, Wind } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bell, BellOff, CheckCircle2, CloudSun, Droplets, Loader2, RefreshCw, Sunrise, Sunset, Wind } from "lucide-react";
+import { toast } from "sonner";
+import { useCurrentUser } from "@/lib/use-current-user";
+import { currentPushSubscription, disablePush, enablePush, pushPermission, sendTestPush } from "@/lib/push";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SignalCard, useKilnForecast } from "@/components/weather-signals";
@@ -88,6 +92,8 @@ function WeatherPage() {
             </div>
           </section>
 
+          <PushCard />
+
           {/* Signals */}
           <section className="space-y-2">
             <h2 className="px-1 text-base font-bold">সংকেত</h2>
@@ -152,5 +158,66 @@ function WeatherPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** Turn phone notifications on or off for this phone, and send a test */
+function PushCard() {
+  const { data: me } = useCurrentUser();
+  const [state, setState] = useState<"loading" | "unsupported" | "denied" | "off" | "on">("loading");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    const perm = pushPermission();
+    if (perm === "unsupported") return setState("unsupported");
+    if (perm === "denied") return setState("denied");
+    setState((await currentPushSubscription()) ? "on" : "off");
+  };
+  useEffect(() => { refresh().catch(() => setState("off")); }, []);
+
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    setBusy(true);
+    try { await fn(); toast.success(ok); } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); refresh().catch(() => {}); }
+  };
+
+  return (
+    <section className="rounded-[20px] border bg-card p-4">
+      <div className="flex items-start gap-3">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${state === "on" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}>
+          {state === "on" ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-bold">ফোনে নোটিফিকেশন</h2>
+          <p className="text-sm text-muted-foreground">
+            {state === "on" && "এই ফোনে চালু আছে। অ্যাপ বন্ধ থাকলেও খবর আসবে।"}
+            {state === "off" && "চালু করলে অ্যাপ বন্ধ থাকলেও বৃষ্টি-ঝড়ের খবর ফোনে আসবে।"}
+            {state === "denied" && "ব্রাউজারে এই সাইটের নোটিফিকেশন বন্ধ করা আছে। Chrome-এর ⋮ মেনু → সেটিংস → সাইট সেটিংস → নোটিফিকেশন থেকে এই সাইটকে অনুমতি দিন।"}
+            {state === "unsupported" && "এই ব্রাউজারে নোটিফিকেশন চলে না। অ্যান্ড্রয়েড ফোনে Chrome দিয়ে খুলুন।"}
+            {state === "loading" && "দেখা হচ্ছে…"}
+          </p>
+        </div>
+      </div>
+      {(state === "off" || state === "on") && (
+        <div className={`mt-3 grid gap-2 ${state === "on" ? "grid-cols-2" : "grid-cols-1"}`}>
+          {state === "off" ? (
+            <Button className="h-11 gap-2 rounded-xl font-bold" disabled={busy || !me} onClick={() => run(() => enablePush(me!.user.id), "নোটিফিকেশন চালু হয়েছে")}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />} এই ফোনে চালু করুন
+            </Button>
+          ) : (
+            <>
+              <Button className="h-11 gap-2 rounded-xl font-bold" disabled={busy} onClick={() => run(sendTestPush, "পরীক্ষার নোটিফিকেশন পাঠানো হয়েছে")}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />} পরীক্ষা পাঠান
+              </Button>
+              <Button variant="outline" className="h-11 rounded-xl" disabled={busy} onClick={() => run(disablePush, "নোটিফিকেশন বন্ধ হয়েছে")}>বন্ধ করুন</Button>
+            </>
+          )}
+        </div>
+      )}
+      <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+        <li>🔴 জরুরি (বৃষ্টি, ঝড়, দমকা হাওয়া): দিন-রাত যেকোনো সময়, একই খবর ৩ ঘণ্টায় একবার</li>
+        <li>🟠 সতর্কতা: ভোর ৬টা থেকে রাত ১০টা, প্রতিটি দিনে একবার</li>
+        <li>🌤️ প্রতিদিন সকাল ৬টায় আজকের আবহাওয়া ও শুকানোর দিন</li>
+      </ul>
+    </section>
   );
 }

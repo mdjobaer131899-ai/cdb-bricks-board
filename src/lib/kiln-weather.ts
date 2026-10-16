@@ -1,5 +1,8 @@
-import { bn } from "@/lib/format";
-import { kilnBnTime, kilnWeatherText } from "@/services/gemini";
+/*
+ * SELF-CONTAINED ON PURPOSE: no imports, so the same file runs in the browser and in
+ * the Supabase Edge Function supabase/functions/weather-alerts (a copy lives there as
+ * kiln-weather.ts). Change the rules here, then copy this file over and redeploy.
+ */
 
 /**
  * Weather for brick-kiln work at Kapasia: an hourly forecast from Open-Meteo and
@@ -11,9 +14,31 @@ import { kilnBnTime, kilnWeatherText } from "@/services/gemini";
 const LAT = 24.1023;
 const LON = 90.5694;
 
+const bn = (x: number | string) => Number(x).toLocaleString("bn-BD");
+
+const WEATHER_TEXT: Record<number, string> = {
+  0: "পরিষ্কার আকাশ ☀️", 1: "প্রায় পরিষ্কার আকাশ 🌤️", 2: "আংশিক মেঘলা ⛅", 3: "মেঘাচ্ছন্ন আকাশ ☁️",
+  45: "কুয়াশা 🌫️", 48: "ঘন কুয়াশা 🌫️",
+  51: "হালকা গুঁড়ি গুঁড়ি বৃষ্টি 🌦️", 53: "গুঁড়ি গুঁড়ি বৃষ্টি 🌦️", 55: "ঘন গুঁড়ি গুঁড়ি বৃষ্টি 🌧️",
+  56: "হালকা ঠান্ডা গুঁড়ি বৃষ্টি 🌧️", 57: "ঠান্ডা গুঁড়ি বৃষ্টি 🌧️",
+  61: "হালকা বৃষ্টি 🌧️", 63: "মাঝারি বৃষ্টি 🌧️", 65: "ভারী বৃষ্টি 🌧️", 66: "হালকা ঠান্ডা বৃষ্টি 🌧️", 67: "ভারী ঠান্ডা বৃষ্টি 🌧️",
+  80: "হালকা ঝরো বৃষ্টি 🌦️", 81: "মাঝারি ঝরো বৃষ্টি 🌧️", 82: "প্রবল ঝরো বৃষ্টি ⛈️",
+  95: "বজ্রসহ ঝড়-বৃষ্টি ⛈️", 96: "শিলাসহ বজ্রঝড় ⛈️", 99: "প্রবল শিলাসহ বজ্রঝড় ⛈️",
+};
+export const kilnWeatherText = (code: number) => WEATHER_TEXT[code] ?? "মিশ্র আবহাওয়া";
+
+/** "YYYY-MM-DDTHH:MM" (already Dhaka time) → "বিকাল ৪:০০" */
+export function kilnBnTime(t: string): string {
+  const h = Number(t.slice(11, 13)), m = Number(t.slice(14, 16));
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return t;
+  const label = h >= 4 && h < 6 ? "ভোর" : h >= 6 && h < 12 ? "সকাল" : h >= 12 && h < 15 ? "দুপুর" : h >= 15 && h < 18 ? "বিকাল" : h >= 18 && h < 20 ? "সন্ধ্যা" : "রাত";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${label} ${bn(h12)}:${m < 10 ? "০" : ""}${bn(m)}`;
+}
+
 export const KILN_WEATHER_RULES = {
   /** hours ahead to warn of rain: time needed to cover the green bricks in the field */
-  coverLeadHours: 3,
+  coverLeadHours: 2, // covering takes 30-60 min; the forecast is hourly and checked every 30 min
   rainNowProb: 60, // % within the lead time → red
   rainNowMm: 0.5, // mm in an hour within the lead time → red
   rainLaterProb: 40, // % later today or tonight → orange
@@ -260,4 +285,3 @@ export function dryingDay(f: KilnForecast, date: string): DryingDay | null {
   return { label: "খারাপ", tone: "bad", reason };
 }
 
-export { kilnWeatherText, kilnBnTime };
