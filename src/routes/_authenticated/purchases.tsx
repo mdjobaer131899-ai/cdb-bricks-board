@@ -1,7 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Clock, Loader2, Pencil, Plus, Printer, ShoppingCart, Trash2, Wallet } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wallet, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,8 +31,13 @@ export const Route = createFileRoute("/_authenticated/purchases")({
       { name: "description", content: "কাঁচামাল, ইঞ্জিন মালামাল, কারেন্ট বিল সহ সব কেনাকাটা, পরিশোধ ও বাকির হিসাব।" },
     ],
   }),
+  // Which folder is open lives in the URL (?f=raw|other) so the phone back button returns here
+  validateSearch: (search: Record<string, unknown>): { f?: Folder } =>
+    search.f === "raw" || search.f === "other" ? { f: search.f } : {},
   component: PurchasesPage,
 });
+
+type Folder = "raw" | "other";
 
 type Item = {
   id: string;
@@ -102,8 +107,14 @@ function PurchasesPage() {
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
   const today = todayBD();
+  const { f: folder } = Route.useSearch();
+  const navigate = useNavigate();
+  const openFolder = (k: Folder) => navigate({ to: "/purchases", search: { f: k } });
+  const closeFolder = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) window.history.back();
+    else navigate({ to: "/purchases", search: {}, replace: true });
+  };
 
-  const [filter, setFilter] = useState<string>("all");
   const [buy, setBuy] = useState<BuyForm | null>(null);
   const [itemDlg, setItemDlg] = useState<ItemForm | null>(null);
   const [payDlg, setPayDlg] = useState<null | { id?: string; supplier_id: string; amount: string; date: string; note: string }>(null);
@@ -190,12 +201,7 @@ function PurchasesPage() {
   const rawTotal = rawCards.reduce((a, c) => a + c.amount, 0);
   const otherTotal = otherCards.reduce((a, c) => a + c.amount, 0) + untaggedTotal;
 
-  const shown =
-    filter === "all"
-      ? purchases
-      : filter === "raw"
-        ? purchases.filter((p) => itemOf(p)?.item_group === "raw")
-        : purchases.filter((p) => itemOf(p)?.item_group !== "raw");
+  const folderRows = folder === "raw" ? purchases.filter((p) => itemOf(p)?.item_group === "raw") : purchases.filter((p) => itemOf(p)?.item_group !== "raw");
 
   /* ---------- buy form ---------- */
   const formItem = buy ? items.find((i) => i.id === buy.item_id) : undefined;
@@ -474,234 +480,8 @@ function PurchasesPage() {
     );
   };
 
-  return (
-    <div className="mx-auto w-full max-w-5xl space-y-5 pb-4">
-      {/* header */}
-      <div className="space-y-3 px-0.5 pt-1">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h1 className="font-display flex items-center gap-2 text-[26px] font-extrabold leading-tight">
-              <ShoppingCart className="h-6 w-6 text-primary" aria-hidden="true" /> মালামাল ক্রয় ও বাকি
-            </h1>
-            <p className="text-sm font-semibold text-muted-foreground">কাঁচামাল, ইঞ্জিন মালামাল, কারেন্ট বিল সহ সব কেনাকাটা</p>
-          </div>
-          <div className="flex gap-2">
-            <Button asChild variant="secondary" size="sm">
-              <Link to="/suppliers">সাপ্লায়ার তালিকা</Link>
-            </Button>
-            <Button variant="outline" size="sm" onClick={print}>
-              <Printer className="mr-1 h-4 w-4" /> প্রিন্ট
-            </Button>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => openBuy()}
-          disabled={!items.length}
-          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-60 md:w-auto md:px-6"
-        >
-          <Plus className="h-5 w-5" aria-hidden="true" />
-          নতুন কেনা লিখুন
-        </button>
-      </div>
-
-      {/* totals */}
-      <section className="grid grid-cols-3 gap-2">
-        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
-          <span className="text-xs font-semibold text-muted-foreground">মোট ক্রয়</span>
-          <span className="num text-[15px] font-bold sm:text-lg">{tk(tot.bought)}</span>
-        </div>
-        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
-          <span className="text-xs font-semibold text-muted-foreground">পরিশোধ</span>
-          <span className="num text-[15px] font-bold text-success sm:text-lg">{tk(tot.paid)}</span>
-        </div>
-        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
-          <span className="text-xs font-semibold text-muted-foreground">বাকি</span>
-          <span className={`num text-[15px] font-bold sm:text-lg ${tot.due < 0 ? "text-info" : "text-warning"}`}>{tk(tot.due)}</span>
-        </div>
-      </section>
-
-      {/* refill reminders */}
-      {rawCards
-        .filter((c) => c.dueSoon)
-        .map((c) => (
-          <div key={c.it.id} className="flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-            <Clock className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-            <span>
-              <b>{c.it.name} কেনার সময় হয়ে এসেছে।</b> সাধারণত প্রতি {bn(Math.round(c.avgGap ?? 0))} দিনে কেনা হয়, শেষবার কেনা হয়েছে {bn(c.sinceLast ?? 0)} দিন আগে।
-            </span>
-          </div>
-        ))}
-
-      {loading ? (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-[132px] rounded-2xl" />
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* raw materials */}
-          <section className="space-y-2">
-            <div className="flex items-center justify-between gap-2 px-1">
-              <h2 className="section-label">কাঁচামাল · {tk(rawTotal)}</h2>
-              <button type="button" onClick={() => setItemDlg({ name: "", group: "raw", pricing: "unit", unit: "" })} className="flex items-center gap-1 text-sm font-bold text-primary">
-                <Plus className="h-4 w-4" aria-hidden="true" /> নতুন কাঁচামাল
-              </button>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {rawCards.map((c) => (
-                <ItemCard key={c.it.id} c={c} />
-              ))}
-            </div>
-          </section>
-
-          {/* other goods */}
-          <section className="space-y-2">
-            <div className="flex items-center justify-between gap-2 px-1">
-              <h2 className="section-label">অন্যান্য মালামাল ও খরচ · {tk(otherTotal)}</h2>
-              <button type="button" onClick={() => setItemDlg({ name: "", group: "other", pricing: "total", unit: "" })} className="flex items-center gap-1 text-sm font-bold text-primary">
-                <Plus className="h-4 w-4" aria-hidden="true" /> নতুন মালামাল
-              </button>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {otherCards.map((c) => (
-                <ItemCard key={c.it.id} c={c} compact />
-              ))}
-            </div>
-            {untaggedTotal > 0 && (
-              <p className="px-1 text-xs text-muted-foreground">
-                তালিকার বাইরের নামে আগে লেখা কেনা: {tk(untaggedTotal)}। এগুলোর পেনসিল চেপে সঠিক মালামাল বেছে দিলে উপরের ঘরে যোগ হবে।
-              </p>
-            )}
-          </section>
-        </>
-      )}
-
-      {/* supplier dues */}
-      <section className="space-y-2">
-        <h2 className="section-label px-1">বিক্রেতা অনুযায়ী বাকি</h2>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {bySup.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">কোনো ক্রয় নেই</p>
-          ) : (
-            bySup.map((s) => (
-              <div key={s.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold">{s.name}</div>
-                  <div className="num text-xs text-muted-foreground">
-                    ক্রয় {tk(s.bought)} · পরিশোধ {tk(s.paid)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className={`num text-[15px] font-bold ${s.due < 0 ? "text-info" : "text-warning"}`}>{tk(Math.abs(s.due))}</div>
-                  <div className="text-[11px] text-muted-foreground">{s.due < 0 ? "অগ্রিম দেওয়া" : "বাকি"}</div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => setPayDlg({ supplier_id: s.id, amount: "", date: today, note: "" })}>
-                  পরিশোধ
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      {/* purchase list */}
-      <section className="space-y-2">
-        <h2 className="section-label px-1">কেনার তালিকা</h2>
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {[
-            { id: "all", name: "সব" },
-            { id: "raw", name: "কাঁচামাল" },
-            { id: "other", name: "অন্যান্য" },
-          ].map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              aria-pressed={filter === m.id}
-              onClick={() => setFilter(m.id)}
-              className={`h-9 shrink-0 rounded-full border px-3.5 text-sm font-semibold transition ${
-                filter === m.id ? "border-primary bg-primary text-primary-foreground" : "bg-card text-foreground"
-              }`}
-            >
-              {m.name}
-            </button>
-          ))}
-        </div>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {shown.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">কোনো কেনা নেই।</p>
-          ) : (
-            shown.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
-                <span className={`font-display grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-extrabold ${look(p.item_name).chip}`}>
-                  {look(p.item_name).initial}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold">{p.item_name}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {bnDate(p.purchase_date)} · {supName(p.supplier_id)} · {qtyText(p)}
-                    {p.note ? ` · ${p.note}` : ""}
-                  </div>
-                </div>
-                <div className="num shrink-0 text-[15px] font-bold">{tk(p.total_amount)}</div>
-                {isAdmin && (
-                  <div className="flex shrink-0">
-                    <Button size="icon" variant="ghost" aria-label="সম্পাদনা" onClick={() => openEdit(p)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() => confirm("এই কেনা মুছবেন?") && delBuy.mutate(p.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      {/* payment list */}
-      <section className="space-y-2">
-        <h2 className="section-label px-1">পরিশোধের তালিকা</h2>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {(payQ.data ?? []).length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">কোনো পরিশোধ নেই।</p>
-          ) : (
-            (payQ.data ?? []).map((p) => (
-              <div key={p.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
-                  <Wallet className="h-4 w-4" aria-hidden="true" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold">{supName(p.supplier_id)}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {bnDate(p.payment_date)}
-                    {p.note ? ` · ${p.note}` : ""}
-                  </div>
-                </div>
-                <div className="num shrink-0 text-[15px] font-bold text-success">{tk(p.amount)}</div>
-                {isAdmin && (
-                  <div className="flex shrink-0">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label="সম্পাদনা"
-                      onClick={() => setPayDlg({ id: p.id, supplier_id: p.supplier_id, amount: String(p.amount), date: p.payment_date, note: p.note ?? "" })}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() => confirm("মুছবেন?") && delPay.mutate(p.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
+  const dialogs = (
+    <>
       {/* ===== buy dialog ===== */}
       <Dialog open={!!f} onOpenChange={(o) => !o && setBuy(null)}>
         <DialogContent className="max-h-[92dvh] max-w-md overflow-y-auto">
@@ -939,6 +719,285 @@ function PurchasesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+
+  const PurchaseRows = ({ rows }: { rows: Purchase[] }) => (
+    <div className="overflow-hidden rounded-2xl border bg-card">
+      {rows.length === 0 ? (
+        <p className="p-4 text-sm text-muted-foreground">কোনো কেনা নেই।</p>
+      ) : (
+        rows.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
+                <span className={`font-display grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-extrabold ${look(p.item_name).chip}`}>
+                  {look(p.item_name).initial}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[15px] font-semibold">{p.item_name}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {bnDate(p.purchase_date)} · {supName(p.supplier_id)} · {qtyText(p)}
+                    {p.note ? ` · ${p.note}` : ""}
+                  </div>
+                </div>
+                <div className="num shrink-0 text-[15px] font-bold">{tk(p.total_amount)}</div>
+                {isAdmin && (
+                  <div className="flex shrink-0">
+                    <Button size="icon" variant="ghost" aria-label="সম্পাদনা" onClick={() => openEdit(p)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() => confirm("এই কেনা মুছবেন?") && delBuy.mutate(p.id)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+        ))
+      )}
+    </div>
+  );
+
+  if (!folder) {
+    return (
+    <div className="mx-auto w-full max-w-5xl space-y-5 pb-4">
+      {/* header */}
+      <div className="space-y-3 px-0.5 pt-1">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="font-display flex items-center gap-2 text-[26px] font-extrabold leading-tight">
+              <ShoppingCart className="h-6 w-6 text-primary" aria-hidden="true" /> মালামাল ক্রয় ও বাকি
+            </h1>
+            <p className="text-sm font-semibold text-muted-foreground">কাঁচামাল, ইঞ্জিন মালামাল, কারেন্ট বিল সহ সব কেনাকাটা</p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild variant="secondary" size="sm">
+              <Link to="/suppliers">সাপ্লায়ার তালিকা</Link>
+            </Button>
+            <Button variant="outline" size="sm" onClick={print}>
+              <Printer className="mr-1 h-4 w-4" /> প্রিন্ট
+            </Button>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => openBuy()}
+          disabled={!items.length}
+          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-60 md:w-auto md:px-6"
+        >
+          <Plus className="h-5 w-5" aria-hidden="true" />
+          নতুন কেনা লিখুন
+        </button>
+      </div>
+
+      {/* totals */}
+      <section className="grid grid-cols-3 gap-2">
+        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
+          <span className="text-xs font-semibold text-muted-foreground">মোট ক্রয়</span>
+          <span className="num text-[15px] font-bold sm:text-lg">{tk(tot.bought)}</span>
+        </div>
+        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
+          <span className="text-xs font-semibold text-muted-foreground">পরিশোধ</span>
+          <span className="num text-[15px] font-bold text-success sm:text-lg">{tk(tot.paid)}</span>
+        </div>
+        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
+          <span className="text-xs font-semibold text-muted-foreground">বাকি</span>
+          <span className={`num text-[15px] font-bold sm:text-lg ${tot.due < 0 ? "text-info" : "text-warning"}`}>{tk(tot.due)}</span>
+        </div>
+      </section>
+
+      {/* refill reminders */}
+      {rawCards
+        .filter((c) => c.dueSoon)
+        .map((c) => (
+          <div key={c.it.id} className="flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <Clock className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <span>
+              <b>{c.it.name} কেনার সময় হয়ে এসেছে।</b> সাধারণত প্রতি {bn(Math.round(c.avgGap ?? 0))} দিনে কেনা হয়, শেষবার কেনা হয়েছে {bn(c.sinceLast ?? 0)} দিন আগে।
+            </span>
+          </div>
+        ))}
+
+      {/* folders */}
+      <section className="grid grid-cols-2 gap-2.5">
+        {(
+          [
+            { key: "raw" as const, title: "কাঁচামাল", sub: "মাটি, বালু, কয়লা, তুষ, ডিজেল…", amount: rawTotal, count: rawItems.length, chip: "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200", icon: Mountain },
+            { key: "other" as const, title: "অন্যান্য মালামাল ও খরচ", sub: "ইঞ্জিন মালামাল, কারেন্ট বিল…", amount: otherTotal, count: otherItems.length, chip: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200", icon: Wrench },
+          ]
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => openFolder(t.key)}
+            className="flex min-h-[150px] flex-col gap-2 rounded-2xl border bg-card p-3.5 text-left transition hover:bg-muted/50 active:scale-[0.99]"
+          >
+            <span className="flex items-center justify-between">
+              <span className={`grid h-11 w-11 place-items-center rounded-xl ${t.chip}`}>
+                <t.icon className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+            </span>
+            <span className="text-base font-bold leading-tight">{t.title}</span>
+            <span className="line-clamp-1 text-xs text-muted-foreground">{t.sub}</span>
+            <span className="font-display num mt-auto text-xl font-extrabold">{tk(t.amount)}</span>
+            <span className="text-[11px] font-semibold text-muted-foreground">{bn(t.count)}টি মালামাল · এই মৌসুম</span>
+          </button>
+        ))}
+      </section>
+
+      {/* supplier dues */}
+      <section className="space-y-2">
+        <h2 className="section-label px-1">বিক্রেতা অনুযায়ী বাকি</h2>
+        <div className="overflow-hidden rounded-2xl border bg-card">
+          {bySup.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">কোনো ক্রয় নেই</p>
+          ) : (
+            bySup.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[15px] font-semibold">{s.name}</div>
+                  <div className="num text-xs text-muted-foreground">
+                    ক্রয় {tk(s.bought)} · পরিশোধ {tk(s.paid)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`num text-[15px] font-bold ${s.due < 0 ? "text-info" : "text-warning"}`}>{tk(Math.abs(s.due))}</div>
+                  <div className="text-[11px] text-muted-foreground">{s.due < 0 ? "অগ্রিম দেওয়া" : "বাকি"}</div>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setPayDlg({ supplier_id: s.id, amount: "", date: today, note: "" })}>
+                  পরিশোধ
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      {/* purchase list */}
+      <section className="space-y-2">
+        <h2 className="section-label px-1">সব কেনার তালিকা</h2>
+        <PurchaseRows rows={purchases} />
+      </section>
+
+      {/* payment list */}
+      <section className="space-y-2">
+        <h2 className="section-label px-1">পরিশোধের তালিকা</h2>
+        <div className="overflow-hidden rounded-2xl border bg-card">
+          {(payQ.data ?? []).length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">কোনো পরিশোধ নেই।</p>
+          ) : (
+            (payQ.data ?? []).map((p) => (
+              <div key={p.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                  <Wallet className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[15px] font-semibold">{supName(p.supplier_id)}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {bnDate(p.payment_date)}
+                    {p.note ? ` · ${p.note}` : ""}
+                  </div>
+                </div>
+                <div className="num shrink-0 text-[15px] font-bold text-success">{tk(p.amount)}</div>
+                {isAdmin && (
+                  <div className="flex shrink-0">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label="সম্পাদনা"
+                      onClick={() => setPayDlg({ id: p.id, supplier_id: p.supplier_id, amount: String(p.amount), date: p.payment_date, note: p.note ?? "" })}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() => confirm("মুছবেন?") && delPay.mutate(p.id)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      {dialogs}
+    </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-5 pb-4">
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          type="button"
+          onClick={closeFolder}
+          aria-label="মালামাল ক্রয় ও বাকিতে ফিরে যান"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border bg-card transition active:scale-95"
+        >
+          <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <h1 className="font-display truncate text-[24px] font-extrabold leading-tight">{folder === "raw" ? "কাঁচামাল" : "অন্যান্য মালামাল ও খরচ"}</h1>
+          <p className="text-sm font-semibold text-muted-foreground">
+            এই মৌসুমে <span className="num">{tk(folder === "raw" ? rawTotal : otherTotal)}</span>
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => openBuy()}
+        disabled={!items.length}
+        className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-60 md:w-auto md:px-6"
+      >
+        <Plus className="h-5 w-5" aria-hidden="true" />
+        নতুন কেনা লিখুন
+      </button>
+
+      {/* refill reminders */}
+      {folder === "raw" && rawCards
+        .filter((c) => c.dueSoon)
+        .map((c) => (
+          <div key={c.it.id} className="flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <Clock className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <span>
+              <b>{c.it.name} কেনার সময় হয়ে এসেছে।</b> সাধারণত প্রতি {bn(Math.round(c.avgGap ?? 0))} দিনে কেনা হয়, শেষবার কেনা হয়েছে {bn(c.sinceLast ?? 0)} দিন আগে।
+            </span>
+          </div>
+        ))}
+
+      {loading ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[132px] rounded-2xl" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(folder === "raw" ? rawCards : otherCards).map((c) => (
+            <ItemCard key={c.it.id} c={c} compact={folder !== "raw"} />
+          ))}
+          <button
+            type="button"
+            onClick={() => setItemDlg(folder === "raw" ? { name: "", group: "raw", pricing: "unit", unit: "" } : { name: "", group: "other", pricing: "total", unit: "" })}
+            className="flex min-h-[132px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed text-sm font-bold text-primary transition hover:bg-accent"
+          >
+            <Plus className="h-6 w-6" aria-hidden="true" />
+            {folder === "raw" ? "নতুন কাঁচামাল যোগ" : "নতুন মালামাল যোগ"}
+          </button>
+        </div>
+      )}
+      {folder === "other" && untaggedTotal > 0 && (
+        <p className="px-1 text-xs text-muted-foreground">
+          তালিকার বাইরের নামে আগে লেখা কেনা: {tk(untaggedTotal)}। নিচের তালিকায় এগুলোর পেনসিল চেপে সঠিক মালামাল বেছে দিন।
+        </p>
+      )}
+
+      <section className="space-y-2">
+        <h2 className="section-label px-1">কেনার তালিকা</h2>
+        <PurchaseRows rows={folderRows} />
+      </section>
+
+      {dialogs}
     </div>
   );
 }
