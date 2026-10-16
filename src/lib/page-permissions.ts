@@ -10,7 +10,6 @@ export const PAGES: { key: string; label: string }[] = [
   { key: "/customers", label: "গ্রাহক" },
   { key: "/collections", label: "কালেকশন" },
   { key: "/advance-sales", label: "অগ্রিম ইট বিক্রয়" },
-  { key: "/materials", label: "কাঁচামাল" },
   { key: "/production-steps/kacha", label: "কাঁচা ইট (মিল)" },
   { key: "/production-steps/load", label: "ভাটায় ঢোকানো" },
   { key: "/production-steps/unload", label: "বের করা" },

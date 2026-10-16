@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck, Mountain } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from "@/components/ui/sidebar";
@@ -26,7 +26,6 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "উৎপাদন ও শ্রমিক",
     items: [
-      { title: "কাঁচামাল", url: "/materials", icon: Mountain },
       { title: "কাঁচা ইট (মিল)", url: "/production-steps/kacha", icon: Boxes },
       { title: "ভাটায় ঢোকানো", url: "/production-steps/load", icon: ArrowDownToLine },
       { title: "বের করা", url: "/production-steps/unload", icon: ArrowUpFromLine },
@@ -39,7 +38,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "ভাটার হিসাব",
     items: [
       { title: "ক্যাশ বই (দৈনিক ড্রয়ার)", url: "/cash-book", icon: Receipt },
-      { title: "মালামাল ও সাপ্লায়ার", url: "/purchases", icon: ShoppingCart },
+      { title: "মালামাল ক্রয় ও বাকি", url: "/purchases", icon: ShoppingCart },
       { title: "মালিক ও ঋণ", url: "/owners", icon: Crown },
       { title: "পূর্বের বকেয়া ও জের", url: "/opening-balances", icon: History },
     ],
