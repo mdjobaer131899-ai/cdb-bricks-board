@@ -78,10 +78,10 @@ export function printNode(node: HTMLElement, title = "ইনভয়েস", op
 <title>${safeTitle}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Hind Siliguri',system-ui,sans-serif;color:#111;background:#fff;padding:24px}
+  body{font-family:'Noto Sans Bengali','Hind Siliguri',system-ui,sans-serif;color:#111;background:#fff;padding:24px}
   .inv-doc{max-width:820px;margin:0 auto;border:1px solid #d1d5db;padding:32px;background:#fff}
   .inv-title{font-size:34px;font-weight:700;letter-spacing:1px;text-align:right;color:#374151}
   .inv-meta{font-size:13px;margin-top:8px}

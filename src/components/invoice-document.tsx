@@ -30,7 +30,7 @@ export interface InvoiceData {
 export const InvoiceDocument = forwardRef<HTMLDivElement, { data: InvoiceData }>(
   function InvoiceDocument({ data }, ref) {
     return (
-      <div ref={ref} className="inv-doc" style={{ position: "relative", background: "#fff", color: "#111", fontFamily: "'Hind Siliguri', system-ui, sans-serif", padding: 32, maxWidth: 820, margin: "0 auto", border: "1px solid #d1d5db", overflow: "hidden" }}>
+      <div ref={ref} className="inv-doc" style={{ position: "relative", background: "#fff", color: "#111", fontFamily: "'Noto Sans Bengali', 'Hind Siliguri', system-ui, sans-serif", padding: 32, maxWidth: 820, margin: "0 auto", border: "1px solid #d1d5db", overflow: "hidden" }}>
         {/* Watermark */}
         <div aria-hidden style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 0 }}>
           <img src={logoAsset.url} alt="" style={{ width: 480, height: 480, objectFit: "contain", opacity: 0.07 }} />

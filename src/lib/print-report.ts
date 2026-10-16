@@ -20,10 +20,10 @@ export function printReport({ title, subtitle, bodyHtml }: PrintOptions) {
   <title>${safeTitle}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap">
   <style>
     *{box-sizing:border-box}
-    body{font-family:'Hind Siliguri',system-ui,sans-serif;padding:28px;color:#111;background:#fff}
+    body{font-family:'Noto Sans Bengali','Hind Siliguri',system-ui,sans-serif;padding:28px;color:#111;background:#fff}
     .head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px}
     .brand{font-weight:700;font-size:20px}
     .meta{font-size:11px;color:#475569;text-align:right}
