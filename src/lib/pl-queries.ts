@@ -1,5 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
+import { fetchAllRows } from "@/lib/fetch-all";
+
+export { fetchAllRows };
 
 /**
  * Profit/loss on an accrual basis, and what the kiln owes suppliers.
@@ -13,21 +16,6 @@ import { sdb } from "@/lib/season-db";
  */
 
 type DateFilter = { from?: string; to?: string };
-
-const PAGE = 1000;
-
-/** Reads every row of a query page by page, so totals are not cut at the 1000-row API limit */
-export async function fetchAllRows<T = any>(makeQuery: () => any): Promise<T[]> {
-  const out: T[] = [];
-  for (let start = 0; ; start += PAGE) {
-    const { data, error } = await makeQuery().range(start, start + PAGE - 1);
-    if (error) throw error;
-    const rows = (data ?? []) as T[];
-    out.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-  return out;
-}
 
 function ranged(q: any, column: string, f: DateFilter) {
   let out = q;

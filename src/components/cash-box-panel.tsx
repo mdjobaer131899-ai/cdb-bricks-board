@@ -25,6 +25,8 @@ import { createExpense, deleteExpense } from "@/lib/expenses.functions";
 import { createSardarPayment } from "@/lib/sardars.functions";
 import { fetchCashDay } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { sardarEarned } from "@/lib/salary-accrual";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { toast } from "sonner";
 
 export const EXPENSE_HEADS = [
@@ -447,9 +449,19 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
   const sardarBalQ = useQuery({
     queryKey: ["sardar-balance-one", personId],
     enabled: open && isSardar && !!personId,
+    // Same rule as the sardar page (salary-accrual.ts), within the selected season
     queryFn: async () => {
-      const { data } = await supabase.from("sardar_balances").select("*").eq("sardar_id", personId).maybeSingle();
-      return data as any;
+      const [sd, kacha, work, pays] = await Promise.all([
+        supabase.from("sardars").select("id, kind, monthly_salary, join_date, leave_date").eq("id", personId).maybeSingle(),
+        fetchAllRows(() => sdb.from("kacha_brick_entries").select("id, sardar_id, entry_type, quantity, amount").eq("sardar_id", personId).order("id")),
+        fetchAllRows(() => sdb.from("sardar_work_entries").select("id, sardar_id, quantity, amount").eq("sardar_id", personId).order("id")),
+        fetchAllRows(() => sdb.from("sardar_payments").select("id, amount").eq("sardar_id", personId).order("id")),
+      ]);
+      if (sd.error) throw sd.error;
+      if (!sd.data) return null;
+      const earned = sardarEarned(sd.data as any, kacha as any[], work as any[]).earned;
+      const paid = (pays as any[]).reduce((a, p) => a + Number(p.amount || 0), 0);
+      return { total_due: earned, total_paid: paid, balance: earned - paid };
     },
   });
   const sardarOpenQ = useQuery({

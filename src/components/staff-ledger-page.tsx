@@ -15,7 +15,8 @@ import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
 import { toast } from "sonner";
-import { accruedDays, accruedMonths } from "@/lib/salary-accrual";
+import { salaryEarned } from "@/lib/salary-accrual";
+import { fetchAllRows } from "@/lib/fetch-all";
 
 type Mode = "daily" | "salary";
 const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "মেস্তুরি", manager: "ম্যানেজার" };
@@ -42,18 +43,14 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
     queryKey: ["staff-att", mode, ids.join(",")],
     enabled: ids.length > 0,
     queryFn: async () => {
-      const { data, error } = await sdb.from("worker_attendance").select("*").in("worker_id", ids);
-      if (error) throw error;
-      return data ?? [];
+      return fetchAllRows<any>(() => sdb.from("worker_attendance").select("*").in("worker_id", ids).order("id"));
     },
   });
   const payQ = useQuery({
     queryKey: ["staff-pay", mode, ids.join(",")],
     enabled: ids.length > 0,
     queryFn: async () => {
-      const { data, error } = await sdb.from("worker_payments").select("*").in("worker_id", ids).order("payment_date", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      return fetchAllRows<any>(() => sdb.from("worker_payments").select("*").in("worker_id", ids).order("payment_date", { ascending: false }).order("id"));
     },
   });
 
@@ -68,9 +65,10 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       } else {
         // salaried: rows are absence entries (full or half day)
         for (const a of rows) absent += (a as any).is_half_day ? 0.5 : 1;
-        days = accruedDays(w.join_date);
-        const sal = Number(w.monthly_salary || 0);
-        earned = Math.max(0, Math.round(accruedMonths(w.join_date) * sal - absent * (sal / 30)));
+        // Season window: later of join/season start → earliest of today/leave date/season end
+        const s = salaryEarned({ monthly: w.monthly_salary, join: w.join_date, leave: (w as any).leave_date, absentDays: absent });
+        days = s.days;
+        earned = s.earned;
       }
       const paid = (payQ.data ?? []).filter((p) => p.worker_id === w.id).reduce((a, b) => a + Number(b.amount || 0), 0);
       m.set(w.id, { days, halves, absent, earned, paid, due: earned - paid });
@@ -82,7 +80,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const invalidate = () => qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("staff") || q.queryKey[0] === "cash" });
 
   // ---- worker form
-  const emptyW = { id: "", name: "", phone: "", role: mode === "daily" ? "daily" : "", wage: "", join_date: today };
+  const emptyW = { id: "", name: "", phone: "", role: mode === "daily" ? "daily" : "", wage: "", join_date: today, leave_date: "" };
   const [wDlg, setWDlg] = useState<null | typeof emptyW>(null);
   const saveW = useMutation({
     mutationFn: async () => {
@@ -93,6 +91,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
         daily_wage: mode === "daily" ? Number(f.wage || 0) : 0,
         monthly_salary: mode === "salary" ? Number(f.wage || 0) : 0,
         join_date: f.join_date || null,
+        leave_date: mode === "salary" ? f.leave_date || null : null,
       };
       const { error } = f.id ? await supabase.from("workers").update(payload).eq("id", f.id) : await supabase.from("workers").insert(payload);
       if (error) throw error;
@@ -247,7 +246,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                       <Button size="sm" variant="outline" onClick={() => setPDlg({ worker_id: w.id, amount: "", date: today, note: "" })}>টাকা দিন</Button>
                       {mode === "salary" && <Button size="sm" variant="ghost" className="ml-1" onClick={() => setAbsDlg({ worker_id: w.id, date: today, half: false, note: "" })}>ছুটি/অনুপস্থিত</Button>}
                       {isAdmin && <>
-                        <Button size="sm" variant="ghost" onClick={() => setWDlg({ id: w.id, name: w.name, phone: w.phone ?? "", role: w.role, wage: String(mode === "daily" ? w.daily_wage : w.monthly_salary), join_date: w.join_date ?? today })}><Pencil className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setWDlg({ id: w.id, name: w.name, phone: w.phone ?? "", role: w.role, wage: String(mode === "daily" ? w.daily_wage : w.monthly_salary), join_date: w.join_date ?? today, leave_date: (w as any).leave_date ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>
                         <Button size="sm" variant="ghost" onClick={() => confirm(`"${w.name}" মুছবেন?`) && delW.mutate(w.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                       </>}
                     </TableCell>
@@ -299,6 +298,13 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
               <div><Label>{mode === "daily" ? "দৈনিক মজুরি (৳)" : "মাসিক বেতন (৳)"}</Label><Input type="number" value={wDlg.wage} onChange={(e) => setWDlg({ ...wDlg, wage: e.target.value })} /></div>
               <div><Label>যোগদানের তারিখ</Label><Input type="date" value={wDlg.join_date} onChange={(e) => setWDlg({ ...wDlg, join_date: e.target.value })} /></div>
             </div>
+            {mode === "salary" && (
+              <div className="space-y-1">
+                <Label>কাজ ছাড়ার তারিখ (থাকলে)</Label>
+                <Input type="date" value={wDlg.leave_date} onChange={(e) => setWDlg({ ...wDlg, leave_date: e.target.value })} />
+                <p className="text-xs text-muted-foreground">বেতন জমবে মৌসুম শুরু বা যোগদান (যেটা পরে) থেকে আজ বা কাজ ছাড়ার দিন পর্যন্ত। আগের মৌসুমের বাকি "পূর্বের বকেয়া ও জের" পাতায় রাখুন।</p>
+              </div>
+            )}
           </div>}
           <DialogFooter><Button onClick={() => saveW.mutate()} disabled={saveW.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>

@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchCashSummary } from "@/lib/cash-queries";
-import { accruedMonths } from "@/lib/salary-accrual";
+import { sardarEarned } from "@/lib/salary-accrual";
 
 /* ============================================================================
  * CDB Bricks AI ব্রেন
@@ -289,7 +289,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     safeRows("খরচ", failed, sdbx.from("expenses").select("category,amount,expense_date,note").limit(20000)),
     safeRows("ইটের ধরন", failed, db.from("brick_types").select("id,name,default_unit_price,is_active").order("name")),
     safeRows("স্টক", failed, db.from("current_stock").select("brick_name,quantity")),
-    safeRows("সর্দার", failed, db.from("sardars").select("id,name,phone,kind,is_active,mill_name,monthly_salary,join_date").order("name")),
+    safeRows("সর্দার", failed, db.from("sardars").select("id,name,phone,kind,is_active,mill_name,monthly_salary,join_date,leave_date").order("name")),
     safeRows("কাঁচা ইট", failed, sdbx.from("kacha_brick_entries").select("sardar_id,quantity,amount,entry_type,entry_date").limit(20000)),
     safeRows("সর্দারের কাজ", failed, sdbx.from("sardar_work_entries").select("sardar_id,quantity,amount,entry_date").limit(20000)),
     safeRows("সর্দার পেমেন্ট", failed, sdbx.from("sardar_payments").select("sardar_id,amount,payment_type,payment_date").limit(20000)),
@@ -338,25 +338,11 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
 
   // সর্দার: সর্দার পাতার হুবহু সূত্র
   const sardarLines: SardarLine[] = sardars.map((sd) => {
-    let qty = 0;
-    let earned = 0;
+    // Same rule as the sardar page: production + load (or monthly salary for burn), season-scoped
+    const e = sardarEarned(sd as any, kacha as any, sardarWork as any);
+    const qty = e.qty;
+    const earned = e.earned;
     let paid = 0;
-    if (sd.kind === "burn") {
-      earned = Math.round(accruedMonths(sd.join_date) * num(sd.monthly_salary));
-    } else {
-      for (const k of kacha) {
-        if (k.sardar_id === sd.id && k.entry_type === "production") {
-          qty += num(k.quantity);
-          earned += num(k.amount);
-        }
-      }
-      for (const w of sardarWork) {
-        if (w.sardar_id === sd.id) {
-          qty += num(w.quantity);
-          earned += num(w.amount);
-        }
-      }
-    }
     for (const p of sardarPay) if (p.sardar_id === sd.id) paid += num(p.amount);
     return {
       id: sd.id,

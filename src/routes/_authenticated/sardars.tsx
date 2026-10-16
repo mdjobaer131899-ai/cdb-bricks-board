@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { accruedMonths } from "@/lib/salary-accrual";
+import { sardarEarned } from "@/lib/salary-accrual";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Users2, Loader2, Pencil, Trash2, Search } from "lucide-react";
@@ -33,11 +34,10 @@ export const Route = createFileRoute("/_authenticated/sardars")({
   component: SardarsPage,
 });
 
-type SardarForm = { id?: string; name: string; phone: string; address: string; group_id: string; note: string; is_active: boolean; kind: string; mill_name: string; monthly_salary: string; join_date: string };
+type SardarForm = { id?: string; name: string; phone: string; address: string; group_id: string; note: string; is_active: boolean; kind: string; mill_name: string; monthly_salary: string; join_date: string; leave_date: string };
 const NO_GROUP = "__none__";
-const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "", monthly_salary: "", join_date: todayBD() };
+const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "", monthly_salary: "", join_date: todayBD(), leave_date: "" };
 const KINDS: Record<string, string> = { mill: "মিল (কাঁচা ইট)", load: "লোড (ঢোকানো)", unload: "আনলোড (বের করা)", burn: "পুড়াই মেস্তুরি (মাসিক বেতন)" };
-const monthsSince = (d?: string | null) => accruedMonths(d);
 type GroupForm = { id?: string; name: string; note: string };
 const emptyGroup: GroupForm = { name: "", note: "" };
 
@@ -70,9 +70,7 @@ function SardarsPage() {
   const kachaQ = useQuery({
     queryKey: ["kacha-by-sardar"],
     queryFn: async () => {
-      const { data, error } = await sdb.from("kacha_brick_entries").select("id,sardar_id,quantity,amount,entry_type,entry_date,note");
-      if (error) throw error;
-      return data ?? [];
+      return fetchAllRows(() => sdb.from("kacha_brick_entries").select("id,sardar_id,quantity,amount,entry_type,entry_date,note").order("id"));
     },
   });
 
@@ -91,44 +89,26 @@ function SardarsPage() {
   const payQ = useQuery({
     queryKey: ["sardar-payments-by-sardar"],
     queryFn: async () => {
-      const { data, error } = await sdb
+      return fetchAllRows(() => sdb
         .from("sardar_payments")
         .select("id,sardar_id,payment_date,amount,payment_type,method,note")
-        .order("payment_date", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+        .order("payment_date", { ascending: false })
+        .order("id"));
     },
   });
 
   const stats = useMemo(() => {
-    const m = new Map<string, { qty: number; kacha: number; work: number; earned: number; paid: number; due: number }>();
-    const get = (id: string) => {
-      let cur = m.get(id);
-      if (!cur) { cur = { qty: 0, kacha: 0, work: 0, earned: 0, paid: 0, due: 0 }; m.set(id, cur); }
-      return cur;
-    };
-    (kachaQ.data ?? []).forEach((k: any) => {
-      if (!k.sardar_id) return;
-      const cur = get(k.sardar_id);
-      if (k.entry_type === "production") {
-        cur.qty += Number(k.quantity || 0);
-        cur.kacha += Number(k.amount || 0);
-      }
-    });
-    (workQ.data ?? []).forEach((w: any) => {
-      if (!w.sardar_id) return;
-      get(w.sardar_id).work += Number(w.amount || 0);
-    });
+    const m = new Map<string, { qty: number; kacha: number; work: number; earned: number; paid: number; due: number; months: number }>();
+    const paidBy = new Map<string, number>();
     (payQ.data ?? []).forEach((p: any) => {
       if (!p.sardar_id) return;
-      get(p.sardar_id).paid += Number(p.amount || 0);
+      paidBy.set(p.sardar_id, (paidBy.get(p.sardar_id) ?? 0) + Number(p.amount || 0));
     });
+    // Shared rule (salary-accrual.ts): production + load entries, or the season's salary for burn
     for (const sd of (sardarsQ.data ?? []) as any[]) {
-      if (sd.kind === "burn") { const c = get(sd.id); c.kacha = 0; c.qty = 0; c.work = Math.round(monthsSince(sd.join_date) * Number(sd.monthly_salary || 0)); }
-    }
-    for (const v of m.values()) {
-      v.earned = v.kacha + v.work;
-      v.due = v.earned - v.paid;
+      const e = sardarEarned(sd, (kachaQ.data ?? []) as any[], (workQ.data ?? []) as any[]);
+      const paid = paidBy.get(sd.id) ?? 0;
+      m.set(sd.id, { qty: e.qty, kacha: e.kacha, work: e.work, earned: e.earned, paid, due: e.earned - paid, months: e.salary?.months ?? 0 });
     }
     return m;
   }, [kachaQ.data, workQ.data, payQ.data, sardarsQ.data]);
@@ -154,13 +134,20 @@ function SardarsPage() {
     if (!detail) return [] as Array<{ id: string; date: string; label: string; credit: number; debit: number }>;
     const rows: Array<{ id: string; date: string; label: string; credit: number; debit: number }> = [];
     (kachaQ.data ?? []).forEach((k: any) => {
-      if (k.sardar_id !== detail.id || k.entry_type !== "production") return;
-      rows.push({ id: `k-${k.id}`, date: k.entry_date, label: `কাঁচা ইট — ${bn(Number(k.quantity || 0))} পিস`, credit: Number(k.amount || 0), debit: 0 });
+      if (k.sardar_id !== detail.id || (k.entry_type !== "production" && k.entry_type !== "load")) return;
+      const what = k.entry_type === "load" ? "ভাটায় ঢোকানো" : "কাঁচা ইট";
+      rows.push({ id: `k-${k.id}`, date: k.entry_date, label: `${what} — ${bn(Number(k.quantity || 0))} পিস`, credit: Number(k.amount || 0), debit: 0 });
     });
     (workQ.data ?? []).forEach((w: any) => {
       if (w.sardar_id !== detail.id) return;
       rows.push({ id: `w-${w.id}`, date: w.entry_date, label: `${w.category?.name ?? "কাজ"} — ${bn(Number(w.quantity || 0))} ${w.category?.unit ?? ""}`, credit: Number(w.amount || 0), debit: 0 });
     });
+    if (detail.kind === "burn") {
+      const e = sardarEarned(detail, [], []);
+      if (e.salary?.start && e.salary.end) {
+        rows.push({ id: "salary", date: e.salary.end, label: `মাসিক বেতন — ${bnDate(e.salary.start)} থেকে ${bnDate(e.salary.end)} (${bn(e.salary.days)} দিন)`, credit: e.earned, debit: 0 });
+      }
+    }
     (payQ.data ?? []).forEach((p: any) => {
       if (p.sardar_id !== detail.id) return;
       rows.push({ id: `p-${p.id}`, date: p.payment_date, label: `পেমেন্ট${p.payment_type === "advance" ? " (অগ্রিম)" : ""}${p.method ? ` • ${p.method}` : ""}`, credit: 0, debit: Number(p.amount || 0) });
@@ -193,6 +180,7 @@ function SardarsPage() {
         mill_name: f.kind === "mill" ? f.mill_name || null : null,
         monthly_salary: f.kind === "burn" ? Number(f.monthly_salary || 0) : 0,
         join_date: f.kind === "burn" ? f.join_date || null : null,
+        leave_date: f.kind === "burn" ? f.leave_date || null : null,
       };
       if (dlg.mode === "edit" && f.id) {
         const { error } = await sdb.from("sardars").update(payload).eq("id", f.id);
@@ -311,7 +299,7 @@ function SardarsPage() {
                               <div className="flex justify-end gap-1">
                                 <Button size="sm" variant="ghost" onClick={() => setDlg({
                                   open: true, mode: "edit",
-                                  form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "", monthly_salary: String(s.monthly_salary ?? ""), join_date: s.join_date ?? todayBD() },
+                                  form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "", monthly_salary: String(s.monthly_salary ?? ""), join_date: s.join_date ?? todayBD(), leave_date: s.leave_date ?? "" },
                                 })}><Pencil className="h-3.5 w-3.5" /></Button>
                                 <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${s.name}" মুছে ফেলবেন?`)) delSardar.mutate(s.id); }}>
                                   <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -405,7 +393,8 @@ function SardarsPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div><Label>মাসিক বেতন (৳)</Label><Input type="number" inputMode="decimal" value={dlg.form.monthly_salary} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, monthly_salary: e.target.value } }))} /></div>
                 <div><Label>যোগদানের তারিখ</Label><Input type="date" value={dlg.form.join_date} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, join_date: e.target.value } }))} /></div>
-                <p className="col-span-2 text-xs text-muted-foreground">পুড়াই মেস্তুরির ইটের সংখ্যা গণনা হবে না — মাস × মাসিক বেতন হিসেবে পাওনা হবে।</p>
+                <div className="col-span-2"><Label>কাজ ছাড়ার তারিখ (থাকলে)</Label><Input type="date" value={dlg.form.leave_date} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, leave_date: e.target.value } }))} /></div>
+                <p className="col-span-2 text-xs text-muted-foreground">পাওনা = এই মৌসুমে কাজের মাস × মাসিক বেতন। মৌসুম শুরু বা যোগদান (যেটা পরে) থেকে আজ বা কাজ ছাড়ার দিন পর্যন্ত। আগের মৌসুমের বাকি "পূর্বের বকেয়া ও জের" পাতায় রাখুন।</p>
               </div>
             )}
             <div><Label>ঠিকানা</Label><Input value={dlg.form.address} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, address: e.target.value } }))} /></div>

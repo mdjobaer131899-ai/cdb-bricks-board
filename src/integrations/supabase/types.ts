@@ -1979,6 +1979,7 @@ export type Database = {
           id: string
           is_active: boolean
           join_date: string | null
+          leave_date: string | null
           kind: string
           mill_name: string | null
           monthly_salary: number
@@ -1994,6 +1995,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           join_date?: string | null
+          leave_date?: string | null
           kind?: string
           mill_name?: string | null
           monthly_salary?: number
@@ -2009,6 +2011,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           join_date?: string | null
+          leave_date?: string | null
           kind?: string
           mill_name?: string | null
           monthly_salary?: number
@@ -2527,6 +2530,7 @@ export type Database = {
           designation_id: string | null
           id: string
           join_date: string | null
+          leave_date: string | null
           monthly_salary: number
           name: string
           note: string | null
@@ -2542,6 +2546,7 @@ export type Database = {
           designation_id?: string | null
           id?: string
           join_date?: string | null
+          leave_date?: string | null
           monthly_salary?: number
           name: string
           note?: string | null
@@ -2557,6 +2562,7 @@ export type Database = {
           designation_id?: string | null
           id?: string
           join_date?: string | null
+          leave_date?: string | null
           monthly_salary?: number
           name?: string
           note?: string | null
