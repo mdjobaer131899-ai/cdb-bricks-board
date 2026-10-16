@@ -59,9 +59,10 @@ function SuppliersPage() {
   });
 
   const purchasesQ = useQuery({
-    queryKey: ["raw-purchases-by-supplier"],
+    queryKey: ["purchases-by-supplier"],
     queryFn: async () => {
-      const { data, error } = await sdb.from("raw_material_purchases").select("supplier_id,total_amount");
+      // সব কেনাকাটা (কাঁচামাল সহ) এখন একটাই খাতায়: purchases
+      const { data, error } = await sdb.from("purchases").select("supplier_id,total_amount");
       if (error) throw error;
       return data ?? [];
     },

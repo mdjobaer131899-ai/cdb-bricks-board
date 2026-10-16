@@ -745,7 +745,7 @@ async function fetchSeasonTotals(s: SeasonRow) {
     sdb.from("collections").select("amount").gte("payment_date", from).lte("payment_date", to),
     sdb.from("expenses").select("amount").gte("expense_date", from).lte("expense_date", to),
     sdb.from("worker_payments").select("amount").gte("payment_date", from).lte("payment_date", to),
-    sdb.from("raw_material_purchases").select("total_amount").gte("purchase_date", from).lte("purchase_date", to),
+    sdb.from("purchases").select("total_amount").gte("purchase_date", from).lte("purchase_date", to),
   ]);
   const sum = (rows: any[] | null, k: string) => (rows ?? []).reduce((a, r) => a + Number(r[k] || 0), 0);
   const production = sum(prodRes.data, "quantity");
@@ -853,7 +853,7 @@ function SeasonReport() {
                   <TableBody>
                     <TableRow><TableCell>সাধারণ ব্যয় (expenses)</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expGeneral)}</TableCell></TableRow>
                     <TableRow><TableCell>শ্রমিক খরচ (worker_payments)</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expWorker)}</TableCell></TableRow>
-                    <TableRow><TableCell>কাঁচামাল খরচ (raw_material_purchases)</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expRaw)}</TableCell></TableRow>
+                    <TableRow><TableCell>কাঁচামাল ও মালামাল ক্রয়</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expRaw)}</TableCell></TableRow>
                   </TableBody>
                   <TableFooter>
                     <TableRow><TableCell className="font-semibold">মোট ব্যয়</TableCell><TableCell className="text-right tabular-nums font-bold">৳ {bn(t.expense)}</TableCell></TableRow>
@@ -888,7 +888,7 @@ async function fetchAnnual(year: number) {
     sdb.from("collections").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
     sdb.from("expenses").select("expense_date, amount").gte("expense_date", from).lte("expense_date", to),
     sdb.from("worker_payments").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
-    sdb.from("raw_material_purchases").select("purchase_date, total_amount").gte("purchase_date", from).lte("purchase_date", to),
+    sdb.from("purchases").select("purchase_date, total_amount").gte("purchase_date", from).lte("purchase_date", to),
   ]);
   const months = Array.from({ length: 12 }, () => ({ sales: 0, collection: 0, expense: 0 }));
   const bucket = (date: string) => new Date(date).getMonth();

@@ -298,7 +298,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     safeRows("শ্রমিক পেমেন্ট", failed, sdbx.from("worker_payments").select("worker_id,amount,payment_date").limit(20000)),
     safeRows("সাপ্লায়ার", failed, db.from("suppliers").select("id,name,phone,material_type").order("name")),
     safeRows("কেনাকাটা", failed, sdbx.from("purchases").select("supplier_id,total_amount").limit(20000)),
-    safeRows("কাঁচামাল কেনা", failed, sdbx.from("raw_material_purchases").select("supplier_id,total_amount").limit(20000)),
+    Promise.resolve([] as Row[]), // আগে raw_material_purchases পড়া হতো; এখন সব purchases-এ
     safeRows("সাপ্লায়ার পেমেন্ট", failed, sdbx.from("supplier_payments").select("supplier_id,amount,payment_date").limit(20000)),
     safeRows("গাড়ি", failed, db.from("vehicles").select("vehicle_no,type,driver_name,active")),
     safeRows("পূর্বের জের", failed,
@@ -393,9 +393,9 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
   });
 
   const supplierLines: SupplierLine[] = suppliers.map((s) => {
-    const purchase =
-      purchases.filter((p) => p.supplier_id === s.id).reduce((a, p) => a + num(p.total_amount), 0) +
-      rawPurchases.filter((p) => p.supplier_id === s.id).reduce((a, p) => a + num(p.total_amount), 0);
+    // সব কেনাকাটা (কাঁচামাল সহ) এখন purchases খাতায়; পুরোনো raw_material_purchases
+    // সেখানে কপি করা হয়েছে, তাই আবার যোগ করলে দ্বিগুণ হতো
+    const purchase = purchases.filter((p) => p.supplier_id === s.id).reduce((a, p) => a + num(p.total_amount), 0);
     const paid = supplierPay.filter((p) => p.supplier_id === s.id).reduce((a, p) => a + num(p.amount), 0);
     return {
       id: s.id,

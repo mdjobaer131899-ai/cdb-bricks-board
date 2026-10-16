@@ -1381,6 +1381,8 @@ export type Database = {
           created_by: string
           id: string
           item_name: string
+          legacy_rmp_id: string | null
+          material_id: string | null
           note: string | null
           purchase_date: string
           quantity: number
@@ -1395,6 +1397,8 @@ export type Database = {
           created_by: string
           id?: string
           item_name: string
+          legacy_rmp_id?: string | null
+          material_id?: string | null
           note?: string | null
           purchase_date?: string
           quantity?: number
@@ -1409,6 +1413,8 @@ export type Database = {
           created_by?: string
           id?: string
           item_name?: string
+          legacy_rmp_id?: string | null
+          material_id?: string | null
           note?: string | null
           purchase_date?: string
           quantity?: number
@@ -1419,6 +1425,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "purchases_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "purchases_supplier_id_fkey"
             columns: ["supplier_id"]
@@ -1562,27 +1575,39 @@ export type Database = {
       raw_materials: {
         Row: {
           active: boolean
+          buy_pattern: string
           created_at: string
           id: string
+          in_brick_cost: boolean
           low_stock_threshold: number
           name: string
+          sort_order: number
+          stage: string
           unit: string
           updated_at: string
         }
         Insert: {
           active?: boolean
+          buy_pattern?: string
           created_at?: string
           id?: string
+          in_brick_cost?: boolean
           low_stock_threshold?: number
+          sort_order?: number
+          stage?: string
           name: string
           unit?: string
           updated_at?: string
         }
         Update: {
           active?: boolean
+          buy_pattern?: string
           created_at?: string
           id?: string
+          in_brick_cost?: boolean
           low_stock_threshold?: number
+          sort_order?: number
+          stage?: string
           name?: string
           unit?: string
           updated_at?: string
