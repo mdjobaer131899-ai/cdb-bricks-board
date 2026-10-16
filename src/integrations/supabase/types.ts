@@ -301,6 +301,7 @@ export type Database = {
           note: string | null
           order_id: string | null
           payment_date: string
+          sales_entry_id: string | null
           updated_at: string
         }
         Insert: {
@@ -314,6 +315,7 @@ export type Database = {
           note?: string | null
           order_id?: string | null
           payment_date?: string
+          sales_entry_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -327,6 +329,7 @@ export type Database = {
           note?: string | null
           order_id?: string | null
           payment_date?: string
+          sales_entry_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2162,8 +2165,10 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          method: string
           note: string | null
           payment_date: string
+          sales_entry_id: string | null
           supplier_id: string
         }
         Insert: {
@@ -2171,8 +2176,10 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          method?: string
           note?: string | null
           payment_date?: string
+          sales_entry_id?: string | null
           supplier_id: string
         }
         Update: {
@@ -2180,8 +2187,10 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          method?: string
           note?: string | null
           payment_date?: string
+          sales_entry_id?: string | null
           supplier_id?: string
         }
         Relationships: [
@@ -2786,6 +2795,18 @@ export type Database = {
       material_avg_cost: { Args: { _material_id: string }; Returns: number }
       next_challan_number: {
         Args: { _date?: string; _prefix?: string }
+        Returns: string
+      }
+      settle_supplier_with_bricks: {
+        Args: {
+          _supplier_id: string
+          _customer_id: string
+          _brick_type_id: string
+          _quantity: number
+          _unit_price: number
+          _date?: string
+          _note?: string
+        }
         Returns: string
       }
       recompute_contract_advance: {

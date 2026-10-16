@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wallet, Wrench } from "lucide-react";
+import { ArrowLeft, Boxes, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wallet, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { printTable } from "@/lib/print-table";
 
 /* =========================================================
@@ -118,6 +119,15 @@ function PurchasesPage() {
   const [buy, setBuy] = useState<BuyForm | null>(null);
   const [itemDlg, setItemDlg] = useState<ItemForm | null>(null);
   const [payDlg, setPayDlg] = useState<null | { id?: string; supplier_id: string; amount: string; date: string; note: string }>(null);
+  const [brickDlg, setBrickDlg] = useState<null | {
+    supplier_id: string;
+    customer_id: string;
+    brick_type_id: string;
+    quantity: string;
+    unit_price: string;
+    date: string;
+    note: string;
+  }>(null);
 
   /* ---------- data ---------- */
   const itemsQ = useQuery({
@@ -156,6 +166,19 @@ function PurchasesPage() {
       if (error) throw error;
       return data ?? [];
     },
+  });
+
+  // For settling a supplier due with bricks
+  const custQ = useQuery({
+    queryKey: ["customers-min"],
+    enabled: isAdmin,
+    queryFn: async () => (await supabase.from("customers").select("id,name").order("name").limit(5000)).data ?? [],
+  });
+  const brickTypesQ = useQuery({ queryKey: ["brick-types-active"], enabled: !!brickDlg, queryFn: fetchActiveBrickTypes });
+  const stockQ = useQuery({
+    queryKey: ["current-stock"],
+    enabled: !!brickDlg,
+    queryFn: async () => (await supabase.from("current_stock").select("brick_type_id, brick_name, quantity")).data ?? [],
   });
 
   const items = itemsQ.data ?? [];
@@ -390,11 +413,59 @@ function PurchasesPage() {
     onError: (e: Error) => toast.error(e.message),
   });
   const delPay = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("supplier_payments").delete().eq("id", id);
+    mutationFn: async (p: { id: string; sales_entry_id?: string | null }) => {
+      // A brick settlement is undone by deleting its challan: the collection and payment go with it
+      const { error } = p.sales_entry_id
+        ? await supabase.from("sales_entries").delete().eq("id", p.sales_entry_id)
+        : await supabase.from("supplier_payments").delete().eq("id", p.id);
       if (error) throw error;
     },
     onSuccess: () => toast.success("মুছে ফেলা হয়েছে"),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  /* ---------- settle a supplier due with bricks (admin) ---------- */
+  function openBrickDlg(supplierId: string, supplierName: string) {
+    const same = (custQ.data ?? []).find((c) => c.name.trim() === supplierName.trim());
+    setBrickDlg({ supplier_id: supplierId, customer_id: same?.id ?? NEW_SUP, brick_type_id: "", quantity: "", unit_price: "", date: today, note: "" });
+  }
+  const brickSupplierName = brickDlg ? supName(brickDlg.supplier_id) : "";
+  const brickDue = brickDlg ? (bySup.find((x) => x.id === brickDlg.supplier_id)?.due ?? 0) : 0;
+  const brickTotal = brickDlg ? Number(brickDlg.quantity || 0) * Number(brickDlg.unit_price || 0) : 0;
+  const brickStock = brickDlg ? Number((stockQ.data ?? []).find((x) => x.brick_type_id === brickDlg.brick_type_id)?.quantity ?? 0) : 0;
+
+  const saveBrick = useMutation({
+    mutationFn: async () => {
+      const f = brickDlg!;
+      if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
+      if (!f.brick_type_id) throw new Error("কোন ইট দিলেন তা বেছে নিন");
+      const qty = Math.round(Number(f.quantity || 0));
+      const rate = Number(f.unit_price || 0);
+      if (!(qty > 0)) throw new Error("কত পিস দিলেন লিখুন");
+      if (!(rate > 0)) throw new Error("প্রতি পিসের দর লিখুন");
+      if (qty > brickStock) throw new Error(`স্টকে এত ইট নেই (আছে ${bn(brickStock)} পিস)`);
+      let customerId = f.customer_id;
+      if (customerId === NEW_SUP) {
+        const name = brickSupplierName.trim();
+        const { data, error } = await supabase.from("customers").insert({ name, created_by: me.user.id }).select("id").single();
+        if (error) throw error;
+        customerId = data.id;
+      }
+      const { error } = await supabase.rpc("settle_supplier_with_bricks", {
+        _supplier_id: f.supplier_id,
+        _customer_id: customerId,
+        _brick_type_id: f.brick_type_id,
+        _quantity: qty,
+        _unit_price: rate,
+        _date: f.date,
+        _note: f.note.trim() || undefined,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("ইট দিয়ে বাকি শোধ হয়েছে, চালানও তৈরি হয়েছে");
+      setBrickDlg(null);
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -719,6 +790,118 @@ function PurchasesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* ===== settle with bricks dialog ===== */}
+      <Dialog open={!!brickDlg} onOpenChange={(o) => !o && setBrickDlg(null)}>
+        <DialogContent className="max-h-[92dvh] max-w-md overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>ইট দিয়ে বাকি শোধ — {brickSupplierName}</DialogTitle>
+          </DialogHeader>
+          {brickDlg && (
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between rounded-xl bg-amber-50 px-3.5 py-2.5 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                <span className="text-sm font-semibold">এখন বাকি</span>
+                <span className="num text-lg font-extrabold">{tk(brickDue)}</span>
+              </div>
+
+              <div>
+                <Label>কোন ইট দিলেন</Label>
+                <Select
+                  value={brickDlg.brick_type_id}
+                  onValueChange={(v) => {
+                    const bt = (brickTypesQ.data ?? []).find((b) => b.id === v);
+                    setBrickDlg({ ...brickDlg, brick_type_id: v, unit_price: brickDlg.unit_price || (bt?.default_unit_price ? String(bt.default_unit_price) : "") });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="ইটের ধরন বাছুন" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(brickTypesQ.data ?? []).map((b) => {
+                      const st = Number((stockQ.data ?? []).find((x) => x.brick_type_id === b.id)?.quantity ?? 0);
+                      return (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name} · স্টকে {bn(st)}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="bs-qty">কত পিস</Label>
+                  <Input id="bs-qty" type="number" inputMode="numeric" value={brickDlg.quantity} onChange={(e) => setBrickDlg({ ...brickDlg, quantity: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="bs-rate">দর (প্রতি পিস, ৳)</Label>
+                  <Input id="bs-rate" type="number" inputMode="decimal" value={brickDlg.unit_price} onChange={(e) => setBrickDlg({ ...brickDlg, unit_price: e.target.value })} />
+                </div>
+              </div>
+              {brickDue > 0 && Number(brickDlg.unit_price || 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setBrickDlg({ ...brickDlg, quantity: String(Math.floor(brickDue / Number(brickDlg.unit_price))) })}
+                  className="text-sm font-bold text-primary underline-offset-2 hover:underline"
+                >
+                  পুরো বাকির সমান: {bn(Math.floor(brickDue / Number(brickDlg.unit_price)))} পিস
+                </button>
+              )}
+
+              <div className="rounded-xl bg-muted px-3.5 py-2.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">ইটের দাম</span>
+                  <b className="num">{tk(brickTotal)}</b>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">এরপর বাকি থাকবে</span>
+                  <b className={`num ${brickDue - brickTotal < -0.5 ? "text-info" : ""}`}>
+                    {brickDue - brickTotal < -0.5 ? `উল্টো অগ্রিম ${tk(brickTotal - brickDue)}` : tk(Math.max(0, brickDue - brickTotal))}
+                  </b>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="bs-date">তারিখ</Label>
+                  <Input id="bs-date" type="date" value={brickDlg.date} onChange={(e) => setBrickDlg({ ...brickDlg, date: e.target.value })} />
+                </div>
+                <div>
+                  <Label>চালান কার নামে</Label>
+                  <Select value={brickDlg.customer_id} onValueChange={(v) => setBrickDlg({ ...brickDlg, customer_id: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NEW_SUP}>+ নতুন গ্রাহক: {brickSupplierName}</SelectItem>
+                      {(custQ.data ?? []).map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="bs-note">নোট (ইচ্ছা হলে)</Label>
+                <Input id="bs-note" placeholder="যেমন: গাড়ি নম্বর" value={brickDlg.note} onChange={(e) => setBrickDlg({ ...brickDlg, note: e.target.value })} />
+              </div>
+
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                সেভ করলে: ইট স্টক থেকে কমবে, ওই নামে একটা চালান হবে, ক্যাশ বইয়ে সমান টাকার আয় (ইট বিক্রি) আর খরচ (বাকি পরিশোধ) উঠবে। হাতের নগদ বদলাবে না।
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button className="h-11 w-full text-base" onClick={() => saveBrick.mutate()} disabled={saveBrick.isPending}>
+              {saveBrick.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              ইট দিয়ে শোধ করুন
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 
@@ -863,9 +1046,16 @@ function PurchasesPage() {
                   <div className={`num text-[15px] font-bold ${s.due < 0 ? "text-info" : "text-warning"}`}>{tk(Math.abs(s.due))}</div>
                   <div className="text-[11px] text-muted-foreground">{s.due < 0 ? "অগ্রিম দেওয়া" : "বাকি"}</div>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => setPayDlg({ supplier_id: s.id, amount: "", date: today, note: "" })}>
-                  পরিশোধ
-                </Button>
+                <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                  <Button size="sm" variant="outline" onClick={() => setPayDlg({ supplier_id: s.id, amount: "", date: today, note: "" })}>
+                    টাকা দিয়ে
+                  </Button>
+                  {isAdmin && s.due > 0.5 && (
+                    <Button size="sm" variant="outline" onClick={() => openBrickDlg(s.id, s.name)}>
+                      ইট দিয়ে
+                    </Button>
+                  )}
+                </div>
               </div>
             ))
           )}
@@ -887,8 +1077,12 @@ function PurchasesPage() {
           ) : (
             (payQ.data ?? []).map((p) => (
               <div key={p.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
-                  <Wallet className="h-4 w-4" aria-hidden="true" />
+                <span
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+                    p.method === "bricks" ? "bg-accent text-accent-foreground" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                  }`}
+                >
+                  {p.method === "bricks" ? <Boxes className="h-4 w-4" aria-hidden="true" /> : <Wallet className="h-4 w-4" aria-hidden="true" />}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[15px] font-semibold">{supName(p.supplier_id)}</div>
@@ -900,15 +1094,20 @@ function PurchasesPage() {
                 <div className="num shrink-0 text-[15px] font-bold text-success">{tk(p.amount)}</div>
                 {isAdmin && (
                   <div className="flex shrink-0">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label="সম্পাদনা"
-                      onClick={() => setPayDlg({ id: p.id, supplier_id: p.supplier_id, amount: String(p.amount), date: p.payment_date, note: p.note ?? "" })}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() => confirm("মুছবেন?") && delPay.mutate(p.id)}>
+                    {p.method !== "bricks" && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label="সম্পাদনা"
+                        onClick={() => setPayDlg({ id: p.id, supplier_id: p.supplier_id, amount: String(p.amount), date: p.payment_date, note: p.note ?? "" })}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() =>
+                        confirm(p.method === "bricks" ? "এই ইট দিয়ে শোধ বাতিল করবেন? সাথে এর চালান আর জমাও মুছে যাবে, ইট স্টকে ফিরবে।" : "মুছবেন?") &&
+                        delPay.mutate({ id: p.id, sales_entry_id: p.sales_entry_id })
+                      }>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
