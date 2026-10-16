@@ -49,6 +49,12 @@ function PurchasesPage() {
     queryFn: async () => { const { data, error } = await sdb.from("supplier_payments").select("*").order("payment_date", { ascending: false }); if (error) throw error; return data ?? []; },
   });
   const supName = (id: string | null) => (supQ.data ?? []).find((s) => s.id === id)?.name ?? "—";
+  // Raw materials typed here by name (e.g. "কয়লা") are tagged so the materials page counts them too
+  const matQ = useQuery({ queryKey: ["raw-materials-names"], queryFn: async () => (await supabase.from("raw_materials").select("id,name")).data ?? [] });
+  const materialIdFor = (name: string) => (matQ.data ?? []).find((m) => m.name.normalize("NFC") === name.trim().normalize("NFC"))?.id ?? null;
+  // Mixed items (e.g. engine parts) have no single rate: quantity 0 means "bought together, total only"
+  const qtyText = (p: { quantity: number; unit: string | null; unit_price: number }) =>
+    Number(p.quantity) > 0 ? `${bn(p.quantity)} ${p.unit ?? ""} × ${bn(p.unit_price)}` : "একসাথে (মোট দাম)";
 
   const bySup = useMemo(() => {
     return (supQ.data ?? []).map((s) => {
@@ -61,7 +67,9 @@ function PurchasesPage() {
 
   const inv = () => { ["purchases", "supplier-payments", "suppliers", "cash"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); };
 
-  const emptyP = { id: "", purchase_date: today, supplier_id: NEW_SUP, new_supplier: "", item_name: "", quantity: "", unit: "", unit_price: "", paid_now: "", note: "" };
+  const emptyP = { id: "", purchase_date: today, supplier_id: NEW_SUP, new_supplier: "", item_name: "", quantity: "", unit: "", unit_price: "", total: "", paid_now: "", note: "" };
+  // Total: typed total wins; otherwise quantity × rate
+  const formTotal = (f: typeof emptyP) => (f.total.trim() !== "" ? Number(f.total || 0) : Number(f.quantity || 0) * Number(f.unit_price || 0));
   const [pDlg, setPDlg] = useState<null | typeof emptyP>(null);
   const saveP = useMutation({
     mutationFn: async () => {
@@ -75,7 +83,9 @@ function PurchasesPage() {
         supplierId = data.id;
       }
       const qty = Number(f.quantity || 0), price = Number(f.unit_price || 0);
-      const payload = { purchase_date: f.purchase_date, supplier_id: supplierId, item_name: f.item_name.trim(), quantity: qty, unit: f.unit || null, unit_price: price, total_amount: qty * price, note: f.note || null };
+      const total = formTotal(f);
+      if (!(total > 0)) throw new Error("মোট দাম দিন (পরিমাণ × দর, অথবা সরাসরি মোট টাকা)");
+      const payload = { purchase_date: f.purchase_date, supplier_id: supplierId, item_name: f.item_name.trim(), material_id: materialIdFor(f.item_name), quantity: qty, unit: f.unit || null, unit_price: price, total_amount: Math.round(total * 100) / 100, note: f.note || null };
       if (f.id) { const { error } = await supabase.from("purchases").update(payload).eq("id", f.id); if (error) throw error; }
       else {
         const { error } = await supabase.from("purchases").insert({ ...payload, created_by: me!.user.id }); if (error) throw error;
@@ -110,7 +120,7 @@ function PurchasesPage() {
   const print = () => printTable({
     title: "মালামাল ক্রয় তালিকা",
     headers: ["তারিখ", "বিক্রেতা", "জিনিস", "পরিমাণ", "দর", "মোট"], rightCols: [3, 4, 5],
-    rows: (purQ.data ?? []).map((p) => [bnDate(p.purchase_date), supName(p.supplier_id), p.item_name, `${bn(p.quantity)} ${p.unit ?? ""}`, bn(p.unit_price), `৳ ${bn(p.total_amount)}`]),
+    rows: (purQ.data ?? []).map((p) => [bnDate(p.purchase_date), supName(p.supplier_id), p.item_name, Number(p.quantity) > 0 ? `${bn(p.quantity)} ${p.unit ?? ""}` : "একসাথে", Number(p.quantity) > 0 ? bn(p.unit_price) : "—", `৳ ${bn(p.total_amount)}`]),
     totals: [["মোট ক্রয়", `৳ ${bn(tot.bought)}`], ["পরিশোধ", `৳ ${bn(tot.paid)}`], ["বাকি", `৳ ${bn(tot.due)}`]],
   });
   const f = pDlg;
@@ -166,10 +176,10 @@ function PurchasesPage() {
                   <TableCell>{bnDate(p.purchase_date)}</TableCell>
                   <TableCell className="font-medium">{p.item_name}</TableCell>
                   <TableCell>{supName(p.supplier_id)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{bn(p.quantity)} {p.unit ?? ""} × {bn(p.unit_price)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{qtyText(p)}</TableCell>
                   <TableCell className="text-right tabular-nums">৳ {bn(p.total_amount)}</TableCell>
                   <TableCell className="text-right whitespace-nowrap">{isAdmin && <>
-                    <Button size="sm" variant="ghost" onClick={() => setPDlg({ ...emptyP, id: p.id, purchase_date: p.purchase_date, supplier_id: p.supplier_id ?? NEW_SUP, item_name: p.item_name, quantity: String(p.quantity), unit: p.unit ?? "", unit_price: String(p.unit_price), note: p.note ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPDlg({ ...emptyP, id: p.id, purchase_date: p.purchase_date, supplier_id: p.supplier_id ?? NEW_SUP, item_name: p.item_name, quantity: Number(p.quantity) > 0 ? String(p.quantity) : "", unit: p.unit ?? "", unit_price: Number(p.unit_price) > 0 ? String(p.unit_price) : "", total: Number(p.total_amount) > 0 && Math.abs(Number(p.quantity) * Number(p.unit_price) - Number(p.total_amount)) > 0.5 ? String(p.total_amount) : "", note: p.note ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>
                     <Button size="sm" variant="ghost" onClick={() => confirm("মুছবেন?") && delP.mutate(p.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                   </>}</TableCell>
                 </TableRow>
@@ -207,7 +217,7 @@ function PurchasesPage() {
           {f && <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div><Label>তারিখ</Label><Input type="date" value={f.purchase_date} onChange={(e) => setPDlg({ ...f, purchase_date: e.target.value })} /></div>
-              <div><Label>জিনিস</Label><Input placeholder="যেমন: ডিজেল, কারেন্ট বিল" value={f.item_name} onChange={(e) => setPDlg({ ...f, item_name: e.target.value })} /></div>
+              <div><Label>জিনিস</Label><Input placeholder="যেমন: ইঞ্জিন মালামাল, কারেন্ট বিল" value={f.item_name} onChange={(e) => setPDlg({ ...f, item_name: e.target.value })} /></div>
             </div>
             <div><Label>বিক্রেতা</Label>
               <Select value={f.supplier_id} onValueChange={(v) => setPDlg({ ...f, supplier_id: v })}>
@@ -216,12 +226,16 @@ function PurchasesPage() {
               </Select>
               {f.supplier_id === NEW_SUP && <Input className="mt-2" placeholder="বিক্রেতার নাম" value={f.new_supplier} onChange={(e) => setPDlg({ ...f, new_supplier: e.target.value })} />}
             </div>
+            <p className="text-xs text-muted-foreground">অনেক রকম জিনিস একসাথে কিনলে পরিমাণ ও দর খালি রেখে নিচে শুধু মোট টাকা লিখুন।</p>
             <div className="grid grid-cols-3 gap-2">
               <div><Label>পরিমাণ</Label><Input type="number" value={f.quantity} onChange={(e) => setPDlg({ ...f, quantity: e.target.value })} /></div>
               <div><Label>একক</Label><Input placeholder="লিটার" value={f.unit} onChange={(e) => setPDlg({ ...f, unit: e.target.value })} /></div>
               <div><Label>দর (৳)</Label><Input type="number" value={f.unit_price} onChange={(e) => setPDlg({ ...f, unit_price: e.target.value })} /></div>
             </div>
-            <p className="text-sm">মোট: <b>৳ {bn(Number(f.quantity || 0) * Number(f.unit_price || 0))}</b></p>
+            <div><Label>মোট টাকা (৳)</Label>
+              <Input type="number" inputMode="decimal" placeholder={Number(f.quantity || 0) * Number(f.unit_price || 0) > 0 ? `পরিমাণ × দর = ${bn(Number(f.quantity || 0) * Number(f.unit_price || 0))}` : "যেমন: 68580"} value={f.total} onChange={(e) => setPDlg({ ...f, total: e.target.value })} />
+            </div>
+            <p className="text-sm">মোট: <b>৳ {bn(formTotal(f))}</b>{!f.id && Number(f.paid_now || 0) > 0 && <> · বাকি থাকবে <b>৳ {bn(formTotal(f) - Number(f.paid_now || 0))}</b></>}</p>
             {!f.id && <div><Label>এখন পরিশোধ (৳)</Label><Input type="number" value={f.paid_now} onChange={(e) => setPDlg({ ...f, paid_now: e.target.value })} /></div>}
             <div><Label>নোট</Label><Input value={f.note} onChange={(e) => setPDlg({ ...f, note: e.target.value })} /></div>
           </div>}
