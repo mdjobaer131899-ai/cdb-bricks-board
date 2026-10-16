@@ -24,7 +24,8 @@ export const Route = createFileRoute("/_authenticated/suppliers")({
   component: SuppliersPage,
 });
 
-const MATERIAL_TYPES = ["মাটি", "কয়লা", "তুষ", "কাঠ", "অন্যান্য"];
+const OTHER_MATERIAL = "অন্যান্য";
+const MATERIAL_TYPES = ["মাটি", "কয়লা", "তুষ", "বালু", "ডিজেল", "ইঞ্জিন মালামাল", "গাড়ি ভাড়া", OTHER_MATERIAL];
 
 type SupplierForm = {
   id?: string;
@@ -32,10 +33,12 @@ type SupplierForm = {
   phone: string;
   address: string;
   material_type: string;
+  /** typed material when material_type is "অন্যান্য" */
+  material_other: string;
   note: string;
 };
 
-const emptyForm: SupplierForm = { name: "", phone: "", address: "", material_type: "মাটি", note: "" };
+const emptyForm: SupplierForm = { name: "", phone: "", address: "", material_type: "", material_other: "", note: "" };
 
 function SuppliersPage() {
   const qc = useQueryClient();
@@ -110,13 +113,19 @@ function SuppliersPage() {
   const saveSupplier = useMutation({
     mutationFn: async () => {
       const f = dialog.form;
-      if (!f.name.trim()) throw new Error("নাম দিন");
+      // Everything except the note is required
+      if (!f.name.trim()) throw new Error("নাম লিখুন");
+      if (!f.phone.trim()) throw new Error("ফোন নম্বর লিখুন");
+      if (!f.material_type) throw new Error("উপকরণ বাছুন");
+      const material = f.material_type === OTHER_MATERIAL ? f.material_other.trim() : f.material_type;
+      if (!material) throw new Error("উপকরণটা কী, তা লিখুন");
+      if (!f.address.trim()) throw new Error("ঠিকানা লিখুন");
       const payload = {
         name: f.name.trim(),
-        phone: f.phone || null,
-        address: f.address || null,
-        material_type: f.material_type || null,
-        note: f.note || null,
+        phone: f.phone.trim(),
+        address: f.address.trim(),
+        material_type: material,
+        note: f.note.trim() || null,
       };
       if (dialog.mode === "edit" && f.id) {
         const { error } = await sdb.from("suppliers").update(payload).eq("id", f.id);
@@ -182,7 +191,9 @@ function SuppliersPage() {
     open: true, mode: "edit",
     form: {
       id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "",
-      material_type: s.material_type ?? "মাটি", note: s.note ?? "",
+      material_type: !s.material_type ? "" : MATERIAL_TYPES.includes(s.material_type) ? s.material_type : OTHER_MATERIAL,
+      material_other: s.material_type && !MATERIAL_TYPES.includes(s.material_type) ? s.material_type : "",
+      note: s.note ?? "",
     },
   });
   const openPay = (supplierId: string) => setPayDialog({
@@ -311,18 +322,22 @@ function SuppliersPage() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{dialog.mode === "edit" ? "সরবরাহকারী সম্পাদনা" : "নতুন সরবরাহকারী"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>নাম</Label><Input value={dialog.form.name} onChange={(e) => setDialog((s) => ({ ...s, form: { ...s.form, name: e.target.value } }))} /></div>
+            <div><Label>নাম *</Label><Input value={dialog.form.name} onChange={(e) => setDialog((s) => ({ ...s, form: { ...s.form, name: e.target.value } }))} /></div>
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>ফোন</Label><Input value={dialog.form.phone} onChange={(e) => setDialog((s) => ({ ...s, form: { ...s.form, phone: e.target.value } }))} /></div>
+              <div><Label>ফোন *</Label><Input type="tel" inputMode="tel" value={dialog.form.phone} onChange={(e) => setDialog((s) => ({ ...s, form: { ...s.form, phone: e.target.value } }))} /></div>
               <div>
-                <Label>উপকরণের ধরন</Label>
+                <Label>উপকরণ *</Label>
                 <Select value={dialog.form.material_type} onValueChange={(v) => setDialog((s) => ({ ...s, form: { ...s.form, material_type: v } }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="বাছুন" /></SelectTrigger>
                   <SelectContent>{MATERIAL_TYPES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
-            <div><Label>ঠিকানা</Label><Input value={dialog.form.address} onChange={(e) => setDialog((s) => ({ ...s, form: { ...s.form, address: e.target.value } }))} /></div>
+            {dialog.form.material_type === OTHER_MATERIAL && (
+              <div><Label>উপকরণটা কী *</Label><Input placeholder="যেমন: গ্রিজ, টায়ার" value={dialog.form.material_other} onChange={(e) => setDialog((s) => ({ ...s, form: { ...s.form, material_other: e.target.value } }))} /></div>
+            )}
+            <div><Label>ঠিকানা *</Label><Input value={dialog.form.address} onChange={(e) => setDialog((s) => ({ ...s, form: { ...s.form, address: e.target.value } }))} /></div>
+            <p className="text-xs text-muted-foreground">* চিহ্নের ঘরগুলো পূরণ না করলে সেভ হবে না। নোট ইচ্ছা হলে।</p>
             <div><Label>নোট</Label><Textarea rows={2} value={dialog.form.note} onChange={(e) => setDialog((s) => ({ ...s, form: { ...s.form, note: e.target.value } }))} /></div>
           </div>
           <DialogFooter>
