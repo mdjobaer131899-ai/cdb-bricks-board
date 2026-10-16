@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { sardarEarned } from "@/lib/salary-accrual";
+import { fetchPayRates, rateAt, sardarEarned } from "@/lib/salary-accrual";
+import { fetchMills } from "@/lib/production";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,9 +35,9 @@ export const Route = createFileRoute("/_authenticated/sardars")({
   component: SardarsPage,
 });
 
-type SardarForm = { id?: string; name: string; phone: string; address: string; group_id: string; note: string; is_active: boolean; kind: string; mill_name: string; monthly_salary: string; join_date: string; leave_date: string };
+type SardarForm = { id?: string; name: string; phone: string; address: string; group_id: string; note: string; is_active: boolean; kind: string; mill_name: string; monthly_salary: string; origSalary: string; salaryFrom: string; join_date: string; leave_date: string };
 const NO_GROUP = "__none__";
-const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "", monthly_salary: "", join_date: todayBD(), leave_date: "" };
+const emptySardar: SardarForm = { name: "", phone: "", address: "", group_id: NO_GROUP, note: "", is_active: true, kind: "mill", mill_name: "", monthly_salary: "", origSalary: "", salaryFrom: todayBD(), join_date: todayBD(), leave_date: "" };
 const KINDS: Record<string, string> = { mill: "মিল (কাঁচা ইট)", load: "লোড (ঢোকানো)", unload: "আনলোড (বের করা)", burn: "পুড়াই মেস্তুরি (মাসিক বেতন)" };
 type GroupForm = { id?: string; name: string; note: string };
 const emptyGroup: GroupForm = { name: "", note: "" };
@@ -97,6 +98,11 @@ function SardarsPage() {
     },
   });
 
+  const payRatesQ = useQuery({ queryKey: ["pay-rates"], queryFn: fetchPayRates });
+  const millsQ = useQuery({ queryKey: ["mills"], queryFn: fetchMills });
+  const millsOf = (id: string) => (millsQ.data ?? []).filter((m) => m.sardar_id === id).map((m) => m.name).join(", ");
+  const sardarRates = (id: string) => (payRatesQ.data ?? []).filter((r) => r.sardar_id === id);
+
   const stats = useMemo(() => {
     const m = new Map<string, { qty: number; kacha: number; work: number; earned: number; paid: number; due: number; months: number }>();
     const paidBy = new Map<string, number>();
@@ -106,12 +112,12 @@ function SardarsPage() {
     });
     // Shared rule (salary-accrual.ts): production + load entries, or the season's salary for burn
     for (const sd of (sardarsQ.data ?? []) as any[]) {
-      const e = sardarEarned(sd, (kachaQ.data ?? []) as any[], (workQ.data ?? []) as any[]);
+      const e = sardarEarned(sd, (kachaQ.data ?? []) as any[], (workQ.data ?? []) as any[], payRatesQ.data ?? []);
       const paid = paidBy.get(sd.id) ?? 0;
       m.set(sd.id, { qty: e.qty, kacha: e.kacha, work: e.work, earned: e.earned, paid, due: e.earned - paid, months: e.salary?.months ?? 0 });
     }
     return m;
-  }, [kachaQ.data, workQ.data, payQ.data, sardarsQ.data]);
+  }, [kachaQ.data, workQ.data, payQ.data, sardarsQ.data, payRatesQ.data]);
 
   const [detail, setDetail] = useState<any | null>(null);
   const openingQ = useQuery({
@@ -134,8 +140,8 @@ function SardarsPage() {
     if (!detail) return [] as Array<{ id: string; date: string; label: string; credit: number; debit: number }>;
     const rows: Array<{ id: string; date: string; label: string; credit: number; debit: number }> = [];
     (kachaQ.data ?? []).forEach((k: any) => {
-      if (k.sardar_id !== detail.id || (k.entry_type !== "production" && k.entry_type !== "load")) return;
-      const what = k.entry_type === "load" ? "ভাটায় ঢোকানো" : "কাঁচা ইট";
+      if (k.sardar_id !== detail.id || !["production", "load", "unload"].includes(k.entry_type)) return;
+      const what = k.entry_type === "load" ? "ভাটায় ঢোকানো" : k.entry_type === "unload" ? "বের করা" : "কাঁচা ইট";
       rows.push({ id: `k-${k.id}`, date: k.entry_date, label: `${what} — ${bn(Number(k.quantity || 0))} পিস`, credit: Number(k.amount || 0), debit: 0 });
     });
     (workQ.data ?? []).forEach((w: any) => {
@@ -143,7 +149,7 @@ function SardarsPage() {
       rows.push({ id: `w-${w.id}`, date: w.entry_date, label: `${w.category?.name ?? "কাজ"} — ${bn(Number(w.quantity || 0))} ${w.category?.unit ?? ""}`, credit: Number(w.amount || 0), debit: 0 });
     });
     if (detail.kind === "burn") {
-      const e = sardarEarned(detail, [], []);
+      const e = sardarEarned(detail, [], [], payRatesQ.data ?? []);
       if (e.salary?.start && e.salary.end) {
         rows.push({ id: "salary", date: e.salary.end, label: `মাসিক বেতন — ${bnDate(e.salary.start)} থেকে ${bnDate(e.salary.end)} (${bn(e.salary.days)} দিন)`, credit: e.earned, debit: 0 });
       }
@@ -177,23 +183,39 @@ function SardarsPage() {
         note: f.note || null,
         is_active: f.is_active,
         kind: f.kind,
-        mill_name: f.kind === "mill" ? f.mill_name || null : null,
         monthly_salary: f.kind === "burn" ? Number(f.monthly_salary || 0) : 0,
         join_date: f.kind === "burn" ? f.join_date || null : null,
         leave_date: f.kind === "burn" ? f.leave_date || null : null,
       };
+      const salary = Number(f.monthly_salary || 0);
       if (dlg.mode === "edit" && f.id) {
         const { error } = await sdb.from("sardars").update(payload).eq("id", f.id);
         if (error) throw error;
+        // burn mestri: a changed salary applies from the chosen date only
+        if (f.kind === "burn" && salary !== Number(f.origSalary || 0)) {
+          if (!f.salaryFrom) throw new Error("নতুন বেতন কোন তারিখ থেকে, তা দিন");
+          const rows: any[] = [];
+          if (sardarRates(f.id).length === 0 && Number(f.origSalary || 0) > 0) {
+            rows.push({ sardar_id: f.id, amount: Number(f.origSalary), effective_from: f.join_date || "2000-01-01", note: "শুরুর হার" });
+          }
+          rows.push({ sardar_id: f.id, amount: salary, effective_from: f.salaryFrom, note: "হার বদল" });
+          const { error: e2 } = await (supabase as any).from("pay_rates").upsert(rows, { onConflict: "sardar_id,effective_from" });
+          if (e2) throw e2;
+        }
       } else {
-        const { error } = await sdb.from("sardars").insert(payload);
+        const { data, error } = await sdb.from("sardars").insert(payload).select("id").single();
         if (error) throw error;
+        if (f.kind === "burn" && salary > 0) {
+          const { error: e2 } = await (supabase as any).from("pay_rates").insert({ sardar_id: (data as any).id, amount: salary, effective_from: f.join_date || todayBD(), note: "শুরুর হার" });
+          if (e2) throw e2;
+        }
       }
     },
     onSuccess: () => {
       toast.success("সংরক্ষিত");
       setDlg({ open: false, mode: "new", form: emptySardar });
       qc.invalidateQueries({ queryKey: ["sardars"] });
+      qc.invalidateQueries({ queryKey: ["pay-rates"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -289,8 +311,8 @@ function SardarsPage() {
                             </button>
                             <div className="text-xs text-muted-foreground">{s.phone || "—"}{s.address ? ` • ${s.address}` : ""}</div>
                           </TableCell>
-                          <TableCell><Badge variant="outline">{KINDS[s.kind] ?? s.kind}{s.mill_name ? ` — ${s.mill_name}` : ""}</Badge></TableCell>
-                          <TableCell className="text-right tabular-nums">{s.kind === "burn" ? `মাসিক ৳ ${bn(s.monthly_salary)}` : bn(t.qty)}</TableCell>
+                          <TableCell><Badge variant="outline">{KINDS[s.kind] ?? s.kind}{millsOf(s.id) ? ` — ${millsOf(s.id)}` : ""}</Badge></TableCell>
+                          <TableCell className="text-right tabular-nums">{s.kind === "burn" ? `মাসিক ৳ ${bn(rateAt(sardarRates(s.id), s.monthly_salary, todayBD()))}` : bn(t.qty)}</TableCell>
                           <TableCell className="text-right tabular-nums">৳ {bn(t.earned)}</TableCell>
                           <TableCell className="text-right tabular-nums text-destructive">৳ {bn(t.paid)}</TableCell>
                           <TableCell className={`text-right font-semibold tabular-nums ${t.due > 0 ? "text-warning" : "text-success"}`}>৳ {bn(t.due)}</TableCell>
@@ -299,7 +321,7 @@ function SardarsPage() {
                               <div className="flex justify-end gap-1">
                                 <Button size="sm" variant="ghost" onClick={() => setDlg({
                                   open: true, mode: "edit",
-                                  form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "", monthly_salary: String(s.monthly_salary ?? ""), join_date: s.join_date ?? todayBD(), leave_date: s.leave_date ?? "" },
+                                  form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "", monthly_salary: String(rateAt(sardarRates(s.id), s.monthly_salary, todayBD())), origSalary: String(rateAt(sardarRates(s.id), s.monthly_salary, todayBD())), salaryFrom: todayBD(), join_date: s.join_date ?? todayBD(), leave_date: s.leave_date ?? "" },
                                 })}><Pencil className="h-3.5 w-3.5" /></Button>
                                 <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${s.name}" মুছে ফেলবেন?`)) delSardar.mutate(s.id); }}>
                                   <Trash2 className="h-3.5 w-3.5 text-destructive" />
@@ -386,13 +408,20 @@ function SardarsPage() {
                 </Select>
               </div>
               {dlg.form.kind === "mill" && (
-                <div><Label>মিলের নাম</Label><Input placeholder="যেমন: মিল ১" value={dlg.form.mill_name} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, mill_name: e.target.value } }))} /></div>
+                <p className="self-end text-xs text-muted-foreground">কোন মিলে বসবেন, তা "কাঁচা ইট" পাতায় মিলে চাপে ঠিক করুন।{dlg.form.id && millsOf(dlg.form.id) ? ` এখন: ${millsOf(dlg.form.id)}` : ""}</p>
               )}
             </div>
             {dlg.form.kind === "burn" && (
               <div className="grid grid-cols-2 gap-2">
                 <div><Label>মাসিক বেতন (৳)</Label><Input type="number" inputMode="decimal" value={dlg.form.monthly_salary} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, monthly_salary: e.target.value } }))} /></div>
                 <div><Label>যোগদানের তারিখ</Label><Input type="date" value={dlg.form.join_date} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, join_date: e.target.value } }))} /></div>
+                {dlg.mode === "edit" && Number(dlg.form.monthly_salary || 0) !== Number(dlg.form.origSalary || 0) && (
+                  <div className="col-span-2 rounded-lg border border-warning/40 bg-warning/10 p-2">
+                    <Label>নতুন বেতন কোন তারিখ থেকে চালু</Label>
+                    <Input type="date" value={dlg.form.salaryFrom} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, salaryFrom: e.target.value } }))} />
+                    <p className="mt-1 text-xs text-muted-foreground">এর আগের দিনগুলো আগের বেতন ৳ {bn(Number(dlg.form.origSalary || 0))} এ গোনা হবে।</p>
+                  </div>
+                )}
                 <div className="col-span-2"><Label>কাজ ছাড়ার তারিখ (থাকলে)</Label><Input type="date" value={dlg.form.leave_date} onChange={(e) => setDlg((s) => ({ ...s, form: { ...s.form, leave_date: e.target.value } }))} /></div>
                 <p className="col-span-2 text-xs text-muted-foreground">পাওনা = এই মৌসুমে কাজের মাস × মাসিক বেতন। মৌসুম শুরু বা যোগদান (যেটা পরে) থেকে আজ বা কাজ ছাড়ার দিন পর্যন্ত। আগের মৌসুমের বাকি "পূর্বের বকেয়া ও জের" পাতায় রাখুন।</p>
               </div>

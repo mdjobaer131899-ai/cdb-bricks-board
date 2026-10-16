@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.18"
   }
   public: {
     Tables: {
@@ -359,6 +359,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collections_sales_entry_id_fkey"
+            columns: ["sales_entry_id"]
+            isOneToOne: false
+            referencedRelation: "sales_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -734,9 +741,11 @@ export type Database = {
           amount: number
           created_at: string
           created_by: string
+          damage_reason: string | null
           entry_date: string
           entry_type: string
           id: string
+          mill_id: string | null
           note: string | null
           quantity: number
           rate: number
@@ -747,9 +756,11 @@ export type Database = {
           amount?: number
           created_at?: string
           created_by?: string
+          damage_reason?: string | null
           entry_date?: string
           entry_type?: string
           id?: string
+          mill_id?: string | null
           note?: string | null
           quantity?: number
           rate?: number
@@ -760,9 +771,11 @@ export type Database = {
           amount?: number
           created_at?: string
           created_by?: string
+          damage_reason?: string | null
           entry_date?: string
           entry_type?: string
           id?: string
+          mill_id?: string | null
           note?: string | null
           quantity?: number
           rate?: number
@@ -770,6 +783,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "kacha_brick_entries_mill_id_fkey"
+            columns: ["mill_id"]
+            isOneToOne: false
+            referencedRelation: "mills"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "kacha_brick_entries_sardar_id_fkey"
             columns: ["sardar_id"]
@@ -945,6 +965,51 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      mills: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          sardar_id: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          sardar_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          sardar_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mills_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "mills_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       opening_balances: {
         Row: {
@@ -1248,6 +1313,61 @@ export type Database = {
         }
         Relationships: []
       }
+      pay_rates: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          note: string | null
+          sardar_id: string | null
+          worker_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          id?: string
+          note?: string | null
+          sardar_id?: string | null
+          worker_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          note?: string | null
+          sardar_id?: string | null
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pay_rates_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardar_balances"
+            referencedColumns: ["sardar_id"]
+          },
+          {
+            foreignKeyName: "pay_rates_sardar_id_fkey"
+            columns: ["sardar_id"]
+            isOneToOne: false
+            referencedRelation: "sardars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pay_rates_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "workers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       production_entries: {
         Row: {
           brick_type_id: string
@@ -1267,6 +1387,7 @@ export type Database = {
           production_date: string
           quantity: number
           total_cost: number
+          unload_entry_id: string | null
           updated_at: string
         }
         Insert: {
@@ -1287,6 +1408,7 @@ export type Database = {
           production_date?: string
           quantity: number
           total_cost?: number
+          unload_entry_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -1307,6 +1429,7 @@ export type Database = {
           production_date?: string
           quantity?: number
           total_cost?: number
+          unload_entry_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1352,7 +1475,44 @@ export type Database = {
             referencedRelation: "raw_materials"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "production_entries_unload_entry_id_fkey"
+            columns: ["unload_entry_id"]
+            isOneToOne: false
+            referencedRelation: "kacha_brick_entries"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      production_rates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          kind: string
+          note: string | null
+          rate: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          id?: string
+          kind: string
+          note?: string | null
+          rate: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          kind?: string
+          note?: string | null
+          rate?: number
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -1428,6 +1588,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "purchases_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "raw_material_stock"
+            referencedColumns: ["material_id"]
+          },
           {
             foreignKeyName: "purchases_material_id_fkey"
             columns: ["material_id"]
@@ -1600,11 +1767,11 @@ export type Database = {
           in_brick_cost?: boolean
           item_group?: string
           low_stock_threshold?: number
+          name: string
           pay_mode?: string
           pricing?: string
           sort_order?: number
           stage?: string
-          name: string
           unit?: string
           updated_at?: string
         }
@@ -1616,11 +1783,11 @@ export type Database = {
           in_brick_cost?: boolean
           item_group?: string
           low_stock_threshold?: number
+          name?: string
           pay_mode?: string
           pricing?: string
           sort_order?: number
           stage?: string
-          name?: string
           unit?: string
           updated_at?: string
         }
@@ -1979,8 +2146,8 @@ export type Database = {
           id: string
           is_active: boolean
           join_date: string | null
-          leave_date: string | null
           kind: string
+          leave_date: string | null
           mill_name: string | null
           monthly_salary: number
           name: string
@@ -1995,8 +2162,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           join_date?: string | null
-          leave_date?: string | null
           kind?: string
+          leave_date?: string | null
           mill_name?: string | null
           monthly_salary?: number
           name: string
@@ -2011,8 +2178,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           join_date?: string | null
-          leave_date?: string | null
           kind?: string
+          leave_date?: string | null
           mill_name?: string | null
           monthly_salary?: number
           name?: string
@@ -2200,6 +2367,13 @@ export type Database = {
           supplier_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "supplier_payments_sales_entry_id_fkey"
+            columns: ["sales_entry_id"]
+            isOneToOne: false
+            referencedRelation: "sales_entries"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "supplier_payments_supplier_id_fkey"
             columns: ["supplier_id"]
@@ -2806,18 +2980,6 @@ export type Database = {
         Args: { _date?: string; _prefix?: string }
         Returns: string
       }
-      settle_supplier_with_bricks: {
-        Args: {
-          _supplier_id: string
-          _customer_id: string
-          _brick_type_id: string
-          _quantity: number
-          _unit_price: number
-          _date?: string
-          _note?: string
-        }
-        Returns: string
-      }
       recompute_contract_advance: {
         Args: { _contract_id: string }
         Returns: undefined
@@ -2833,6 +2995,29 @@ export type Database = {
       recompute_order_progress: {
         Args: { _order_id: string }
         Returns: undefined
+      }
+      save_unload: {
+        Args: {
+          p_date: string
+          p_grades: Json
+          p_id: string
+          p_note: string
+          p_rate: number
+          p_sardar_id: string
+        }
+        Returns: string
+      }
+      settle_supplier_with_bricks: {
+        Args: {
+          _brick_type_id: string
+          _customer_id: string
+          _date?: string
+          _note?: string
+          _quantity: number
+          _supplier_id: string
+          _unit_price: number
+        }
+        Returns: string
       }
     }
     Enums: {

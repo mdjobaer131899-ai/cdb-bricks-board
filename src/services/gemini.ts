@@ -276,6 +276,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     opening,
     loans,
     loanPay,
+    payRates,
   ] = await Promise.all([
     safeRows("গ্রাহক", failed, db.from("customers").select("id,name,phone").order("name").limit(5000)),
     safeRows("গ্রাহকের চালান", failed,
@@ -305,6 +306,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
       db.from("opening_balance_summary").select("display_name,party_name,kind,amount,paid_amount,remaining_amount,customer_id")),
     safeRows("ঋণ", failed, sdbx.from("loans").select("party_name,amount,direction,loan_date").limit(5000)),
     safeRows("ঋণ পরিশোধ", failed, sdbx.from("loan_payments").select("amount,loan:loans(direction,party_name)").limit(5000)),
+    safeRows("বেতনের হার", failed, db.from("pay_rates").select("worker_id,sardar_id,amount,effective_from")),
   ]);
 
   let cashSeason: CashSummary | null = null;
@@ -339,7 +341,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
   // সর্দার: সর্দার পাতার হুবহু সূত্র
   const sardarLines: SardarLine[] = sardars.map((sd) => {
     // Same rule as the sardar page: production + load (or monthly salary for burn), season-scoped
-    const e = sardarEarned(sd as any, kacha as any, sardarWork as any);
+    const e = sardarEarned(sd as any, kacha as any, sardarWork as any, payRates as any);
     const qty = e.qty;
     const earned = e.earned;
     let paid = 0;
@@ -1309,7 +1311,7 @@ data-এর ফিল্ড:
 - EXPENSE: expenseCategory, amount, description, date
 - COLLECTION: customerName, amount, description, date
 - SARDAR_PAYMENT: sardarName, amount, paymentType ("advance" = দাদন/অগ্রিম, "payment" = মজুরি/পাওনা পরিশোধ), description, date
-- KACHA_BRICK: sardarName, quantity, rate (প্রতি পিস মজুরি, বললে), description, date
+- KACHA_BRICK: sardarName, quantity, rate (প্রতি হাজার ইটের মজুরি, বললে), description, date
 - SUPPLIER_PAYMENT: supplierName, expenseCategory, amount, description, date
 - QUERY: data খালি রাখবে
 date সবসময় YYYY-MM-DD; না বললে আজকের তারিখ।
@@ -1701,9 +1703,22 @@ export const saveAiActionToDatabase = async (
       if (sardar.kind && sardar.kind !== "mill") {
         throw new Error(`${sardar.name} কাঁচা ইটের (মিল) সর্দার নন। কাঁচা ইটের এন্ট্রি শুধু মিল সর্দারের নামে হয়।`);
       }
+      // Rate is per 1000 bricks everywhere (OVERVIEW 8.1 item 1). A small number like 0.9
+      // is a per-piece rate, so it is converted to per thousand.
       let rate = num(d.rate);
+      if (rate > 0 && rate < 20) rate = Math.round(rate * 1000 * 100) / 100;
       if (!rate) {
-        // এই সর্দারের শেষ এন্ট্রির রেট
+        const { data: rates } = await (supabase as any)
+          .from("production_rates")
+          .select("rate, effective_from")
+          .eq("kind", "production")
+          .lte("effective_from", entryDate)
+          .order("effective_from", { ascending: false })
+          .limit(1);
+        rate = num(rates?.[0]?.rate);
+      }
+      if (!rate) {
+        // এই সর্দারের শেষ এন্ট্রির রেট (প্রতি হাজার)
         const { data: last } = await (supabase as any)
           .from("kacha_brick_entries")
           .select("rate")
@@ -1715,10 +1730,14 @@ export const saveAiActionToDatabase = async (
           .maybeSingle();
         rate = num(last?.rate);
       }
-      if (!rate) throw new Error(`${sardar.name}-এর প্রতি পিস রেট জানা নেই। রেটসহ বলুন, যেমন: "${sardar.name} ১০০০০ ইট, রেট ০.৯০"।`);
-      const amount = Math.round(quantity * rate * 100) / 100;
+      if (!rate) throw new Error(`কাঁচা ইটের রেট (প্রতি হাজার) জানা নেই। রেটসহ বলুন, যেমন: "${sardar.name} ১০০০০ ইট, রেট ৯০০"।`);
+      const amount = Math.round((quantity / 1000) * rate);
+      // the sardar's mill, when he runs exactly one
+      const { data: ownMills } = await (supabase as any).from("mills").select("id").eq("sardar_id", sardar.id);
+      const millId = (ownMills ?? []).length === 1 ? ownMills[0].id : null;
       const { error } = await (supabase as any).from("kacha_brick_entries").insert({
         sardar_id: sardar.id,
+        mill_id: millId,
         quantity,
         rate,
         amount,
@@ -1728,7 +1747,7 @@ export const saveAiActionToDatabase = async (
         created_by: userId,
       });
       if (error) throw new Error(error.message);
-      return { success: true, message: `${sardar.name}: ${bn(quantity)} কাঁচা ইট × ${tk(rate)} = ${tk(amount)} খাতায় সেভ হয়েছে।` };
+      return { success: true, message: `${sardar.name}: ${bn(quantity)} কাঁচা ইট × ${tk(rate)} প্রতি হাজার = ${tk(amount)} খাতায় সেভ হয়েছে।` };
     }
 
     return { success: false, message: "এই ধরনের এন্ট্রি সেভ করা যায় না।" };

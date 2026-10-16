@@ -451,15 +451,16 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
     enabled: open && isSardar && !!personId,
     // Same rule as the sardar page (salary-accrual.ts), within the selected season
     queryFn: async () => {
-      const [sd, kacha, work, pays] = await Promise.all([
+      const [sd, kacha, work, pays, rates] = await Promise.all([
         supabase.from("sardars").select("id, kind, monthly_salary, join_date, leave_date").eq("id", personId).maybeSingle(),
         fetchAllRows(() => sdb.from("kacha_brick_entries").select("id, sardar_id, entry_type, quantity, amount").eq("sardar_id", personId).order("id")),
         fetchAllRows(() => sdb.from("sardar_work_entries").select("id, sardar_id, quantity, amount").eq("sardar_id", personId).order("id")),
         fetchAllRows(() => sdb.from("sardar_payments").select("id, amount").eq("sardar_id", personId).order("id")),
+        (supabase as any).from("pay_rates").select("sardar_id, amount, effective_from").eq("sardar_id", personId),
       ]);
       if (sd.error) throw sd.error;
       if (!sd.data) return null;
-      const earned = sardarEarned(sd.data as any, kacha as any[], work as any[]).earned;
+      const earned = sardarEarned(sd.data as any, kacha as any[], work as any[], (rates?.data ?? []) as any[]).earned;
       const paid = (pays as any[]).reduce((a, p) => a + Number(p.amount || 0), 0);
       return { total_due: earned, total_paid: paid, balance: earned - paid };
     },
