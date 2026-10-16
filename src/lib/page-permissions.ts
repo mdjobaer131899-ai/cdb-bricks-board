@@ -17,7 +17,7 @@ export const PAGES: { key: string; label: string }[] = [
   { key: "/daily-workers", label: "ডেলি শ্রমিক" },
   { key: "/salaries", label: "মেস্তুরি ও ম্যানেজার বেতন" },
   { key: "/cash-book", label: "ক্যাশ বই (দৈনিক ড্রয়ার)" },
-  { key: "/purchases", label: "মালামাল ক্রয় ও বাকি" },
+  { key: "/purchases", label: "মালামাল ক্রয় ও খরচ" },
   { key: "/suppliers", label: "সাপ্লায়ার তালিকা" },
   { key: "/owners", label: "মালিকের বিনিয়োগ" },
   { key: "/loans", label: "ঋণ দেওয়া-নেওয়া" },

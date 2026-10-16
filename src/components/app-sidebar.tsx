@@ -38,7 +38,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "ভাটার হিসাব",
     items: [
       { title: "ক্যাশ বই (দৈনিক ড্রয়ার)", url: "/cash-book", icon: Receipt },
-      { title: "মালামাল ক্রয় ও বাকি", url: "/purchases", icon: ShoppingCart },
+      { title: "মালামাল ক্রয় ও খরচ", url: "/purchases", icon: ShoppingCart },
       { title: "মালিক ও ঋণ", url: "/owners", icon: Crown },
       { title: "পূর্বের বকেয়া ও জের", url: "/opening-balances", icon: History },
     ],

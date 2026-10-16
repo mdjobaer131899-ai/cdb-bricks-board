@@ -17,6 +17,7 @@ import { sdb } from "@/lib/season-db";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
+import { SettleWithBricksDialog } from "@/components/settle-with-bricks-dialog";
 
 export const Route = createFileRoute("/_authenticated/suppliers")({
   head: () => ({ meta: [{ title: "সরবরাহকারী — CDB Bricks" }] }),
@@ -42,6 +43,7 @@ function SuppliersPage() {
   const isAdmin = me?.role === "admin";
 
   const [search, setSearch] = useState("");
+  const [brickFor, setBrickFor] = useState<{ id: string; name: string; due: number } | null>(null);
   const [dialog, setDialog] = useState<{ open: boolean; mode: "new" | "edit"; form: SupplierForm }>({
     open: false, mode: "new", form: emptyForm,
   });
@@ -92,6 +94,18 @@ function SuppliersPage() {
     });
     return m;
   }, [purchasesQ.data, paymentsQ.data]);
+
+  // A brick settlement is undone by deleting its challan (collection and payment go with it)
+  const delPayment = useMutation({
+    mutationFn: async (p: { id: string; sales_entry_id?: string | null }) => {
+      const { error } = p.sales_entry_id
+        ? await supabase.from("sales_entries").delete().eq("id", p.sales_entry_id)
+        : await supabase.from("supplier_payments").delete().eq("id", p.id);
+      if (error) throw error;
+    },
+    onSuccess: () => toast.success("মুছে ফেলা হয়েছে"),
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const saveSupplier = useMutation({
     mutationFn: async () => {
@@ -229,7 +243,8 @@ function SuppliersPage() {
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             {isAdmin && <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Pencil className="h-3.5 w-3.5" /></Button>}
-                            {isAdmin && <Button size="sm" variant="outline" onClick={() => openPay(s.id)}>পেমেন্ট</Button>}
+                            {isAdmin && <Button size="sm" variant="outline" onClick={() => openPay(s.id)}>টাকা দিয়ে</Button>}
+                            {isAdmin && due > 0.5 && <Button size="sm" variant="outline" onClick={() => setBrickFor({ id: s.id, name: s.name, due })}>ইট দিয়ে</Button>}
                             {isAdmin && <Button size="sm" variant="ghost" onClick={() => { if (confirm(`"${s.name}" মুছে ফেলবেন?`)) delSupplier.mutate(s.id); }}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>}
                           </div>
                         </TableCell>
@@ -241,7 +256,55 @@ function SuppliersPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="payments">
+          <Card>
+            <CardContent className="p-0">
+              {(paymentsQ.data ?? []).length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">কোনো পেমেন্ট নেই</div>
+              ) : (
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead>তারিখ</TableHead>
+                    <TableHead>সরবরাহকারী</TableHead>
+                    <TableHead>কীভাবে</TableHead>
+                    <TableHead>নোট</TableHead>
+                    <TableHead className="text-right">টাকা</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {(paymentsQ.data ?? []).map((p: any) => (
+                      <TableRow key={p.id}>
+                        <TableCell>{bnDate(p.payment_date)}</TableCell>
+                        <TableCell className="font-medium">{(suppliersQ.data ?? []).find((s: any) => s.id === p.supplier_id)?.name ?? "—"}</TableCell>
+                        <TableCell>{p.method === "bricks" ? <Badge variant="outline">ইট দিয়ে</Badge> : "নগদ"}</TableCell>
+                        <TableCell className="text-muted-foreground">{p.note ?? ""}</TableCell>
+                        <TableCell className="text-right tabular-nums">৳ {bn(p.amount)}</TableCell>
+                        <TableCell className="text-right">
+                          {isAdmin && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                confirm(p.method === "bricks" ? "এই ইট দিয়ে শোধ বাতিল করবেন? সাথে এর চালান আর জমাও মুছে যাবে, ইট স্টকে ফিরবে।" : "এই পেমেন্ট মুছবেন?") &&
+                                delPayment.mutate({ id: p.id, sales_entry_id: p.sales_entry_id })
+                              }
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <SettleWithBricksDialog supplier={brickFor} onClose={() => setBrickFor(null)} />
 
       {/* Supplier add/edit dialog */}
       <Dialog open={dialog.open} onOpenChange={(o) => setDialog((s) => ({ ...s, open: o }))}>

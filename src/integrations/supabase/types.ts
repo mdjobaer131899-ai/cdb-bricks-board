@@ -1585,6 +1585,7 @@ export type Database = {
           item_group: string
           low_stock_threshold: number
           name: string
+          pay_mode: string
           pricing: string
           sort_order: number
           stage: string
@@ -1599,6 +1600,7 @@ export type Database = {
           in_brick_cost?: boolean
           item_group?: string
           low_stock_threshold?: number
+          pay_mode?: string
           pricing?: string
           sort_order?: number
           stage?: string
@@ -1614,6 +1616,7 @@ export type Database = {
           in_brick_cost?: boolean
           item_group?: string
           low_stock_threshold?: number
+          pay_mode?: string
           pricing?: string
           sort_order?: number
           stage?: string

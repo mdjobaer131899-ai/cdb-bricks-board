@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Boxes, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wallet, Wrench } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,59 +13,65 @@ import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
-import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { printTable } from "@/lib/print-table";
 
 /* =========================================================
-   Purchases & dues — one page for everything bought:
-   raw materials (soil, sand, coal, husk, diesel, firewood) and other
-   goods (engine parts, electricity bill, ...). Items come from the
-   raw_materials catalog; each is bought either by quantity × rate or
-   as a lump total. All rows go to `purchases`; cash paid goes to
-   `supplier_payments`, so supplier dues, cash book, reports and AI agree.
+   Purchases & expenses.
+   Items come from the raw_materials catalog:
+     item_group  raw | other             (which folder)
+     pricing     unit | total | flex     (how the amount is entered)
+     pay_mode    credit | cash           (credit -> purchases + supplier_payments,
+                                          part may stay due; cash -> expenses,
+                                          paid in full, no seller, e.g. electricity)
+   The main page shows totals and two history folders; supplier dues are paid
+   on the suppliers page (cash or bricks).
    ========================================================= */
+
+type Folder = "raw" | "other";
 
 export const Route = createFileRoute("/_authenticated/purchases")({
   head: () => ({
     meta: [
-      { title: "মালামাল ক্রয় ও বাকি — CDB Bricks" },
-      { name: "description", content: "কাঁচামাল, ইঞ্জিন মালামাল, কারেন্ট বিল সহ সব কেনাকাটা, পরিশোধ ও বাকির হিসাব।" },
+      { title: "মালামাল ক্রয় ও খরচ — CDB Bricks" },
+      { name: "description", content: "কাঁচামাল, ইঞ্জিন মালামাল, কারেন্ট বিল, গাড়ি ভাড়া সহ সব কেনাকাটা ও খরচের হিসাব।" },
     ],
   }),
-  // Which folder is open lives in the URL (?f=raw|other) so the phone back button returns here
+  // Which history folder is open lives in the URL (?f=raw|other) so the phone back button returns here
   validateSearch: (search: Record<string, unknown>): { f?: Folder } =>
     search.f === "raw" || search.f === "other" ? { f: search.f } : {},
   component: PurchasesPage,
 });
 
-type Folder = "raw" | "other";
-
 type Item = {
   id: string;
   name: string;
   unit: string;
-  item_group: string; // raw | other
-  pricing: string; // unit | total
-  buy_pattern: string; // season | refill | as_needed
+  item_group: string;
+  pricing: string;
+  pay_mode: string;
+  buy_pattern: string;
   in_brick_cost: boolean;
   sort_order: number;
 };
 
-type Purchase = {
+/** One history row, from purchases (credit items) or expenses (cash items) */
+type Entry = {
+  key: string;
+  source: "purchase" | "expense";
   id: string;
-  purchase_date: string;
+  date: string;
+  item: Item | undefined;
+  name: string;
   supplier_id: string | null;
-  material_id: string | null;
-  item_name: string;
   quantity: number;
   unit: string | null;
-  unit_price: number;
-  total_amount: number;
+  rate: number;
+  total: number;
   note: string | null;
 };
 
 const NEW_SUP = "__new__";
-const OTHER_ITEM = "__other__"; // older rows typed by hand, not in the catalog
+const UNIT_OPTIONS = ["পিস", "কেজি", "লিটার", "টন", "বস্তা", "মণ", "ফুট", "মিটার", "সেট", "প্যাকেট", "জোড়া"];
 
 const RAW_LOOK: Record<string, { chip: string; initial: string }> = {
   মাটি: { chip: "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200", initial: "মা" },
@@ -78,31 +84,26 @@ const RAW_LOOK: Record<string, { chip: string; initial: string }> = {
 const look = (name: string) =>
   RAW_LOOK[name.normalize("NFC")] ?? { chip: "bg-muted text-foreground", initial: name.trim().charAt(0) || "?" };
 
-const PATTERN_HINT: Record<string, string> = {
-  season: "মৌসুমে একবার কেনা",
-  refill: "শেষ হলে আবার কেনা",
-  as_needed: "দরকার মতো কেনা",
-};
-
 const tk = (n: number) => `৳${bn(Math.round(n))}`;
 const daysBetween = (a: string, b: string) =>
   Math.round((new Date(b + "T12:00:00+06:00").getTime() - new Date(a + "T12:00:00+06:00").getTime()) / 86400000);
+const isVehicle = (name: string) => name.normalize("NFC").includes("গাড়ি".normalize("NFC"));
 
-type BuyForm = {
-  id?: string;
+type EntryForm = {
+  edit?: { source: "purchase" | "expense"; id: string };
   item_id: string;
-  item_name_free: string; // only for OTHER_ITEM (old hand-typed rows)
-  purchase_date: string;
+  date: string;
   supplier_id: string;
   new_supplier: string;
   quantity: string;
-  unit_price: string;
+  unit: string;
+  rate: string;
   total: string;
-  paid_now: string;
+  paid: string;
   note: string;
 };
 
-type ItemForm = { name: string; group: "raw" | "other"; pricing: "unit" | "total"; unit: string };
+type ItemForm = { name: string; group: Folder; pricing: "unit" | "total" | "flex"; pay_mode: "credit" | "cash"; unit: string };
 
 function PurchasesPage() {
   const { data: me } = useCurrentUser();
@@ -116,18 +117,9 @@ function PurchasesPage() {
     else navigate({ to: "/purchases", search: {}, replace: true });
   };
 
-  const [buy, setBuy] = useState<BuyForm | null>(null);
+  const [form, setForm] = useState<EntryForm | null>(null);
   const [itemDlg, setItemDlg] = useState<ItemForm | null>(null);
-  const [payDlg, setPayDlg] = useState<null | { id?: string; supplier_id: string; amount: string; date: string; note: string }>(null);
-  const [brickDlg, setBrickDlg] = useState<null | {
-    supplier_id: string;
-    customer_id: string;
-    brick_type_id: string;
-    quantity: string;
-    unit_price: string;
-    date: string;
-    note: string;
-  }>(null);
+  const [itemFilter, setItemFilter] = useState<string>("all");
 
   /* ---------- data ---------- */
   const itemsQ = useQuery({
@@ -135,7 +127,7 @@ function PurchasesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("raw_materials")
-        .select("id, name, unit, item_group, pricing, buy_pattern, in_brick_cost, sort_order")
+        .select("id, name, unit, item_group, pricing, pay_mode, buy_pattern, in_brick_cost, sort_order")
         .eq("active", true)
         .order("sort_order")
         .order("name");
@@ -156,154 +148,208 @@ function PurchasesPage() {
         .order("purchase_date", { ascending: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Purchase[];
+      return data ?? [];
     },
   });
   const payQ = useQuery({
     queryKey: ["supplier-payments"],
     queryFn: async () => {
-      const { data, error } = await sdb.from("supplier_payments").select("*").order("payment_date", { ascending: false });
+      const { data, error } = await sdb.from("supplier_payments").select("supplier_id, amount");
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  // For settling a supplier due with bricks
-  const custQ = useQuery({
-    queryKey: ["customers-min"],
-    enabled: isAdmin,
-    queryFn: async () => (await supabase.from("customers").select("id,name").order("name").limit(5000)).data ?? [],
-  });
-  const brickTypesQ = useQuery({ queryKey: ["brick-types-active"], enabled: !!brickDlg, queryFn: fetchActiveBrickTypes });
-  const stockQ = useQuery({
-    queryKey: ["current-stock"],
-    enabled: !!brickDlg,
-    queryFn: async () => (await supabase.from("current_stock").select("brick_type_id, brick_name, quantity")).data ?? [],
+  const items = itemsQ.data ?? [];
+  const cashItemNames = items.filter((i) => i.pay_mode === "cash").map((i) => i.name);
+  const expQ = useQuery({
+    queryKey: ["purchase-cash-expenses", cashItemNames.join("|")],
+    enabled: cashItemNames.length > 0,
+    queryFn: async () => {
+      const { data, error } = await sdb
+        .from("expenses")
+        .select("id, expense_date, category, amount, note")
+        .in("category", cashItemNames)
+        .order("expense_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
   });
 
-  const items = itemsQ.data ?? [];
   const rawItems = items.filter((i) => i.item_group === "raw");
   const otherItems = items.filter((i) => i.item_group !== "raw");
-  const purchases = purQ.data ?? [];
   const supName = (id: string | null) => (supQ.data ?? []).find((s) => s.id === id)?.name ?? "—";
-  const itemOf = (p: Purchase) => items.find((i) => i.id === p.material_id);
+  const itemByName = (n: string) => items.find((i) => i.name.normalize("NFC") === n.trim().normalize("NFC"));
 
-  /* ---------- summaries ---------- */
-  const bySup = useMemo(() => {
-    return (supQ.data ?? [])
-      .map((s) => {
-        const bought = purchases.filter((p) => p.supplier_id === s.id).reduce((a, b) => a + Number(b.total_amount || 0), 0);
-        const paid = (payQ.data ?? []).filter((p) => p.supplier_id === s.id).reduce((a, b) => a + Number(b.amount || 0), 0);
-        return { ...s, bought, paid, due: bought - paid };
-      })
-      .filter((s) => s.bought || s.paid);
-  }, [supQ.data, purchases, payQ.data]);
-  const tot = bySup.reduce((a, b) => ({ bought: a.bought + b.bought, paid: a.paid + b.paid, due: a.due + b.due }), { bought: 0, paid: 0, due: 0 });
-
-  const cardFor = (it: Item) => {
-    const rows = purchases.filter((p) => p.material_id === it.id).sort((a, b) => (a.purchase_date < b.purchase_date ? -1 : 1));
-    const qty = rows.reduce((a, r) => a + Number(r.quantity || 0), 0);
-    const amount = rows.reduce((a, r) => a + Number(r.total_amount || 0), 0);
-    const last = rows[rows.length - 1] ?? null;
-    let avgGap: number | null = null;
-    if (rows.length >= 2) {
-      const gaps: number[] = [];
-      for (let i = 1; i < rows.length; i++) {
-        const g = daysBetween(rows[i - 1].purchase_date, rows[i].purchase_date);
-        if (g > 0) gaps.push(g);
-      }
-      if (gaps.length) avgGap = gaps.reduce((a, g) => a + g, 0) / gaps.length;
-    }
-    const sinceLast = last ? daysBetween(last.purchase_date, today) : null;
-    const dueSoon = it.buy_pattern === "refill" && avgGap !== null && sinceLast !== null && sinceLast >= Math.max(1, Math.round(avgGap) - 1);
-    return { it, rows, qty, amount, last, avgGap, sinceLast, dueSoon };
-  };
-  const rawCards = useMemo(() => rawItems.map(cardFor), [rawItems, purchases, today]);
-  const otherCards = useMemo(() => otherItems.map(cardFor), [otherItems, purchases, today]);
-  const untaggedTotal = purchases.filter((p) => !p.material_id).reduce((a, p) => a + Number(p.total_amount || 0), 0);
-  const rawTotal = rawCards.reduce((a, c) => a + c.amount, 0);
-  const otherTotal = otherCards.reduce((a, c) => a + c.amount, 0) + untaggedTotal;
-
-  const folderRows = folder === "raw" ? purchases.filter((p) => itemOf(p)?.item_group === "raw") : purchases.filter((p) => itemOf(p)?.item_group !== "raw");
-
-  /* ---------- buy form ---------- */
-  const formItem = buy ? items.find((i) => i.id === buy.item_id) : undefined;
-  const byTotal = buy ? buy.item_id === OTHER_ITEM || formItem?.pricing === "total" : false;
-  const formTotal = (f: BuyForm) => {
-    const it = items.find((i) => i.id === f.item_id);
-    const totalOnly = f.item_id === OTHER_ITEM || it?.pricing === "total";
-    if (totalOnly || f.total.trim() !== "") return Number(f.total || 0);
-    return Number(f.quantity || 0) * Number(f.unit_price || 0);
-  };
-
-  function openBuy(itemId?: string) {
-    const id = itemId ?? "";
-    const lastOf = purchases.find((p) => p.material_id === id);
-    setBuy({
-      item_id: id,
-      item_name_free: "",
-      purchase_date: today,
-      supplier_id: lastOf?.supplier_id ?? NEW_SUP,
-      new_supplier: "",
-      quantity: "",
-      unit_price: lastOf && Number(lastOf.unit_price) > 0 ? String(lastOf.unit_price) : "",
-      total: "",
-      paid_now: "",
-      note: "",
+  /* ---------- history ---------- */
+  const entries: Entry[] = useMemo(() => {
+    const fromPurchases: Entry[] = (purQ.data ?? []).map((p) => {
+      const it = items.find((i) => i.id === p.material_id) ?? itemByName(p.item_name);
+      return {
+        key: `p${p.id}`,
+        source: "purchase",
+        id: p.id,
+        date: p.purchase_date,
+        item: it,
+        name: p.item_name,
+        supplier_id: p.supplier_id,
+        quantity: Number(p.quantity) || 0,
+        unit: p.unit,
+        rate: Number(p.unit_price) || 0,
+        total: Number(p.total_amount) || 0,
+        note: p.note,
+      };
     });
-  }
+    const fromExpenses: Entry[] = (expQ.data ?? []).map((e) => ({
+      key: `e${e.id}`,
+      source: "expense",
+      id: e.id,
+      date: e.expense_date,
+      item: itemByName(e.category),
+      name: e.category,
+      supplier_id: null,
+      quantity: 0,
+      unit: null,
+      rate: 0,
+      total: Number(e.amount) || 0,
+      note: e.note,
+    }));
+    return [...fromPurchases, ...fromExpenses].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [purQ.data, expQ.data, items]);
+
+  const inFolder = (e: Entry, f: Folder) => (f === "raw" ? e.item?.item_group === "raw" : e.item?.item_group !== "raw");
+  const sumOf = (rows: Entry[]) => rows.reduce((a, e) => a + e.total, 0);
+  const rawEntries = entries.filter((e) => inFolder(e, "raw"));
+  const otherEntries = entries.filter((e) => inFolder(e, "other"));
+
+  const totals = useMemo(() => {
+    const bought = sumOf(entries);
+    const cashBills = sumOf(entries.filter((e) => e.source === "expense"));
+    const credit = bought - cashBills;
+    const paid = (payQ.data ?? []).reduce((a, p) => a + Number(p.amount || 0), 0);
+    return { bought, paid: paid + cashBills, due: credit - paid };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, payQ.data]);
+
+  // "time to buy again" for items bought when they run out (coal, diesel)
+  const reminders = useMemo(() => {
+    return rawItems
+      .filter((it) => it.buy_pattern === "refill")
+      .map((it) => {
+        const rows = entries.filter((e) => e.item?.id === it.id).sort((a, b) => (a.date < b.date ? -1 : 1));
+        if (rows.length < 2) return null;
+        const gaps: number[] = [];
+        for (let i = 1; i < rows.length; i++) {
+          const g = daysBetween(rows[i - 1].date, rows[i].date);
+          if (g > 0) gaps.push(g);
+        }
+        if (!gaps.length) return null;
+        const avg = gaps.reduce((a, g) => a + g, 0) / gaps.length;
+        const since = daysBetween(rows[rows.length - 1].date, today);
+        return since >= Math.max(1, Math.round(avg) - 1) ? { name: it.name, avg, since } : null;
+      })
+      .filter(Boolean) as { name: string; avg: number; since: number }[];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawItems, entries, today]);
+
+  /* ---------- entry form ---------- */
+  const fItem = form ? items.find((i) => i.id === form.item_id) : undefined;
+  const fCash = fItem?.pay_mode === "cash";
+  const formTotal = (f: EntryForm) => {
+    const it = items.find((i) => i.id === f.item_id);
+    if (!it) return 0;
+    if (it.pay_mode === "cash" || it.pricing === "total") return Number(f.total || 0);
+    if (f.total.trim() !== "") return Number(f.total || 0);
+    return Number(f.quantity || 0) * Number(f.rate || 0);
+  };
+  const fTotal = form ? formTotal(form) : 0;
+  const fPaid = form ? Number(form.paid || 0) : 0;
+
+  const blankForm = (itemId = ""): EntryForm => ({
+    item_id: itemId,
+    date: today,
+    supplier_id: NEW_SUP,
+    new_supplier: "",
+    quantity: "",
+    unit: "",
+    rate: "",
+    total: "",
+    paid: "",
+    note: "",
+  });
 
   function pickItem(id: string) {
-    if (!buy) return;
-    const lastOf = purchases.find((p) => p.material_id === id);
-    setBuy({
-      ...buy,
+    if (!form) return;
+    const it = items.find((i) => i.id === id);
+    const last = entries.find((e) => e.item?.id === id && e.source === "purchase");
+    setForm({
+      ...form,
       item_id: id,
-      unit_price: buy.id ? buy.unit_price : lastOf && Number(lastOf.unit_price) > 0 ? String(lastOf.unit_price) : "",
-      supplier_id: buy.id ? buy.supplier_id : (lastOf?.supplier_id ?? buy.supplier_id),
+      unit: it?.pricing === "flex" ? (last?.unit ?? "পিস") : "",
+      rate: !form.edit && it?.pricing === "unit" && last && last.rate > 0 ? String(last.rate) : form.edit ? form.rate : "",
+      supplier_id: form.edit ? form.supplier_id : (last?.supplier_id ?? form.supplier_id),
+      total: form.edit ? form.total : "",
     });
   }
 
-  function openEdit(p: Purchase) {
-    const it = itemOf(p);
-    const qty = Number(p.quantity) || 0;
-    const rate = Number(p.unit_price) || 0;
-    const total = Number(p.total_amount) || 0;
-    const totalOnly = !it || it.pricing === "total" || qty <= 0 || rate <= 0;
-    setBuy({
-      id: p.id,
-      item_id: it ? it.id : OTHER_ITEM,
-      item_name_free: it ? "" : p.item_name,
-      purchase_date: p.purchase_date,
-      supplier_id: p.supplier_id ?? NEW_SUP,
+  function openEdit(e: Entry) {
+    const it = e.item;
+    const fixedTotal = !it || it.pricing === "total" || it.pay_mode === "cash";
+    const hasQty = e.quantity > 0 && e.rate > 0;
+    setForm({
+      edit: { source: e.source, id: e.id },
+      item_id: it?.id ?? "",
+      date: e.date,
+      supplier_id: e.supplier_id ?? NEW_SUP,
       new_supplier: "",
-      quantity: !totalOnly ? String(qty) : "",
-      unit_price: !totalOnly ? String(rate) : "",
-      total: totalOnly && total > 0 ? String(total) : "",
-      paid_now: "",
-      note: p.note ?? "",
+      quantity: !fixedTotal && hasQty ? String(e.quantity) : "",
+      unit: e.unit ?? (it?.pricing === "flex" ? "পিস" : ""),
+      rate: !fixedTotal && hasQty ? String(e.rate) : "",
+      total: fixedTotal || !hasQty || Math.abs(e.quantity * e.rate - e.total) > 0.5 ? String(e.total || "") : "",
+      paid: "",
+      note: e.note ?? "",
     });
   }
 
-  const saveBuy = useMutation({
+  const saveEntry = useMutation({
     mutationFn: async () => {
-      const f = buy!;
+      const f = form!;
       if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
       const it = items.find((i) => i.id === f.item_id);
-      if (!it && f.item_id !== OTHER_ITEM) throw new Error("কী কিনলেন তা বেছে নিন");
-      const name = it ? it.name : f.item_name_free.trim();
-      if (!name) throw new Error("জিনিসের নাম দিন");
-      const totalOnly = !it || it.pricing === "total";
-      const qty = totalOnly ? 0 : Number(f.quantity || 0);
-      const rate = totalOnly ? 0 : Number(f.unit_price || 0);
-      if (!totalOnly && !(qty > 0)) throw new Error("পরিমাণ দিন");
-      const total = formTotal(f);
-      if (!(total > 0)) throw new Error(totalOnly ? "মোট টাকা দিন" : "দর দিন, অথবা মোট টাকা লিখুন");
+      if (!it) throw new Error("কী কিনলেন বা কিসের খরচ, তা বেছে নিন");
+      const total = Math.round(formTotal(f) * 100) / 100;
+      if (!(total > 0)) throw new Error(it.pay_mode === "cash" ? "মোট বিল লিখুন" : "মোট দাম লিখুন");
+
+      /* cash items (e.g. electricity bill): one expense row, nothing due */
+      if (it.pay_mode === "cash") {
+        const payload = { category: it.name, amount: total, expense_date: f.date, note: f.note.trim() || null };
+        if (f.edit?.source === "expense") {
+          const { error } = await supabase.from("expenses").update(payload).eq("id", f.edit.id);
+          if (error) throw error;
+        } else {
+          if (f.edit?.source === "purchase") {
+            const { error } = await supabase.from("purchases").delete().eq("id", f.edit.id);
+            if (error) throw error;
+          }
+          const { error } = await supabase.from("expenses").insert({ ...payload, created_by: me.user.id });
+          if (error) throw error;
+        }
+        return;
+      }
+
+      /* credit items: purchase row (+ payment now) */
+      const qty = it.pricing === "total" ? 0 : Number(f.quantity || 0);
+      const rate = it.pricing === "total" ? 0 : Number(f.rate || 0);
+      if (it.pricing === "unit" && !(qty > 0)) throw new Error("পরিমাণ লিখুন");
+      const unit = it.pricing === "unit" ? it.unit : it.pricing === "flex" && qty > 0 ? f.unit || "পিস" : null;
+      const paid = f.edit ? 0 : Number(f.paid || 0);
+      if (paid > total + 0.5) throw new Error("দেওয়া টাকা মোট দামের চেয়ে বেশি");
 
       let supplierId: string | null = f.supplier_id === NEW_SUP ? null : f.supplier_id;
       if (f.supplier_id === NEW_SUP) {
         const sname = f.new_supplier.trim();
-        if (!sname) throw new Error("বিক্রেতার নাম দিন");
+        if (!sname) throw new Error(isVehicle(it.name) ? "কার গাড়ি, সেই নাম লিখুন" : "বিক্রেতার নাম লিখুন");
         const found = (supQ.data ?? []).find((s) => s.name.trim() === sname);
         if (found) supplierId = found.id;
         else {
@@ -314,31 +360,33 @@ function PurchasesPage() {
       }
 
       const payload = {
-        purchase_date: f.purchase_date,
+        purchase_date: f.date,
         supplier_id: supplierId,
-        material_id: it ? it.id : null,
-        item_name: name,
+        material_id: it.id,
+        item_name: it.name,
         quantity: qty,
-        unit: totalOnly ? null : it!.unit,
+        unit,
         unit_price: rate,
-        total_amount: Math.round(total * 100) / 100,
+        total_amount: total,
         note: f.note.trim() || null,
       };
-
-      if (f.id) {
-        const { error } = await supabase.from("purchases").update(payload).eq("id", f.id);
+      if (f.edit?.source === "purchase") {
+        const { error } = await supabase.from("purchases").update(payload).eq("id", f.edit.id);
         if (error) throw error;
         return;
       }
+      if (f.edit?.source === "expense") {
+        const { error } = await supabase.from("expenses").delete().eq("id", f.edit.id);
+        if (error) throw error;
+      }
       const { error } = await supabase.from("purchases").insert({ ...payload, created_by: me.user.id });
       if (error) throw error;
-      const paid = Number(f.paid_now || 0);
       if (paid > 0 && supplierId) {
         const { error: e2 } = await supabase.from("supplier_payments").insert({
           supplier_id: supplierId,
           amount: paid,
-          payment_date: f.purchase_date,
-          note: `${name} ক্রয়ের সময় পরিশোধ`,
+          payment_date: f.date,
+          note: `${it.name} — কেনার সময় পরিশোধ`,
           created_by: me.user.id,
         });
         if (e2) throw e2;
@@ -346,14 +394,14 @@ function PurchasesPage() {
     },
     onSuccess: () => {
       toast.success("সংরক্ষিত");
-      setBuy(null);
+      setForm(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const delBuy = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("purchases").delete().eq("id", id);
+  const delEntry = useMutation({
+    mutationFn: async (e: Entry) => {
+      const { error } = await supabase.from(e.source === "expense" ? "expenses" : "purchases").delete().eq("id", e.id);
       if (error) throw error;
     },
     onSuccess: () => toast.success("মুছে ফেলা হয়েছে"),
@@ -365,16 +413,18 @@ function PurchasesPage() {
     mutationFn: async () => {
       const f = itemDlg!;
       const name = f.name.trim();
-      if (!name) throw new Error("মালামালের নাম দিন");
-      if (items.some((i) => i.name.normalize("NFC") === name.normalize("NFC"))) throw new Error("এই নামে মালামাল আগে থেকেই আছে");
-      if (f.pricing === "unit" && !f.unit.trim()) throw new Error("একক দিন (যেমন: টন, লিটার, বস্তা)");
+      if (!name) throw new Error("নাম লিখুন");
+      if (items.some((i) => i.name.normalize("NFC") === name.normalize("NFC"))) throw new Error("এই নামে আগে থেকেই আছে");
+      if (f.pay_mode === "credit" && f.pricing === "unit" && !f.unit.trim()) throw new Error("একক লিখুন (যেমন: টন, লিটার, বস্তা)");
+      const pricing = f.pay_mode === "cash" ? "total" : f.pricing;
       const { data, error } = await supabase
         .from("raw_materials")
         .insert({
           name,
-          unit: f.pricing === "unit" ? f.unit.trim() : "মোট",
+          unit: pricing === "unit" ? f.unit.trim() : pricing === "flex" ? "পিস" : "মোট",
           item_group: f.group,
-          pricing: f.pricing,
+          pricing,
+          pay_mode: f.pay_mode,
           buy_pattern: "as_needed",
           stage: "other",
           in_brick_cost: true,
@@ -386,368 +436,272 @@ function PurchasesPage() {
       return data.id as string;
     },
     onSuccess: (newId) => {
-      toast.success("নতুন মালামাল যোগ হয়েছে");
+      toast.success("নতুন নাম যোগ হয়েছে");
       setItemDlg(null);
-      // if the buy form is open, select the new item there
-      setBuy((b) => (b ? { ...b, item_id: newId, quantity: "", unit_price: "", total: "" } : b));
+      setForm((b) => (b ? { ...b, item_id: newId, quantity: "", rate: "", total: "", unit: "পিস" } : b));
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  /* ---------- payments ---------- */
-  const savePay = useMutation({
-    mutationFn: async () => {
-      const f = payDlg!;
-      const amount = Number(f.amount || 0);
-      if (!(amount > 0)) throw new Error("টাকা দিন");
-      const payload = { supplier_id: f.supplier_id, amount, payment_date: f.date, note: f.note || null };
-      const { error } = f.id
-        ? await supabase.from("supplier_payments").update(payload).eq("id", f.id)
-        : await supabase.from("supplier_payments").insert({ ...payload, created_by: me!.user.id });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("পরিশোধ সংরক্ষিত");
-      setPayDlg(null);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-  const delPay = useMutation({
-    mutationFn: async (p: { id: string; sales_entry_id?: string | null }) => {
-      // A brick settlement is undone by deleting its challan: the collection and payment go with it
-      const { error } = p.sales_entry_id
-        ? await supabase.from("sales_entries").delete().eq("id", p.sales_entry_id)
-        : await supabase.from("supplier_payments").delete().eq("id", p.id);
-      if (error) throw error;
-    },
-    onSuccess: () => toast.success("মুছে ফেলা হয়েছে"),
-    onError: (e: Error) => toast.error(e.message),
-  });
+  const lineText = (e: Entry) =>
+    e.source === "expense" ? "নগদ, বাকি নেই" : e.quantity > 0 ? `${bn(e.quantity)} ${e.unit ?? ""} × ${tk(e.rate)}` : "মোট দাম";
 
-  /* ---------- settle a supplier due with bricks (admin) ---------- */
-  function openBrickDlg(supplierId: string, supplierName: string) {
-    const same = (custQ.data ?? []).find((c) => c.name.trim() === supplierName.trim());
-    setBrickDlg({ supplier_id: supplierId, customer_id: same?.id ?? NEW_SUP, brick_type_id: "", quantity: "", unit_price: "", date: today, note: "" });
-  }
-  const brickSupplierName = brickDlg ? supName(brickDlg.supplier_id) : "";
-  const brickDue = brickDlg ? (bySup.find((x) => x.id === brickDlg.supplier_id)?.due ?? 0) : 0;
-  const brickTotal = brickDlg ? Number(brickDlg.quantity || 0) * Number(brickDlg.unit_price || 0) : 0;
-  const brickStock = brickDlg ? Number((stockQ.data ?? []).find((x) => x.brick_type_id === brickDlg.brick_type_id)?.quantity ?? 0) : 0;
-
-  const saveBrick = useMutation({
-    mutationFn: async () => {
-      const f = brickDlg!;
-      if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-      if (!f.brick_type_id) throw new Error("কোন ইট দিলেন তা বেছে নিন");
-      const qty = Math.round(Number(f.quantity || 0));
-      const rate = Number(f.unit_price || 0);
-      if (!(qty > 0)) throw new Error("কত পিস দিলেন লিখুন");
-      if (!(rate > 0)) throw new Error("প্রতি পিসের দর লিখুন");
-      if (qty > brickStock) throw new Error(`স্টকে এত ইট নেই (আছে ${bn(brickStock)} পিস)`);
-      let customerId = f.customer_id;
-      if (customerId === NEW_SUP) {
-        const name = brickSupplierName.trim();
-        const { data, error } = await supabase.from("customers").insert({ name, created_by: me.user.id }).select("id").single();
-        if (error) throw error;
-        customerId = data.id;
-      }
-      const { error } = await supabase.rpc("settle_supplier_with_bricks", {
-        _supplier_id: f.supplier_id,
-        _customer_id: customerId,
-        _brick_type_id: f.brick_type_id,
-        _quantity: qty,
-        _unit_price: rate,
-        _date: f.date,
-        _note: f.note.trim() || undefined,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("ইট দিয়ে বাকি শোধ হয়েছে, চালানও তৈরি হয়েছে");
-      setBrickDlg(null);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const qtyText = (p: Purchase) =>
-    Number(p.quantity) > 0 ? `${bn(p.quantity)} ${p.unit ?? ""} × ${tk(p.unit_price)}` : "একসাথে (মোট দাম)";
-
-  const print = () =>
+  const print = (rows: Entry[], title: string) =>
     printTable({
-      title: "মালামাল ক্রয় তালিকা",
-      headers: ["তারিখ", "বিক্রেতা", "জিনিস", "পরিমাণ", "দর", "মোট"],
+      title,
+      headers: ["তারিখ", "কী", "কার কাছ থেকে", "পরিমাণ", "দর", "মোট"],
       rightCols: [3, 4, 5],
-      rows: purchases.map((p) => [
-        bnDate(p.purchase_date),
-        supName(p.supplier_id),
-        p.item_name,
-        Number(p.quantity) > 0 ? `${bn(p.quantity)} ${p.unit ?? ""}` : "একসাথে",
-        Number(p.quantity) > 0 ? bn(p.unit_price) : "—",
-        `৳ ${bn(p.total_amount)}`,
+      rows: rows.map((e) => [
+        bnDate(e.date),
+        e.name,
+        e.source === "expense" ? "—" : supName(e.supplier_id),
+        e.quantity > 0 ? `${bn(e.quantity)} ${e.unit ?? ""}` : "—",
+        e.quantity > 0 ? bn(e.rate) : "—",
+        `৳ ${bn(e.total)}`,
       ]),
-      totals: [
-        ["মোট ক্রয়", `৳ ${bn(tot.bought)}`],
-        ["পরিশোধ", `৳ ${bn(tot.paid)}`],
-        ["বাকি", `৳ ${bn(tot.due)}`],
-      ],
+      totals: [["মোট", `৳ ${bn(sumOf(rows))}`]],
     });
 
-  const f = buy;
-  const fTotal = f ? formTotal(f) : 0;
-  const fPaid = f ? Number(f.paid_now || 0) : 0;
   const loading = itemsQ.isLoading || purQ.isLoading;
 
-  /* ---------- small pieces ---------- */
-  const ItemCard = ({ c, compact }: { c: ReturnType<typeof cardFor>; compact?: boolean }) => {
-    const lk = look(c.it.name);
-    return (
-      <div className="flex flex-col gap-2.5 rounded-2xl border bg-card p-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className={`font-display grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[17px] font-extrabold ${lk.chip}`}>{lk.initial}</span>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-base font-bold leading-tight">{c.it.name}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              {!c.it.in_brick_cost
-                ? "শ্রমিকদের রান্না · ইটের খরচে নয়"
-                : c.it.pricing === "total"
-                  ? "মোট দামে কেনা"
-                  : (PATTERN_HINT[c.it.buy_pattern] ?? `${c.it.unit} হিসাবে কেনা`)}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="num text-base font-extrabold">{tk(c.amount)}</div>
-            {c.it.pricing === "unit" && (
-              <div className="num text-xs text-muted-foreground">
-                {bn(c.qty)} {c.it.unit}
-              </div>
-            )}
-          </div>
-        </div>
-        {!compact && (
-          <div className="flex items-center justify-between gap-2 rounded-xl bg-muted/70 px-3 py-2 text-[13px]">
-            {c.last ? (
-              <>
-                <span className="min-w-0 truncate text-muted-foreground">
-                  শেষ কেনা {bnDate(c.last.purchase_date)}
-                  {c.it.pricing === "unit" ? ` · ${bn(c.last.quantity)} ${c.it.unit}` : ""}
-                </span>
-                {c.it.buy_pattern === "refill" && c.avgGap !== null && (
-                  <span className="shrink-0 font-bold">গড়ে {bn(Math.round(c.avgGap))} দিনে</span>
-                )}
-              </>
-            ) : (
-              <span className="text-muted-foreground">এখনো কেনা লেখা হয়নি</span>
-            )}
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => openBuy(c.it.id)}
-          className="flex h-10 items-center justify-center gap-1.5 rounded-xl border text-sm font-bold text-primary transition hover:bg-accent active:scale-[0.99]"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" /> {c.it.name} কেনা
-        </button>
-      </div>
-    );
-  };
+  /* ---------- dialogs (shared by both views) ---------- */
+  const itemButton = (it: Item) => (
+    <button
+      key={it.id}
+      type="button"
+      aria-pressed={form?.item_id === it.id}
+      onClick={() => pickItem(it.id)}
+      className={`min-h-11 rounded-xl border px-1.5 text-[14px] font-semibold leading-tight transition ${
+        form?.item_id === it.id ? "border-primary bg-primary text-primary-foreground" : "bg-card"
+      }`}
+    >
+      {it.name}
+    </button>
+  );
 
   const dialogs = (
     <>
-      {/* ===== buy dialog ===== */}
-      <Dialog open={!!f} onOpenChange={(o) => !o && setBuy(null)}>
+      <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>
         <DialogContent className="max-h-[92dvh] max-w-md overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{f?.id ? "কেনা সম্পাদনা" : "নতুন কেনা"}</DialogTitle>
+            <DialogTitle>{form?.edit ? "এন্ট্রি সম্পাদনা" : "খরচ এন্ট্রি"}</DialogTitle>
           </DialogHeader>
-          {f && (
+          {form && (
             <div className="space-y-3.5">
               <div className="space-y-2">
-                <Label>কী কিনলেন</Label>
+                <Label>কী কিনলেন / কিসের খরচ</Label>
                 <div className="text-xs font-bold text-muted-foreground">কাঁচামাল</div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {rawItems.map((it) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      aria-pressed={f.item_id === it.id}
-                      onClick={() => pickItem(it.id)}
-                      className={`min-h-11 rounded-xl border px-1 text-[14px] font-semibold transition ${f.item_id === it.id ? "border-primary bg-primary text-primary-foreground" : "bg-card"}`}
-                    >
-                      {it.name}
-                    </button>
-                  ))}
-                </div>
-                <div className="pt-1 text-xs font-bold text-muted-foreground">অন্যান্য</div>
+                <div className="grid grid-cols-3 gap-1.5">{rawItems.map(itemButton)}</div>
+                <div className="pt-1 text-xs font-bold text-muted-foreground">অন্যান্য মালামাল ও খরচ</div>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {otherItems.map((it) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      aria-pressed={f.item_id === it.id}
-                      onClick={() => pickItem(it.id)}
-                      className={`min-h-11 rounded-xl border px-1 text-[14px] font-semibold transition ${f.item_id === it.id ? "border-primary bg-primary text-primary-foreground" : "bg-card"}`}
-                    >
-                      {it.name}
-                    </button>
-                  ))}
+                  {otherItems.map(itemButton)}
                   <button
                     type="button"
-                    onClick={() => setItemDlg({ name: "", group: "other", pricing: "total", unit: "" })}
+                    onClick={() => setItemDlg({ name: "", group: "other", pricing: "total", pay_mode: "credit", unit: "" })}
                     className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-dashed text-[14px] font-bold text-primary"
                   >
-                    <Plus className="h-4 w-4" aria-hidden="true" /> নতুন মালামাল
+                    <Plus className="h-4 w-4" aria-hidden="true" /> নতুন নাম
                   </button>
                 </div>
-                {f.item_id === OTHER_ITEM && (
-                  <Input placeholder="জিনিসের নাম" value={f.item_name_free} onChange={(e) => setBuy({ ...f, item_name_free: e.target.value })} />
-                )}
               </div>
 
-              {(formItem || f.item_id === OTHER_ITEM) && (
+              {fItem && (
                 <>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className={fCash ? "" : "grid grid-cols-2 gap-2"}>
                     <div>
-                      <Label htmlFor="pb-date">তারিখ</Label>
-                      <Input id="pb-date" type="date" value={f.purchase_date} onChange={(e) => setBuy({ ...f, purchase_date: e.target.value })} />
+                      <Label htmlFor="pe-date">তারিখ</Label>
+                      <Input id="pe-date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
                     </div>
-                    <div>
-                      <Label>বিক্রেতা</Label>
-                      <Select value={f.supplier_id} onValueChange={(v) => setBuy({ ...f, supplier_id: v })}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NEW_SUP}>+ নতুন বিক্রেতা</SelectItem>
-                          {(supQ.data ?? []).map((s) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              {s.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {!fCash && (
+                      <div>
+                        <Label>{isVehicle(fItem.name) ? "কার গাড়ি" : "বিক্রেতা"}</Label>
+                        <Select value={form.supplier_id} onValueChange={(v) => setForm({ ...form, supplier_id: v })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NEW_SUP}>+ নতুন নাম</SelectItem>
+                            {(supQ.data ?? []).map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
-                  {f.supplier_id === NEW_SUP && (
-                    <Input placeholder="বিক্রেতার নাম" value={f.new_supplier} onChange={(e) => setBuy({ ...f, new_supplier: e.target.value })} />
+                  {!fCash && form.supplier_id === NEW_SUP && (
+                    <Input
+                      placeholder={isVehicle(fItem.name) ? "গাড়ির মালিক বা চালকের নাম" : "বিক্রেতার নাম"}
+                      value={form.new_supplier}
+                      onChange={(e) => setForm({ ...form, new_supplier: e.target.value })}
+                    />
                   )}
 
-                  {byTotal ? (
+                  {/* amount */}
+                  {fCash || fItem.pricing === "total" ? (
                     <div>
-                      <Label htmlFor="pb-total">মোট দাম (৳)</Label>
-                      <Input id="pb-total" type="number" inputMode="decimal" placeholder="যেমন: 68580" value={f.total} onChange={(e) => setBuy({ ...f, total: e.target.value })} />
+                      <Label htmlFor="pe-total">{fCash ? "মোট বিল (৳)" : isVehicle(fItem.name) ? "মোট ভাড়া (৳)" : "মোট দাম (৳)"}</Label>
+                      <Input id="pe-total" type="number" inputMode="decimal" value={form.total} onChange={(e) => setForm({ ...form, total: e.target.value })} />
                     </div>
-                  ) : (
+                  ) : fItem.pricing === "unit" ? (
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <Label htmlFor="pb-qty">পরিমাণ ({formItem?.unit})</Label>
-                        <Input id="pb-qty" type="number" inputMode="decimal" value={f.quantity} onChange={(e) => setBuy({ ...f, quantity: e.target.value, total: "" })} />
+                        <Label htmlFor="pe-qty">পরিমাণ ({fItem.unit})</Label>
+                        <Input id="pe-qty" type="number" inputMode="decimal" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
                       </div>
                       <div>
-                        <Label htmlFor="pb-rate">দর (প্রতি {formItem?.unit}, ৳)</Label>
-                        <Input id="pb-rate" type="number" inputMode="decimal" value={f.unit_price} onChange={(e) => setBuy({ ...f, unit_price: e.target.value, total: "" })} />
+                        <Label htmlFor="pe-rate">দর (প্রতি {fItem.unit}, ৳)</Label>
+                        <Input id="pe-rate" type="number" inputMode="decimal" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <Label htmlFor="pe-fqty">পরিমাণ</Label>
+                          <Input id="pe-fqty" type="number" inputMode="decimal" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value, total: "" })} />
+                        </div>
+                        <div>
+                          <Label>কিসে</Label>
+                          <Select value={form.unit || "পিস"} onValueChange={(v) => setForm({ ...form, unit: v })}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {UNIT_OPTIONS.map((u) => (
+                                <SelectItem key={u} value={u}>
+                                  {u}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="pe-frate">দর (৳)</Label>
+                          <Input id="pe-frate" type="number" inputMode="decimal" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value, total: "" })} />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="pe-ftotal">মোট দাম (৳)</Label>
+                        <Input
+                          id="pe-ftotal"
+                          type="number"
+                          inputMode="decimal"
+                          placeholder={Number(form.quantity || 0) * Number(form.rate || 0) > 0 ? `পরিমাণ × দর = ${bn(Number(form.quantity || 0) * Number(form.rate || 0))}` : "পরিমাণ × দর, বা সরাসরি মোট"}
+                          value={form.total}
+                          onChange={(e) => setForm({ ...form, total: e.target.value })}
+                        />
                       </div>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between rounded-xl bg-muted px-3.5 py-2.5">
-                    <span className="text-sm font-semibold text-muted-foreground">মোট দাম</span>
-                    <span className="font-display num text-xl font-extrabold">{tk(fTotal)}</span>
-                  </div>
-
-                  {!f.id && (
-                    <div>
-                      <Label htmlFor="pb-paid">এখন নগদ দিলেন (৳)</Label>
-                      <div className="flex gap-2">
-                        <Input id="pb-paid" type="number" inputMode="decimal" value={f.paid_now} onChange={(e) => setBuy({ ...f, paid_now: e.target.value })} />
-                        <Button type="button" variant="outline" onClick={() => setBuy({ ...f, paid_now: String(Math.round(fTotal)) })}>
-                          পুরোটা
-                        </Button>
+                  {/* paid / due */}
+                  {fCash ? (
+                    <p className="rounded-xl bg-muted px-3.5 py-2.5 text-sm">
+                      মোট <b className="num">{tk(fTotal)}</b> ক্যাশ বই থেকে খরচ হবে। বিলে বাকি থাকে না।
+                    </p>
+                  ) : form.edit ? (
+                    <p className="rounded-xl bg-muted px-3.5 py-2.5 text-sm">
+                      মোট দাম: <b className="num">{tk(fTotal)}</b>। আগে দেওয়া টাকা বা বাকি শোধ "সাপ্লায়ার ও বাকি" পাতা থেকে দেখুন।
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor="pe-paid">এখন কত দিলেন (৳)</Label>
+                        <div className="flex gap-2">
+                          <Input id="pe-paid" type="number" inputMode="decimal" value={form.paid} onChange={(e) => setForm({ ...form, paid: e.target.value })} />
+                          <Button type="button" variant="outline" onClick={() => setForm({ ...form, paid: String(Math.round(fTotal)) })}>
+                            পুরোটা
+                          </Button>
+                        </div>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {fPaid > 0 ? `৳${bn(fPaid)} ক্যাশ বই থেকে কমবে। ` : ""}
-                        {fTotal - fPaid > 0.5 ? `বাকি ${tk(fTotal - fPaid)} বিক্রেতার পাওনায় যোগ হবে।` : fTotal > 0 ? "কোনো বাকি থাকবে না।" : ""}
-                      </p>
+                      <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-muted p-2 text-center">
+                        <div>
+                          <div className="text-[11px] font-semibold text-muted-foreground">মোট</div>
+                          <div className="num text-[15px] font-bold">{tk(fTotal)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-semibold text-muted-foreground">দিলেন</div>
+                          <div className="num text-[15px] font-bold text-success">{tk(fPaid)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-semibold text-muted-foreground">বাকি</div>
+                          <div className="num text-[15px] font-bold text-warning">{tk(Math.max(0, fTotal - fPaid))}</div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
                   <div>
-                    <Label htmlFor="pb-note">নোট (ইচ্ছা হলে)</Label>
-                    <Input id="pb-note" placeholder="যেমন: কোন কোন পার্টস, ট্রাক নম্বর" value={f.note} onChange={(e) => setBuy({ ...f, note: e.target.value })} />
+                    <Label htmlFor="pe-note">নোট (ইচ্ছা হলে)</Label>
+                    <Input
+                      id="pe-note"
+                      placeholder={isVehicle(fItem.name) ? "যেমন: কোথা থেকে কী আনা হলো" : fCash ? "যেমন: কোন মাসের বিল" : "যেমন: কোন কোন জিনিস"}
+                      value={form.note}
+                      onChange={(e) => setForm({ ...form, note: e.target.value })}
+                    />
                   </div>
                 </>
               )}
             </div>
           )}
           <DialogFooter>
-            <Button className="h-11 w-full text-base" onClick={() => saveBuy.mutate()} disabled={saveBuy.isPending || !f || (!formItem && f.item_id !== OTHER_ITEM)}>
-              {saveBuy.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button className="h-11 w-full text-base" onClick={() => saveEntry.mutate()} disabled={saveEntry.isPending || !fItem}>
+              {saveEntry.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               সংরক্ষণ
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ===== new item dialog ===== */}
       <Dialog open={!!itemDlg} onOpenChange={(o) => !o && setItemDlg(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-h-[92dvh] max-w-sm overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>নতুন মালামাল যোগ</DialogTitle>
+            <DialogTitle>নতুন নাম যোগ</DialogTitle>
           </DialogHeader>
           {itemDlg && (
             <div className="space-y-3.5">
               <div>
                 <Label htmlFor="ni-name">নাম</Label>
-                <Input id="ni-name" placeholder="যেমন: গ্রিজ, টায়ার, মোবিল" value={itemDlg.name} onChange={(e) => setItemDlg({ ...itemDlg, name: e.target.value })} />
+                <Input id="ni-name" placeholder="যেমন: গ্রিজ, টায়ার, মোবাইল বিল" value={itemDlg.name} onChange={(e) => setItemDlg({ ...itemDlg, name: e.target.value })} />
               </div>
-              <div>
-                <Label>কোন ঘরে থাকবে</Label>
-                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                  {(
-                    [
-                      ["raw", "কাঁচামাল"],
-                      ["other", "অন্যান্য মালামাল"],
-                    ] as const
-                  ).map(([k, label]) => (
-                    <button
-                      key={k}
-                      type="button"
-                      aria-pressed={itemDlg.group === k}
-                      onClick={() => setItemDlg({ ...itemDlg, group: k })}
-                      className={`h-11 rounded-xl border text-[14px] font-semibold ${itemDlg.group === k ? "border-primary bg-primary text-primary-foreground" : "bg-card"}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <Label>কীভাবে কেনা হয়</Label>
-                <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-                  {(
-                    [
-                      ["unit", "পরিমাণ × দর"],
-                      ["total", "শুধু মোট টাকা"],
-                    ] as const
-                  ).map(([k, label]) => (
-                    <button
-                      key={k}
-                      type="button"
-                      aria-pressed={itemDlg.pricing === k}
-                      onClick={() => setItemDlg({ ...itemDlg, pricing: k })}
-                      className={`h-11 rounded-xl border text-[14px] font-semibold ${itemDlg.pricing === k ? "border-primary bg-primary text-primary-foreground" : "bg-card"}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {itemDlg.pricing === "unit" ? "যেমন কয়লা টন হিসাবে, ডিজেল লিটার হিসাবে।" : "যেমন অনেক রকম পার্টস একসাথে, বা বিল।"}
-                </p>
-              </div>
-              {itemDlg.pricing === "unit" && (
+              <ChoiceRow
+                label="কোন ঘরে থাকবে"
+                value={itemDlg.group}
+                options={[
+                  ["raw", "কাঁচামাল"],
+                  ["other", "অন্যান্য মালামাল ও খরচ"],
+                ]}
+                onChange={(v) => setItemDlg({ ...itemDlg, group: v as Folder })}
+              />
+              <ChoiceRow
+                label="টাকা কীভাবে দেওয়া হয়"
+                value={itemDlg.pay_mode}
+                options={[
+                  ["credit", "বাকি রাখা যায়"],
+                  ["cash", "পুরোটা নগদ (বিল)"],
+                ]}
+                onChange={(v) => setItemDlg({ ...itemDlg, pay_mode: v as "credit" | "cash" })}
+              />
+              {itemDlg.pay_mode === "credit" && (
+                <ChoiceRow
+                  label="দাম কীভাবে লিখবেন"
+                  value={itemDlg.pricing}
+                  cols={3}
+                  options={[
+                    ["unit", "নির্দিষ্ট একক × দর"],
+                    ["flex", "পরিমাণ, একক বেছে"],
+                    ["total", "শুধু মোট"],
+                  ]}
+                  onChange={(v) => setItemDlg({ ...itemDlg, pricing: v as "unit" | "total" | "flex" })}
+                />
+              )}
+              {itemDlg.pay_mode === "credit" && itemDlg.pricing === "unit" && (
                 <div>
                   <Label htmlFor="ni-unit">একক</Label>
-                  <Input id="ni-unit" placeholder="যেমন: টন, লিটার, বস্তা, পিস" value={itemDlg.unit} onChange={(e) => setItemDlg({ ...itemDlg, unit: e.target.value })} />
+                  <Input id="ni-unit" placeholder="যেমন: টন, লিটার, বস্তা" value={itemDlg.unit} onChange={(e) => setItemDlg({ ...itemDlg, unit: e.target.value })} />
                 </div>
               )}
             </div>
@@ -760,443 +714,215 @@ function PurchasesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ===== payment dialog ===== */}
-      <Dialog open={!!payDlg} onOpenChange={(o) => !o && setPayDlg(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>পরিশোধ — {payDlg ? supName(payDlg.supplier_id) : ""}</DialogTitle>
-          </DialogHeader>
-          {payDlg && (
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="pp-date">তারিখ</Label>
-                <Input id="pp-date" type="date" value={payDlg.date} onChange={(e) => setPayDlg({ ...payDlg, date: e.target.value })} />
-              </div>
-              <div>
-                <Label htmlFor="pp-amt">টাকা (৳)</Label>
-                <Input id="pp-amt" type="number" inputMode="decimal" value={payDlg.amount} onChange={(e) => setPayDlg({ ...payDlg, amount: e.target.value })} />
-              </div>
-              <div>
-                <Label htmlFor="pp-note">নোট</Label>
-                <Input id="pp-note" value={payDlg.note} onChange={(e) => setPayDlg({ ...payDlg, note: e.target.value })} />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button className="h-11 w-full" onClick={() => savePay.mutate()} disabled={savePay.isPending}>
-              সংরক্ষণ
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* ===== settle with bricks dialog ===== */}
-      <Dialog open={!!brickDlg} onOpenChange={(o) => !o && setBrickDlg(null)}>
-        <DialogContent className="max-h-[92dvh] max-w-md overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>ইট দিয়ে বাকি শোধ — {brickSupplierName}</DialogTitle>
-          </DialogHeader>
-          {brickDlg && (
-            <div className="space-y-3.5">
-              <div className="flex items-center justify-between rounded-xl bg-amber-50 px-3.5 py-2.5 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                <span className="text-sm font-semibold">এখন বাকি</span>
-                <span className="num text-lg font-extrabold">{tk(brickDue)}</span>
-              </div>
-
-              <div>
-                <Label>কোন ইট দিলেন</Label>
-                <Select
-                  value={brickDlg.brick_type_id}
-                  onValueChange={(v) => {
-                    const bt = (brickTypesQ.data ?? []).find((b) => b.id === v);
-                    setBrickDlg({ ...brickDlg, brick_type_id: v, unit_price: brickDlg.unit_price || (bt?.default_unit_price ? String(bt.default_unit_price) : "") });
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="ইটের ধরন বাছুন" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(brickTypesQ.data ?? []).map((b) => {
-                      const st = Number((stockQ.data ?? []).find((x) => x.brick_type_id === b.id)?.quantity ?? 0);
-                      return (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.name} · স্টকে {bn(st)}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label htmlFor="bs-qty">কত পিস</Label>
-                  <Input id="bs-qty" type="number" inputMode="numeric" value={brickDlg.quantity} onChange={(e) => setBrickDlg({ ...brickDlg, quantity: e.target.value })} />
-                </div>
-                <div>
-                  <Label htmlFor="bs-rate">দর (প্রতি পিস, ৳)</Label>
-                  <Input id="bs-rate" type="number" inputMode="decimal" value={brickDlg.unit_price} onChange={(e) => setBrickDlg({ ...brickDlg, unit_price: e.target.value })} />
-                </div>
-              </div>
-              {brickDue > 0 && Number(brickDlg.unit_price || 0) > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setBrickDlg({ ...brickDlg, quantity: String(Math.floor(brickDue / Number(brickDlg.unit_price))) })}
-                  className="text-sm font-bold text-primary underline-offset-2 hover:underline"
-                >
-                  পুরো বাকির সমান: {bn(Math.floor(brickDue / Number(brickDlg.unit_price)))} পিস
-                </button>
-              )}
-
-              <div className="rounded-xl bg-muted px-3.5 py-2.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">ইটের দাম</span>
-                  <b className="num">{tk(brickTotal)}</b>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">এরপর বাকি থাকবে</span>
-                  <b className={`num ${brickDue - brickTotal < -0.5 ? "text-info" : ""}`}>
-                    {brickDue - brickTotal < -0.5 ? `উল্টো অগ্রিম ${tk(brickTotal - brickDue)}` : tk(Math.max(0, brickDue - brickTotal))}
-                  </b>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label htmlFor="bs-date">তারিখ</Label>
-                  <Input id="bs-date" type="date" value={brickDlg.date} onChange={(e) => setBrickDlg({ ...brickDlg, date: e.target.value })} />
-                </div>
-                <div>
-                  <Label>চালান কার নামে</Label>
-                  <Select value={brickDlg.customer_id} onValueChange={(v) => setBrickDlg({ ...brickDlg, customer_id: v })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NEW_SUP}>+ নতুন গ্রাহক: {brickSupplierName}</SelectItem>
-                      {(custQ.data ?? []).map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="bs-note">নোট (ইচ্ছা হলে)</Label>
-                <Input id="bs-note" placeholder="যেমন: গাড়ি নম্বর" value={brickDlg.note} onChange={(e) => setBrickDlg({ ...brickDlg, note: e.target.value })} />
-              </div>
-
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                সেভ করলে: ইট স্টক থেকে কমবে, ওই নামে একটা চালান হবে, ক্যাশ বইয়ে সমান টাকার আয় (ইট বিক্রি) আর খরচ (বাকি পরিশোধ) উঠবে। হাতের নগদ বদলাবে না।
-              </p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button className="h-11 w-full text-base" onClick={() => saveBrick.mutate()} disabled={saveBrick.isPending}>
-              {saveBrick.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              ইট দিয়ে শোধ করুন
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 
-  const PurchaseRows = ({ rows }: { rows: Purchase[] }) => (
+  const EntryRows = ({ rows }: { rows: Entry[] }) => (
     <div className="overflow-hidden rounded-2xl border bg-card">
       {rows.length === 0 ? (
-        <p className="p-4 text-sm text-muted-foreground">কোনো কেনা নেই।</p>
+        <p className="p-4 text-sm text-muted-foreground">এখনো কিছু লেখা হয়নি।</p>
       ) : (
-        rows.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
-                <span className={`font-display grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-extrabold ${look(p.item_name).chip}`}>
-                  {look(p.item_name).initial}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold">{p.item_name}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {bnDate(p.purchase_date)} · {supName(p.supplier_id)} · {qtyText(p)}
-                    {p.note ? ` · ${p.note}` : ""}
-                  </div>
-                </div>
-                <div className="num shrink-0 text-[15px] font-bold">{tk(p.total_amount)}</div>
-                {isAdmin && (
-                  <div className="flex shrink-0">
-                    <Button size="icon" variant="ghost" aria-label="সম্পাদনা" onClick={() => openEdit(p)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() => confirm("এই কেনা মুছবেন?") && delBuy.mutate(p.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                )}
+        rows.map((e) => (
+          <div key={e.key} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
+            <span className={`font-display grid h-9 w-9 shrink-0 place-items-center rounded-xl text-sm font-extrabold ${look(e.name).chip}`}>{look(e.name).initial}</span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[15px] font-semibold">{e.name}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {bnDate(e.date)}
+                {e.source === "purchase" ? ` · ${supName(e.supplier_id)}` : ""} · {lineText(e)}
+                {e.note ? ` · ${e.note}` : ""}
               </div>
+            </div>
+            <div className="num shrink-0 text-[15px] font-bold">{tk(e.total)}</div>
+            {isAdmin && (
+              <div className="flex shrink-0">
+                <Button size="icon" variant="ghost" aria-label="সম্পাদনা" onClick={() => openEdit(e)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() => confirm("এই এন্ট্রি মুছবেন?") && delEntry.mutate(e)}>
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            )}
+          </div>
         ))
       )}
     </div>
   );
 
+  /* ================= main page ================= */
   if (!folder) {
     return (
-    <div className="mx-auto w-full max-w-5xl space-y-5 pb-4">
-      {/* header */}
-      <div className="space-y-3 px-0.5 pt-1">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
+      <div className="mx-auto w-full max-w-5xl space-y-5 pb-4">
+        <div className="space-y-3 px-0.5 pt-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <h1 className="font-display flex items-center gap-2 text-[26px] font-extrabold leading-tight">
-              <ShoppingCart className="h-6 w-6 text-primary" aria-hidden="true" /> মালামাল ক্রয় ও বাকি
+              <ShoppingCart className="h-6 w-6 text-primary" aria-hidden="true" /> মালামাল ক্রয় ও খরচ
             </h1>
-            <p className="text-sm font-semibold text-muted-foreground">কাঁচামাল, ইঞ্জিন মালামাল, কারেন্ট বিল সহ সব কেনাকাটা</p>
-          </div>
-          <div className="flex gap-2">
             <Button asChild variant="secondary" size="sm">
-              <Link to="/suppliers">সাপ্লায়ার তালিকা</Link>
-            </Button>
-            <Button variant="outline" size="sm" onClick={print}>
-              <Printer className="mr-1 h-4 w-4" /> প্রিন্ট
+              <Link to="/suppliers">সাপ্লায়ার ও বাকি</Link>
             </Button>
           </div>
+          <button
+            type="button"
+            onClick={() => setForm(blankForm())}
+            disabled={!items.length}
+            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-60 md:w-auto md:px-6"
+          >
+            <Plus className="h-5 w-5" aria-hidden="true" />
+            খরচ এন্ট্রি করুন
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => openBuy()}
-          disabled={!items.length}
-          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-60 md:w-auto md:px-6"
-        >
-          <Plus className="h-5 w-5" aria-hidden="true" />
-          নতুন কেনা লিখুন
-        </button>
-      </div>
 
-      {/* totals */}
-      <section className="grid grid-cols-3 gap-2">
-        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
-          <span className="text-xs font-semibold text-muted-foreground">মোট ক্রয়</span>
-          <span className="num text-[15px] font-bold sm:text-lg">{tk(tot.bought)}</span>
-        </div>
-        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
-          <span className="text-xs font-semibold text-muted-foreground">পরিশোধ</span>
-          <span className="num text-[15px] font-bold text-success sm:text-lg">{tk(tot.paid)}</span>
-        </div>
-        <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
-          <span className="text-xs font-semibold text-muted-foreground">বাকি</span>
-          <span className={`num text-[15px] font-bold sm:text-lg ${tot.due < 0 ? "text-info" : "text-warning"}`}>{tk(tot.due)}</span>
-        </div>
-      </section>
+        <section className="grid grid-cols-3 gap-2">
+          <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
+            <span className="text-xs font-semibold text-muted-foreground">মোট ক্রয়</span>
+            <span className="num text-[15px] font-bold sm:text-lg">{tk(totals.bought)}</span>
+          </div>
+          <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
+            <span className="text-xs font-semibold text-muted-foreground">পরিশোধ</span>
+            <span className="num text-[15px] font-bold text-success sm:text-lg">{tk(totals.paid)}</span>
+          </div>
+          <Link to="/suppliers" className="flex flex-col gap-1 rounded-2xl border bg-card p-3 transition hover:bg-muted/50">
+            <span className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+              বাকি <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+            <span className={`num text-[15px] font-bold sm:text-lg ${totals.due < 0 ? "text-info" : "text-warning"}`}>{tk(totals.due)}</span>
+          </Link>
+        </section>
 
-      {/* refill reminders */}
-      {rawCards
-        .filter((c) => c.dueSoon)
-        .map((c) => (
-          <div key={c.it.id} className="flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+        {reminders.map((r) => (
+          <div key={r.name} className="flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
             <Clock className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
             <span>
-              <b>{c.it.name} কেনার সময় হয়ে এসেছে।</b> সাধারণত প্রতি {bn(Math.round(c.avgGap ?? 0))} দিনে কেনা হয়, শেষবার কেনা হয়েছে {bn(c.sinceLast ?? 0)} দিন আগে।
+              <b>{r.name} কেনার সময় হয়ে এসেছে।</b> সাধারণত প্রতি {bn(Math.round(r.avg))} দিনে কেনা হয়, শেষবার কেনা হয়েছে {bn(r.since)} দিন আগে।
             </span>
           </div>
         ))}
 
-      {/* folders */}
-      <section className="grid grid-cols-2 gap-2.5">
-        {(
-          [
-            { key: "raw" as const, title: "কাঁচামাল", sub: "মাটি, বালু, কয়লা, তুষ, ডিজেল…", amount: rawTotal, count: rawItems.length, chip: "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200", icon: Mountain },
-            { key: "other" as const, title: "অন্যান্য মালামাল ও খরচ", sub: "ইঞ্জিন মালামাল, কারেন্ট বিল…", amount: otherTotal, count: otherItems.length, chip: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200", icon: Wrench },
-          ]
-        ).map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => openFolder(t.key)}
-            className="flex min-h-[150px] flex-col gap-2 rounded-2xl border bg-card p-3.5 text-left transition hover:bg-muted/50 active:scale-[0.99]"
-          >
-            <span className="flex items-center justify-between">
-              <span className={`grid h-11 w-11 place-items-center rounded-xl ${t.chip}`}>
-                <t.icon className="h-5 w-5" aria-hidden="true" />
-              </span>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-            </span>
-            <span className="text-base font-bold leading-tight">{t.title}</span>
-            <span className="line-clamp-1 text-xs text-muted-foreground">{t.sub}</span>
-            <span className="font-display num mt-auto text-xl font-extrabold">{tk(t.amount)}</span>
-            <span className="text-[11px] font-semibold text-muted-foreground">{bn(t.count)}টি মালামাল · এই মৌসুম</span>
-          </button>
-        ))}
-      </section>
-
-      {/* supplier dues */}
-      <section className="space-y-2">
-        <h2 className="section-label px-1">বিক্রেতা অনুযায়ী বাকি</h2>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {bySup.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">কোনো ক্রয় নেই</p>
-          ) : (
-            bySup.map((s) => (
-              <div key={s.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold">{s.name}</div>
-                  <div className="num text-xs text-muted-foreground">
-                    ক্রয় {tk(s.bought)} · পরিশোধ {tk(s.paid)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className={`num text-[15px] font-bold ${s.due < 0 ? "text-info" : "text-warning"}`}>{tk(Math.abs(s.due))}</div>
-                  <div className="text-[11px] text-muted-foreground">{s.due < 0 ? "অগ্রিম দেওয়া" : "বাকি"}</div>
-                </div>
-                <div className="flex shrink-0 flex-col gap-1 sm:flex-row">
-                  <Button size="sm" variant="outline" onClick={() => setPayDlg({ supplier_id: s.id, amount: "", date: today, note: "" })}>
-                    টাকা দিয়ে
-                  </Button>
-                  {isAdmin && s.due > 0.5 && (
-                    <Button size="sm" variant="outline" onClick={() => openBrickDlg(s.id, s.name)}>
-                      ইট দিয়ে
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      {/* purchase list */}
-      <section className="space-y-2">
-        <h2 className="section-label px-1">সব কেনার তালিকা</h2>
-        <PurchaseRows rows={purchases} />
-      </section>
-
-      {/* payment list */}
-      <section className="space-y-2">
-        <h2 className="section-label px-1">পরিশোধের তালিকা</h2>
-        <div className="overflow-hidden rounded-2xl border bg-card">
-          {(payQ.data ?? []).length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">কোনো পরিশোধ নেই।</p>
-          ) : (
-            (payQ.data ?? []).map((p) => (
-              <div key={p.id} className="flex items-center gap-3 border-b px-4 py-2.5 last:border-b-0">
-                <span
-                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
-                    p.method === "bricks" ? "bg-accent text-accent-foreground" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                  }`}
-                >
-                  {p.method === "bricks" ? <Boxes className="h-4 w-4" aria-hidden="true" /> : <Wallet className="h-4 w-4" aria-hidden="true" />}
+        {loading ? (
+          <div className="grid grid-cols-2 gap-2.5">
+            <Skeleton className="h-[170px] rounded-2xl" />
+            <Skeleton className="h-[170px] rounded-2xl" />
+          </div>
+        ) : (
+          <section className="grid grid-cols-2 gap-2.5">
+            {(
+              [
+                { key: "raw" as const, title: "কাঁচামাল", sub: "মাটি, বালু, কয়লা, তুষ, ডিজেল…", rows: rawEntries, chip: "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200", icon: Mountain },
+                { key: "other" as const, title: "অন্যান্য মালামাল ও খরচ", sub: "ইঞ্জিন মালামাল, কারেন্ট বিল, গাড়ি ভাড়া…", rows: otherEntries, chip: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200", icon: Wrench },
+              ]
+            ).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => {
+                  setItemFilter("all");
+                  openFolder(t.key);
+                }}
+                className="flex min-h-[170px] flex-col gap-2 rounded-2xl border bg-card p-3.5 text-left transition hover:bg-muted/50 active:scale-[0.99]"
+              >
+                <span className="flex items-center justify-between">
+                  <span className={`grid h-11 w-11 place-items-center rounded-xl ${t.chip}`}>
+                    <t.icon className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-semibold">{supName(p.supplier_id)}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {bnDate(p.payment_date)}
-                    {p.note ? ` · ${p.note}` : ""}
-                  </div>
-                </div>
-                <div className="num shrink-0 text-[15px] font-bold text-success">{tk(p.amount)}</div>
-                {isAdmin && (
-                  <div className="flex shrink-0">
-                    {p.method !== "bricks" && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label="সম্পাদনা"
-                        onClick={() => setPayDlg({ id: p.id, supplier_id: p.supplier_id, amount: String(p.amount), date: p.payment_date, note: p.note ?? "" })}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    )}
-                    <Button size="icon" variant="ghost" aria-label="মুছুন" onClick={() =>
-                        confirm(p.method === "bricks" ? "এই ইট দিয়ে শোধ বাতিল করবেন? সাথে এর চালান আর জমাও মুছে যাবে, ইট স্টকে ফিরবে।" : "মুছবেন?") &&
-                        delPay.mutate({ id: p.id, sales_entry_id: p.sales_entry_id })
-                      }>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+                <span className="text-base font-bold leading-tight">{t.title}</span>
+                <span className="line-clamp-2 text-xs text-muted-foreground">{t.sub}</span>
+                <span className="font-display num mt-auto text-xl font-extrabold">{tk(sumOf(t.rows))}</span>
+                <span className="text-[11px] font-semibold text-muted-foreground">{bn(t.rows.length)}টি এন্ট্রি · ইতিহাস দেখুন</span>
+              </button>
+            ))}
+          </section>
+        )}
 
-      {dialogs}
-    </div>
+        {dialogs}
+      </div>
     );
   }
 
+  /* ================= folder: history only ================= */
+  const folderItems = folder === "raw" ? rawItems : otherItems;
+  const folderRows = folder === "raw" ? rawEntries : otherEntries;
+  const shown = itemFilter === "all" ? folderRows : folderRows.filter((e) => e.item?.id === itemFilter);
+  const folderTitle = folder === "raw" ? "কাঁচামাল" : "অন্যান্য মালামাল ও খরচ";
+
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-5 pb-4">
+    <div className="mx-auto w-full max-w-5xl space-y-4 pb-4">
       <div className="flex items-center gap-3 pt-1">
         <button
           type="button"
           onClick={closeFolder}
-          aria-label="মালামাল ক্রয় ও বাকিতে ফিরে যান"
+          aria-label="মালামাল ক্রয় ও খরচে ফিরে যান"
           className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border bg-card transition active:scale-95"
         >
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="font-display truncate text-[24px] font-extrabold leading-tight">{folder === "raw" ? "কাঁচামাল" : "অন্যান্য মালামাল ও খরচ"}</h1>
+          <h1 className="font-display truncate text-[24px] font-extrabold leading-tight">{folderTitle}</h1>
           <p className="text-sm font-semibold text-muted-foreground">
-            এই মৌসুমে <span className="num">{tk(folder === "raw" ? rawTotal : otherTotal)}</span>
+            ইতিহাস · এই মৌসুমে <span className="num">{tk(sumOf(folderRows))}</span>
           </p>
         </div>
+        <Button variant="outline" size="sm" onClick={() => print(shown, `${folderTitle} — কেনা ও খরচের ইতিহাস`)}>
+          <Printer className="mr-1 h-4 w-4" /> প্রিন্ট
+        </Button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => openBuy()}
-        disabled={!items.length}
-        className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-60 md:w-auto md:px-6"
-      >
-        <Plus className="h-5 w-5" aria-hidden="true" />
-        নতুন কেনা লিখুন
-      </button>
-
-      {/* refill reminders */}
-      {folder === "raw" && rawCards
-        .filter((c) => c.dueSoon)
-        .map((c) => (
-          <div key={c.it.id} className="flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-            <Clock className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-            <span>
-              <b>{c.it.name} কেনার সময় হয়ে এসেছে।</b> সাধারণত প্রতি {bn(Math.round(c.avgGap ?? 0))} দিনে কেনা হয়, শেষবার কেনা হয়েছে {bn(c.sinceLast ?? 0)} দিন আগে।
-            </span>
-          </div>
-        ))}
-
-      {loading ? (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[132px] rounded-2xl" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {(folder === "raw" ? rawCards : otherCards).map((c) => (
-            <ItemCard key={c.it.id} c={c} compact={folder !== "raw"} />
-          ))}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {[{ id: "all", name: "সব", total: sumOf(folderRows) }, ...folderItems.map((it) => ({ id: it.id, name: it.name, total: sumOf(folderRows.filter((e) => e.item?.id === it.id)) }))].map((m) => (
           <button
+            key={m.id}
             type="button"
-            onClick={() => setItemDlg(folder === "raw" ? { name: "", group: "raw", pricing: "unit", unit: "" } : { name: "", group: "other", pricing: "total", unit: "" })}
-            className="flex min-h-[132px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed text-sm font-bold text-primary transition hover:bg-accent"
+            aria-pressed={itemFilter === m.id}
+            onClick={() => setItemFilter(m.id)}
+            className={`flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition ${
+              itemFilter === m.id ? "border-primary bg-primary text-primary-foreground" : "bg-card text-foreground"
+            }`}
           >
-            <Plus className="h-6 w-6" aria-hidden="true" />
-            {folder === "raw" ? "নতুন কাঁচামাল যোগ" : "নতুন মালামাল যোগ"}
+            {m.name}
+            {m.total > 0 && <span className={`num text-xs ${itemFilter === m.id ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{tk(m.total)}</span>}
           </button>
-        </div>
-      )}
-      {folder === "other" && untaggedTotal > 0 && (
-        <p className="px-1 text-xs text-muted-foreground">
-          তালিকার বাইরের নামে আগে লেখা কেনা: {tk(untaggedTotal)}। নিচের তালিকায় এগুলোর পেনসিল চেপে সঠিক মালামাল বেছে দিন।
-        </p>
-      )}
+        ))}
+      </div>
 
-      <section className="space-y-2">
-        <h2 className="section-label px-1">কেনার তালিকা</h2>
-        <PurchaseRows rows={folderRows} />
-      </section>
+      {loading ? <Skeleton className="h-48 rounded-2xl" /> : <EntryRows rows={shown} />}
 
       {dialogs}
+    </div>
+  );
+}
+
+function ChoiceRow({
+  label,
+  value,
+  options,
+  onChange,
+  cols = 2,
+}: {
+  label: string;
+  value: string;
+  options: [string, string][];
+  onChange: (v: string) => void;
+  cols?: 2 | 3;
+}) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className={`mt-1.5 grid gap-1.5 ${cols === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+        {options.map(([k, text]) => (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={value === k}
+            onClick={() => onChange(k)}
+            className={`min-h-11 rounded-xl border px-1.5 text-[13px] font-semibold leading-tight ${value === k ? "border-primary bg-primary text-primary-foreground" : "bg-card"}`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
