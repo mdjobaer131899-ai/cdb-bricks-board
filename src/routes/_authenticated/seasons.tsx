@@ -128,10 +128,27 @@ function SeasonsPage() {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const start = String(fd.get("start_date") || "");
+    const end = String(fd.get("end_date") || "");
+    const active = fd.get("is_active") === "on";
+    // An end date before the start makes every season-scoped page empty
+    if (!start || !end || end <= start) {
+      toast.error("শেষ তারিখ শুরুর তারিখের পরে হতে হবে");
+      return;
+    }
+    if (active) {
+      const clash = seasons.find(
+        (s) => s.is_active && s.id !== editing?.id && s.start_date <= end && s.end_date >= start,
+      );
+      if (clash) {
+        toast.error(`"${clash.name}" মৌসুমের তারিখের সাথে মিলে যাচ্ছে। আগে সেটা বন্ধ করুন বা তারিখ বদলান।`);
+        return;
+      }
+    }
     saveSeason.mutate({
       name: String(fd.get("name") || ""),
-      start_date: String(fd.get("start_date") || ""),
-      end_date: String(fd.get("end_date") || ""),
+      start_date: start,
+      end_date: end,
       target_production: fd.get("target_production") ? Number(fd.get("target_production")) : null,
       note: String(fd.get("note") || "") || null,
       is_active: fd.get("is_active") === "on",
