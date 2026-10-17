@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchCashSummary } from "@/lib/cash-queries";
-import { sardarEarned } from "@/lib/salary-accrual";
+import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
 
 /* ============================================================================
  * CDB Bricks AI ব্রেন
@@ -101,6 +101,23 @@ export interface WorkerLine {
   presentToday: boolean | null;
   halfDayToday: boolean;
   paidSeason: number;
+  /** earned this season (salary-accrual.ts, same as the staff pages) */
+  earned: number;
+  /** earned − paid this season: > 0 the worker is owed, < 0 paid in advance */
+  due: number;
+}
+
+export interface OpeningLine {
+  id: string;
+  name: string;
+  kind: string; // sardar_payable | other_payable | customer_brick_due | customer_receivable
+  amount: number;
+  paid: number;
+  remaining: number;
+  customerId: string | null;
+  sardarId: string | null;
+  workerId: string | null;
+  payments: { date: string; amount: number }[];
 }
 
 export interface SupplierLine {
@@ -136,7 +153,7 @@ export interface KilnSnapshot {
   collections: Row[];
   expenses: Row[];
   kacha: Row[];
-  opening: { name: string; kind: string; amount: number; paid: number; remaining: number; customerId: string | null }[];
+  opening: OpeningLine[];
   loans: { party: string; amount: number; direction: string; date: string }[];
   loanPaid: { party: string; amount: number; direction: string }[];
   cashSeason: CashSummary | null;
@@ -245,6 +262,10 @@ export function clearAiCache() {
 }
 
 async function loadSnapshot(): Promise<KilnSnapshot> {
+  // Wait for the login session (and any token refresh) first: a query sent without it
+  // returns empty lists, not an error, and the AI would then say nobody exists.
+  const { data: sess } = await supabase.auth.getSession();
+  if (!sess?.session) throw new Error("NO_SESSION");
   const today = dhakaDate(0);
   const yesterday = dhakaDate(-1);
   const monthStart = today.slice(0, 8) + "01";
@@ -277,6 +298,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     loans,
     loanPay,
     payRates,
+    openingPay,
   ] = await Promise.all([
     safeRows("গ্রাহক", failed, db.from("customers").select("id,name,phone").order("name").limit(5000)),
     safeRows("গ্রাহকের চালান", failed,
@@ -294,8 +316,8 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     safeRows("কাঁচা ইট", failed, sdbx.from("kacha_brick_entries").select("sardar_id,quantity,amount,entry_type,entry_date").limit(20000)),
     safeRows("সর্দারের কাজ", failed, sdbx.from("sardar_work_entries").select("sardar_id,quantity,amount,entry_date").limit(20000)),
     safeRows("সর্দার পেমেন্ট", failed, sdbx.from("sardar_payments").select("sardar_id,amount,payment_type,payment_date").limit(20000)),
-    safeRows("শ্রমিক", failed, db.from("workers").select("id,name,phone,role,active,daily_wage,monthly_salary").order("name")),
-    safeRows("হাজিরা", failed, db.from("worker_attendance").select("worker_id,present,is_half_day").eq("date", today)),
+    safeRows("শ্রমিক", failed, db.from("workers").select("id,name,phone,role,active,daily_wage,monthly_salary,join_date,leave_date").order("name")),
+    safeRows("হাজিরা", failed, sdbx.from("worker_attendance").select("worker_id,date,present,is_half_day").limit(20000)),
     safeRows("শ্রমিক পেমেন্ট", failed, sdbx.from("worker_payments").select("worker_id,amount,payment_date").limit(20000)),
     safeRows("সাপ্লায়ার", failed, db.from("suppliers").select("id,name,phone,material_type").order("name")),
     safeRows("কেনাকাটা", failed, sdbx.from("purchases").select("supplier_id,total_amount").limit(20000)),
@@ -303,10 +325,11 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     safeRows("সাপ্লায়ার পেমেন্ট", failed, sdbx.from("supplier_payments").select("supplier_id,amount,payment_date").limit(20000)),
     safeRows("গাড়ি", failed, db.from("vehicles").select("vehicle_no,type,driver_name,active")),
     safeRows("পূর্বের জের", failed,
-      db.from("opening_balance_summary").select("display_name,party_name,kind,amount,paid_amount,remaining_amount,customer_id")),
+      db.from("opening_balance_summary").select("id,display_name,party_name,kind,amount,paid_amount,remaining_amount,customer_id,sardar_id,worker_id")),
     safeRows("ঋণ", failed, sdbx.from("loans").select("party_name,amount,direction,loan_date").limit(5000)),
     safeRows("ঋণ পরিশোধ", failed, sdbx.from("loan_payments").select("amount,loan:loans(direction,party_name)").limit(5000)),
     safeRows("বেতনের হার", failed, db.from("pay_rates").select("worker_id,sardar_id,amount,effective_from")),
+    safeRows("পূর্বের জের পরিশোধ", failed, db.from("opening_payments").select("opening_balance_id,amount,payment_date").limit(20000)),
   ]);
 
   let cashSeason: CashSummary | null = null;
@@ -361,22 +384,33 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     };
   });
 
+  // today's attendance, and each worker's season attendance for earnings
   const attMap = new Map<string, Row>();
-  for (const a of attendance) attMap.set(a.worker_id, a);
+  for (const a of attendance) if (a.date === today) attMap.set(a.worker_id, a);
   const workerLines: WorkerLine[] = workers.map((w) => {
     const att = attMap.get(w.id);
+    const mine = attendance.filter((a) => a.worker_id === w.id);
+    const rates = (payRates as Row[]).filter((r) => r.worker_id === w.id) as any[];
+    const isDaily = w.role === "daily";
+    // same rules as the daily-worker and salary pages (salary-accrual.ts)
+    const earned = isDaily
+      ? dailyEarned({ wage: w.daily_wage, rates, days: mine.filter((a) => a.present).map((a) => ({ date: String(a.date), value: a.is_half_day ? 0.5 : 1 })) })
+      : salaryEarned({ monthly: w.monthly_salary, join: w.join_date, leave: w.leave_date, rates, absences: mine.map((a) => ({ date: String(a.date), half: a.is_half_day })) }).earned;
+    const paidSeason = workerPay.filter((p) => p.worker_id === w.id).reduce((a, p) => a + num(p.amount), 0);
     return {
       id: w.id,
       name: String(w.name ?? ""),
       phone: String(w.phone ?? ""),
       role: String(w.role ?? ""),
-      isDaily: w.role === "daily",
+      isDaily,
       active: w.active !== false,
       dailyWage: num(w.daily_wage),
       monthlySalary: num(w.monthly_salary),
       presentToday: att ? att.present === true : null,
       halfDayToday: att ? att.is_half_day === true : false,
-      paidSeason: workerPay.filter((p) => p.worker_id === w.id).reduce((a, p) => a + num(p.amount), 0),
+      paidSeason,
+      earned,
+      due: earned - paidSeason,
     };
   });
 
@@ -422,12 +456,19 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     expenses,
     kacha,
     opening: opening.map((o) => ({
+      id: String(o.id ?? ""),
       name: String(o.display_name || o.party_name || "অজানা"),
       kind: String(o.kind ?? ""),
       amount: num(o.amount),
       paid: num(o.paid_amount),
       remaining: num(o.remaining_amount),
       customerId: o.customer_id ?? null,
+      sardarId: o.sardar_id ?? null,
+      workerId: o.worker_id ?? null,
+      payments: openingPay
+        .filter((p) => p.opening_balance_id === o.id)
+        .map((p) => ({ date: String(p.payment_date ?? ""), amount: num(p.amount) }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
     })),
     loans: loans.map((l) => ({
       party: String(l.party_name ?? ""),
@@ -817,14 +858,6 @@ function customerDetail(s: KilnSnapshot, c: CustomerLine): string {
   else if (c.balance < -0.5) lines.push(`👉 অবস্থা: ${c.name} আমাদের কাছে ${tk(-c.balance)} পাবে (অগ্রিম জমা আছে)`);
   else lines.push("👉 অবস্থা: হিসাব সমান (৳০)");
 
-  const op = s.opening.filter((o) => o.customerId === c.id && o.remaining > 0.5);
-  for (const o of op) {
-    lines.push(
-      o.kind === "customer_receivable"
-        ? `📌 পূর্বের জের: ${c.name}-এর কাছে আগের ${tk(o.remaining)} পাওনা বাকি`
-        : `📌 পূর্বের জের: ${c.name} আগের হিসাবে আমাদের কাছে ${tk(o.remaining)} পাবে`,
-    );
-  }
 
   const recentSales = s.sales
     .filter((r) => r.customer_id === c.id && r.status === "approved")
@@ -866,9 +899,39 @@ function workerDetail(w: WorkerLine): string {
   lines.push(
     `• আজকের হাজিরা: ${w.presentToday === null ? "এখনো দেওয়া হয়নি" : w.presentToday ? (w.halfDayToday ? "হাফ দিন" : "উপস্থিত") : "অনুপস্থিত"}`,
   );
+  lines.push(`• এই মৌসুমে পাওনা হয়েছে: ${tk(w.earned)}`);
   lines.push(`• এই মৌসুমে মোট দেওয়া হয়েছে: ${tk(w.paidSeason)}`);
-  lines.push(`• অবস্থা: ${w.active ? "সক্রিয়" : "নিষ্ক্রিয়"}`);
+  if (w.due > 0.5) lines.push(`👉 ${w.name} আরও ${tk(w.due)} পাবে`);
+  else if (w.due < -0.5) lines.push(`👉 ${w.name}-কে পাওনার চেয়ে ${tk(-w.due)} বেশি (অগ্রিম) দেওয়া হয়েছে`);
+  else lines.push("👉 হিসাব সমান (৳০)");
+  if (!w.active) lines.push("• অবস্থা: নিষ্ক্রিয়");
   return lines.join("\n");
+}
+
+const OPENING_KIND: Record<string, string> = {
+  sardar_payable: "আমাদের দেনা (টাকা)",
+  other_payable: "আমাদের দেনা (টাকা)",
+  customer_brick_due: "অগ্রিম নিয়েছি, ইট দেওয়া বাকি",
+  customer_receivable: "আমাদের পাওনা (তারা দেবে)",
+};
+
+/** One previous-season balance: total, what was paid when, what is left */
+function openingDetail(o: OpeningLine): string {
+  const weOwe = o.kind !== "customer_receivable";
+  const lines = [`📋 পূর্বের বকেয়া — ${o.name} (${OPENING_KIND[o.kind] ?? o.kind})`];
+  lines.push(`• মোট: ${tk(o.amount)}`);
+  lines.push(`• ${weOwe ? (o.kind === "customer_brick_due" ? "সমন্বয়/ফেরত" : "নিয়েছেন (শোধ)") : "আদায় হয়েছে"}: ${tk(o.paid)}`);
+  for (const p of o.payments) lines.push(`   • ${bnDate(p.date)}: ${tk(p.amount)}`);
+  lines.push(o.remaining > 0.5 ? `👉 বাকি: ${tk(o.remaining)}` : "👉 পুরো শোধ হয়ে গেছে");
+  return lines.join("\n");
+}
+
+/** Previous-season balances of a person who is also a customer, sardar or worker */
+function linkedOpening(s: KilnSnapshot, by: { customerId?: string; sardarId?: string; workerId?: string; name?: string }): string {
+  const list = s.opening.filter((o) =>
+    (by.customerId && o.customerId === by.customerId) || (by.sardarId && o.sardarId === by.sardarId) || (by.workerId && o.workerId === by.workerId) ||
+    (!!by.name && !o.customerId && !o.sardarId && !o.workerId && clean(o.name) === clean(by.name)));
+  return list.map(openingDetail).join("\n\n");
 }
 
 function supplierDetail(sp: SupplierLine): string {
@@ -941,15 +1004,21 @@ function customerList(s: KilnSnapshot): string {
 
 function openingBlock(s: KilnSnapshot): string {
   if (!s.opening.length) return "📋 পূর্বের জের বা পুরোনো বকেয়ার কোনো এন্ট্রি নেই।";
+  const money = s.opening.filter((o) => o.kind === "sardar_payable" || o.kind === "other_payable");
+  const bricks = s.opening.filter((o) => o.kind === "customer_brick_due");
   const receivable = s.opening.filter((o) => o.kind === "customer_receivable");
-  const payable = s.opening.filter((o) => o.kind !== "customer_receivable");
+  const sum = (l: OpeningLine[]) => l.reduce((a, o) => a + o.remaining, 0);
   const lines: string[] = ["📋 পূর্বের জের (আগের মৌসুমের হিসাব):"];
-  if (payable.length) {
-    lines.push(`আমাদের দেনা (তারা পাবে) — বাকি মোট ${tk(payable.reduce((a, o) => a + o.remaining, 0))}:`);
-    lines.push(listLines(payable, (o, i) => `${bn(i + 1)}. ${o.name}: মোট ${tk(o.amount)}, শোধ ${tk(o.paid)}, বাকি ${tk(o.remaining)}`));
+  if (money.length) {
+    lines.push(`আমাদের টাকার দেনা — বাকি মোট ${tk(sum(money))}:`);
+    lines.push(listLines(money, (o, i) => `${bn(i + 1)}. ${o.name}: মোট ${tk(o.amount)}, নিয়েছেন ${tk(o.paid)}, বাকি ${tk(o.remaining)}`));
+  }
+  if (bricks.length) {
+    lines.push(`অগ্রিম নিয়েছি, ইট দেওয়া বাকি — মোট ${tk(sum(bricks))}:`);
+    lines.push(listLines(bricks, (o, i) => `${bn(i + 1)}. ${o.name}: মোট ${tk(o.amount)}, সমন্বয় ${tk(o.paid)}, বাকি ${tk(o.remaining)}`));
   }
   if (receivable.length) {
-    lines.push(`আমাদের পাওনা (তারা দেবে) — বাকি মোট ${tk(receivable.reduce((a, o) => a + o.remaining, 0))}:`);
+    lines.push(`আমাদের পাওনা (তারা দেবে) — বাকি মোট ${tk(sum(receivable))}:`);
     lines.push(listLines(receivable, (o, i) => `${bn(i + 1)}. ${o.name}: মোট ${tk(o.amount)}, আদায় ${tk(o.paid)}, বাকি ${tk(o.remaining)}`));
   }
   return lines.join("\n");
@@ -1020,9 +1089,12 @@ type PartyHit =
   | { kind: "customer"; item: CustomerLine; score: number }
   | { kind: "sardar"; item: SardarLine; score: number }
   | { kind: "worker"; item: WorkerLine; score: number }
-  | { kind: "supplier"; item: SupplierLine; score: number };
+  | { kind: "supplier"; item: SupplierLine; score: number }
+  | { kind: "opening"; item: OpeningLine; score: number };
 
-const NAME_STOP = new Set(["মোঃ", "মো", "মোহাম্মদ", "মুহাম্মদ", "md", "mohammad", "শেখ", "মিয়া", "মিয়া", "ভাই", "সাহেব", "হাজী"]);
+// titles and job words that many names share; they must not match a person on their own
+const NAME_STOP = new Set(["মোঃ", "মো", "মোহাম্মদ", "মুহাম্মদ", "md", "mohammad", "শেখ", "মিয়া", "মিয়া", "ভাই", "সাহেব", "হাজী",
+  "বাবু", "ম্যানেজার", "ডেলি", "মেস্তুরি", "মিস্ত্রি", "সর্দার", "সরদার", "মাস্টার", "ড্রাইভার", "কয়লা", "কয়লা", "ডিজেল", "লোড"]);
 
 function nameScore(name: string, msg: string, words: Set<string>): number {
   const n = clean(name);
@@ -1058,19 +1130,43 @@ function findParties(s: KilnSnapshot, msg: string): PartyHit[] {
     const sc = nameScore(x.name, msg, words);
     if (sc) hits.push({ kind: "supplier", item: x, score: sc });
   }
+  // previous-season balances: a linked one stands for its customer/sardar/worker (e.g. "ইকবাল ম্যানেজার" → ইকবাল হোসাইন)
+  for (const o of s.opening) {
+    const sc = nameScore(o.name, msg, words);
+    if (!sc) continue;
+    const c = o.customerId ? s.customers.find((x) => x.id === o.customerId) : !(o.sardarId || o.workerId) ? s.customers.find((x) => clean(x.name) === clean(o.name)) : undefined;
+    const sd = o.sardarId ? s.sardars.find((x) => x.id === o.sardarId) : !(o.customerId || o.workerId) ? s.sardars.find((x) => clean(x.name) === clean(o.name)) : undefined;
+    // not linked by id: same name as a customer/sardar/worker still means that person
+    const same = (n: string) => clean(n) === clean(o.name);
+    const linked = !!(o.customerId || o.sardarId || o.workerId);
+    const wk = o.workerId ? s.workers.find((x) => x.id === o.workerId) : linked ? undefined : s.workers.find((x) => same(x.name));
+    if (c) hits.push({ kind: "customer", item: c, score: sc });
+    else if (sd) hits.push({ kind: "sardar", item: sd, score: sc });
+    else if (wk) hits.push({ kind: "worker", item: wk, score: sc });
+    else hits.push({ kind: "opening", item: o, score: sc });
+  }
   if (!hits.length) return [];
   const top = Math.max(...hits.map((h) => h.score));
-  return hits.filter((h) => h.score === top);
+  const seen = new Set<string>();
+  return hits.filter((h) => {
+    if (h.score !== top) return false;
+    const key = `${h.kind}:${h.item.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function partyDetail(s: KilnSnapshot, h: PartyHit): string {
-  if (h.kind === "customer") return customerDetail(s, h.item);
-  if (h.kind === "sardar") return sardarDetail(h.item);
-  if (h.kind === "worker") return workerDetail(h.item);
+  const join = (main: string, extra: string) => (extra ? `${main}\n\n${extra}` : main);
+  if (h.kind === "customer") return join(customerDetail(s, h.item), linkedOpening(s, { customerId: h.item.id, name: h.item.name }));
+  if (h.kind === "sardar") return join(sardarDetail(h.item), linkedOpening(s, { sardarId: h.item.id, name: h.item.name }));
+  if (h.kind === "worker") return join(workerDetail(h.item), linkedOpening(s, { workerId: h.item.id, name: h.item.name }));
+  if (h.kind === "opening") return openingDetail(h.item);
   return supplierDetail(h.item);
 }
 
-const KIND_BN: Record<PartyHit["kind"], string> = { customer: "গ্রাহক", sardar: "সর্দার", worker: "শ্রমিক", supplier: "সাপ্লায়ার" };
+const KIND_BN: Record<PartyHit["kind"], string> = { customer: "গ্রাহক", sardar: "সর্দার", worker: "শ্রমিক", supplier: "সাপ্লায়ার", opening: "পূর্বের বকেয়া" };
 
 // শব্দভান্ডার
 const W = {
@@ -1219,7 +1315,7 @@ function buildAiContext(s: KilnSnapshot, w: WeatherInfo | null): string {
     (x) =>
       `${x.name}|${x.isDaily ? "ডেলি" : x.role}|${x.active ? "সক্রিয়" : "নিষ্ক্রিয়"}|দৈনিক ${x.dailyWage}|মাসিক ${x.monthlySalary}|আজ ${
         x.presentToday === null ? "হাজিরা নেই" : x.presentToday ? "উপস্থিত" : "অনুপস্থিত"
-      }|মৌসুমে দেওয়া ${Math.round(x.paidSeason)}`,
+      }|মৌসুমে পাওনা ${Math.round(x.earned)}|মৌসুমে দেওয়া ${Math.round(x.paidSeason)}|বাকি ${Math.round(x.due)}`,
   );
   const suppliers = s.suppliers.map((x) => `${x.name}|${x.material}|কেনা ${Math.round(x.purchase)}|দেওয়া ${Math.round(x.paid)}|বাকি ${Math.round(x.due)}`);
   const recentSales = [...s.sales]
@@ -1263,14 +1359,14 @@ function buildAiContext(s: KilnSnapshot, w: WeatherInfo | null): string {
     `[সর্দার — ${s.sardars.length} জন; বাকি ধনাত্মক = সর্দার পাবে, ঋণাত্মক = সর্দারের কাছে দাদন]`,
     ...sardars,
     "",
-    `[শ্রমিক ও স্টাফ — ${s.workers.length} জন]`,
+    `[শ্রমিক ও স্টাফ — ${s.workers.length} জন; বাকি ধনাত্মক = সে পাবে]`,
     ...workers,
     "",
     `[সাপ্লায়ার — ${s.suppliers.length} জন; বাকি = সাপ্লায়ার পাবে]`,
     ...suppliers,
     "",
-    "[পূর্বের জের]",
-    openingBlock(s),
+    "[পূর্বের জের: নাম|ধরন|মোট|শোধ|বাকি|পরিশোধের তারিখ:টাকা]",
+    ...s.opening.map((o) => `${o.name}|${OPENING_KIND[o.kind] ?? o.kind}|${Math.round(o.amount)}|${Math.round(o.paid)}|${Math.round(o.remaining)}|${o.payments.map((p) => `${p.date}:${Math.round(p.amount)}`).join(", ")}`),
     "",
     "[ঋণ]",
     loanBlock(s),
@@ -1425,10 +1521,16 @@ export const processBrickFieldCommand = async (
   // আবহাওয়ার প্রশ্ন হলে অপেক্ষা করে আনা হয়; নইলে আগের জানা তথ্য ব্যবহার, পেছনে নতুন করে আনা
   const wantsWeather = hasAny(clean(message), W.weather);
   if (!wantsWeather) void getWeather().catch(() => undefined);
-  const [snapshot, weather] = await Promise.all([
-    getSnapshot(),
-    wantsWeather ? getWeather() : Promise.resolve(weatherCache?.data ?? null),
-  ]);
+  let snapshot: KilnSnapshot;
+  let weather: WeatherInfo | null;
+  try {
+    [snapshot, weather] = await Promise.all([
+      getSnapshot(),
+      wantsWeather ? getWeather() : Promise.resolve(weatherCache?.data ?? null),
+    ]);
+  } catch {
+    return reply("খাতা পড়া যাচ্ছে না, লগইন শেষ হয়ে গেছে মনে হচ্ছে। পাতাটা রিফ্রেশ করে বা আবার লগইন করে জিজ্ঞেস করুন।");
+  }
 
   // ক) সরাসরি খাতা থেকে, সাথে সাথে
   if (!hasAttachment && message && !looksLikeEntry(message)) {
