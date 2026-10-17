@@ -5,6 +5,7 @@ import { Input } from "./ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { processBrickFieldCommand, saveAiActionToDatabase, AIAttachment } from "../services/gemini";
 import { toast } from "sonner";
+import { bn, bnDate } from "@/lib/format";
 
 export const OPEN_AI_CHAT_EVENT = "open-ai-chat-drawer";
 
@@ -384,23 +385,25 @@ export function AiAssistantFab() {
                     )}
 
                     {/* ২. খরচ, কালেকশন, সর্দার, কাঁচা ইট ও সাপ্লায়ার কার্ড */}
-                    {["EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "KACHA_BRICK", "SUPPLIER_PAYMENT"].includes(m.data?.type) && (
+                    {["EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "WORKER_PAYMENT", "KACHA_BRICK", "SUPPLIER_PAYMENT"].includes(m.data?.type) && (
                       <div className="mt-3 p-3 bg-orange-50/70 dark:bg-slate-800 rounded-xl border border-orange-200 text-xs text-foreground space-y-1.5 shadow-xs">
                         <div className="font-bold text-orange-700 border-b border-orange-200 pb-1">
                           {m.data.type === "EXPENSE" && "💸 খরচের ভাউচার"}
                           {m.data.type === "COLLECTION" && "💵 নগদ জমা / কালেকশন"}
                           {m.data.type === "SARDAR_PAYMENT" && "👷 সর্দার পেমেন্ট / দাদন"}
+                          {m.data.type === "WORKER_PAYMENT" && "🧑‍🏭 শ্রমিক / স্টাফ পেমেন্ট"}
                           {m.data.type === "KACHA_BRICK" && "🧱 কাঁচা ইট (মিল) এন্ট্রি"}
                           {m.data.type === "SUPPLIER_PAYMENT" && "🚛 সাপ্লায়ার পেমেন্ট"}
                         </div>
-                        {(m.data.data?.customerName || m.data.data?.customer_name || m.data.data?.sardarName || m.data.data?.sardar_name || m.data.data?.supplierName) && (
-                          <div>👤 <b>নাম:</b> {m.data.data.customerName || m.data.data.customer_name || m.data.data.sardarName || m.data.data.sardar_name || m.data.data.supplierName}</div>
+                        {(m.data.data?.customerName || m.data.data?.customer_name || m.data.data?.sardarName || m.data.data?.sardar_name || m.data.data?.workerName || m.data.data?.supplierName) && (
+                          <div>👤 <b>নাম:</b> {m.data.data.customerName || m.data.data.customer_name || m.data.data.sardarName || m.data.data.sardar_name || m.data.data.workerName || m.data.data.supplierName}</div>
                         )}
+                        {m.data.data?.date && <div>📅 <b>তারিখ:</b> {bnDate(m.data.data.date)}</div>}
                         {(m.data.data?.expenseCategory || m.data.data?.category) && (
                           <div>📂 <b>খাত:</b> {m.data.data.expenseCategory || m.data.data.category}</div>
                         )}
                         {m.data.data?.quantity > 0 && <div>🧱 <b>পরিমাণ:</b> {m.data.data.quantity} পিস</div>}
-                        <div>💰 <b>টাকার পরিমাণ:</b> ৳{m.data.data?.amount || m.data.data?.paidAmount || m.data.data?.totalAmount || 0}</div>
+                        <div>💰 <b>টাকার পরিমাণ:</b> ৳{bn(Number(m.data.data?.amount || m.data.data?.paidAmount || m.data.data?.totalAmount || 0))}</div>
 
                         {!m.saved ? (
                           <Button

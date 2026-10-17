@@ -37,6 +37,9 @@ export interface AIActionData {
   description?: string;
   sardarId?: string | null;
   sardarName?: string;
+  workerId?: string | null;
+  workerName?: string;
+  supplierId?: string | null;
   supplierName?: string;
   date?: string; // YYYY-MM-DD
 }
@@ -53,6 +56,7 @@ export interface AIResponse {
     | "EXPENSE"
     | "COLLECTION"
     | "SARDAR_PAYMENT"
+    | "WORKER_PAYMENT"
     | "KACHA_BRICK"
     | "SUPPLIER_PAYMENT"
     | "QUERY"
@@ -1447,17 +1451,18 @@ function buildPrompt(userMessage: string, s: KilnSnapshot, w: WeatherInfo | null
 ৬. ব্যবহারকারী নতুন এন্ট্রি দিতে চাইলে (বিক্রি/চালান, খরচ, গ্রাহকের জমা, সর্দারকে টাকা, কাঁচা ইট, সাপ্লায়ার পেমেন্ট) সঠিক type বেছে data পূরণ করবে। দরকারি তথ্য (নাম, পরিমাণ, টাকা) না থাকলে type "QUERY" দিয়ে reply-তে প্রশ্ন করবে, অনুমান করে সংখ্যা বসাবে না। ইটের দাম না বললে খাতার বর্তমান দাম × পরিমাণ দিয়ে totalAmount হিসাব করবে।
 ${hasAttachment ? "৭. সংযুক্ত ছবি/ফাইলটি মনোযোগ দিয়ে পড়ে (OCR) নাম, পরিমাণ, টাকা বের করে উপযুক্ত এন্ট্রি প্রস্তুত করবে বা কী লেখা আছে তা বাংলায় বলবে।\n" : ""}
 শুধু এই JSON ফেরত দেবে:
-{"type":"SALE_CHALLAN"|"EXPENSE"|"COLLECTION"|"SARDAR_PAYMENT"|"KACHA_BRICK"|"SUPPLIER_PAYMENT"|"QUERY","reply":"বাংলা উত্তর","data":{...}}
+{"type":"SALE_CHALLAN"|"EXPENSE"|"COLLECTION"|"SARDAR_PAYMENT"|"WORKER_PAYMENT"|"KACHA_BRICK"|"SUPPLIER_PAYMENT"|"QUERY","reply":"বাংলা উত্তর","data":{...}}
 data-এর ফিল্ড:
 - SALE_CHALLAN: customerName, brickType, quantity, rate (প্রতি পিস দাম), totalAmount, paidAmount, dueAmount, vehicleNumber, driverName, date
 - EXPENSE: expenseCategory, amount, description, date
 - COLLECTION: customerName, amount, description, date
 - SARDAR_PAYMENT: sardarName, amount, paymentType ("advance" = দাদন/অগ্রিম, "payment" = মজুরি/পাওনা পরিশোধ), description, date
+- WORKER_PAYMENT: workerName, amount, description, date (ডেলি শ্রমিক, ম্যানেজার, মেস্তুরি বা অন্য স্টাফকে টাকা দিলে; সর্দারকে নয়)
 - KACHA_BRICK: sardarName, quantity, rate (প্রতি হাজার ইটের মজুরি, বললে), description, date
 - SUPPLIER_PAYMENT: supplierName, expenseCategory, amount, description, date
 - QUERY: data খালি রাখবে
 date সবসময় YYYY-MM-DD; না বললে আজকের তারিখ।
-customerName, sardarName, supplierName খাতার তালিকার নামের সাথে হুবহু মিলিয়ে লিখবে। খাতায় নেই এমন নাম হলে reply-তে জানাবে যে আগে সেই নাম যোগ করতে হবে।
+customerName, sardarName, workerName, supplierName খাতার তালিকার নামের সাথে হুবহু মিলিয়ে লিখবে। সর্দারের তালিকার কাউকে টাকা দিলে SARDAR_PAYMENT, শ্রমিক/স্টাফ তালিকার কাউকে দিলে WORKER_PAYMENT। reply-তে যার নাম বলবে data-তেও ঠিক সেই নাম দেবে, অন্য কারো নাম কখনো নয়। খাতায় নেই এমন নাম হলে reply-তে জানাবে যে আগে সেই নাম যোগ করতে হবে।
 
 ========== লাইভ খাতা ==========
 ${buildAiContext(s, w)}
@@ -1547,7 +1552,81 @@ function parseAiJson(raw: string): Row {
   }
 }
 
-const ENTRY_TYPES = new Set(["SALE_CHALLAN", "EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "KACHA_BRICK", "SUPPLIER_PAYMENT"]);
+const ENTRY_TYPES = new Set(["SALE_CHALLAN", "EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "WORKER_PAYMENT", "KACHA_BRICK", "SUPPLIER_PAYMENT"]);
+
+type EntryKind = "customer" | "sardar" | "worker" | "supplier";
+const ENTRY_PARTY: Record<string, { kind: EntryKind; nameKey: keyof AIActionData; idKey: keyof AIActionData }> = {
+  SALE_CHALLAN: { kind: "customer", nameKey: "customerName", idKey: "customerId" },
+  COLLECTION: { kind: "customer", nameKey: "customerName", idKey: "customerId" },
+  SARDAR_PAYMENT: { kind: "sardar", nameKey: "sardarName", idKey: "sardarId" },
+  KACHA_BRICK: { kind: "sardar", nameKey: "sardarName", idKey: "sardarId" },
+  WORKER_PAYMENT: { kind: "worker", nameKey: "workerName", idKey: "workerId" },
+  SUPPLIER_PAYMENT: { kind: "supplier", nameKey: "supplierName", idKey: "supplierId" },
+};
+const PARTY_LIST: Record<EntryKind, (s: KilnSnapshot) => Array<{ id: string; name: string }>> = {
+  customer: (s) => s.customers,
+  sardar: (s) => s.sardars,
+  worker: (s) => s.workers,
+  supplier: (s) => s.suppliers,
+};
+
+/**
+ * Checks the person in an AI entry before the save card is shown. The model sometimes writes
+ * one name in its reply and another in data (or puts a worker under SARDAR_PAYMENT); a card
+ * with the wrong person must never reach the save button.
+ * Returns the entry with the person's id filled in, or a question to ask instead.
+ */
+function checkEntryParty(
+  type: string,
+  data: AIActionData,
+  replyText: string,
+  userMsg: string,
+  s: KilnSnapshot,
+): { type: string; data: AIActionData } | { ask: string } {
+  const spec = ENTRY_PARTY[type];
+  if (!spec) return { type, data };
+  // a sale to a walk-in buyer may have no customer name; the save step asks for it
+  if (type === "SALE_CHALLAN" && !String(data.customerName ?? "").trim()) return { type, data };
+
+  const givenName = clean(String((data as any)[spec.nameKey] ?? (data as any).sardarName ?? (data as any).workerName ?? ""));
+  const findIn = (kind: EntryKind) => PARTY_LIST[kind](s).filter((p) => clean(p.name) === givenName);
+
+  let kind = spec.kind;
+  let found = givenName ? findIn(kind) : [];
+  // a staff member sent as a sardar payment (or the other way round): switch to the right entry
+  if (!found.length && givenName && (type === "SARDAR_PAYMENT" || type === "WORKER_PAYMENT")) {
+    const other: EntryKind = kind === "sardar" ? "worker" : "sardar";
+    if (findIn(other).length) {
+      kind = other;
+      found = findIn(other);
+      type = other === "worker" ? "WORKER_PAYMENT" : "SARDAR_PAYMENT";
+    }
+  }
+
+  // the person the reply and the user's message talk about
+  const last = history.length ? history[history.length - 1] : null;
+  const said = clean(`${replyText} ${userMsg} ${last ? `${last.q} ${last.a}` : ""}`);
+  const mentioned = findParties(s, said).filter((h) => h.kind === kind);
+  const person = found.length === 1 ? found[0] : undefined;
+  const personMentioned = person && nameScore(person.name, said, new Set(said.split(" "))) > 0;
+
+  let chosen = person && (personMentioned || !mentioned.length) ? person : undefined;
+  if (!chosen && mentioned.length === 1) chosen = mentioned[0].item as { id: string; name: string };
+  if (!chosen) {
+    const label = { customer: "গ্রাহক", sardar: "সর্দার", worker: "শ্রমিক/স্টাফ", supplier: "সাপ্লায়ার" }[kind];
+    return { ask: `কার নামে এন্ট্রি হবে নিশ্চিত হতে পারিনি। ${label}ের পুরো নাম খাতায় যেমন আছে তেমন লিখে আবার বলুন।` };
+  }
+
+  const out: AIActionData = { ...data };
+  delete (out as any).sardarName;
+  delete (out as any).workerName;
+  delete (out as any).sardarId;
+  delete (out as any).workerId;
+  const target = ENTRY_PARTY[type];
+  (out as any)[target.nameKey] = chosen.name;
+  (out as any)[target.idKey] = chosen.id;
+  return { type, data: out };
+}
 
 // ============================================================
 // ৫. মূল ফাংশন: চ্যাটের প্রতিটি বার্তা এখানে আসে
@@ -1594,8 +1673,17 @@ export const processBrickFieldCommand = async (
     const type = String(parsed.type || parsed.action || "QUERY").toUpperCase();
     const finalType = (ENTRY_TYPES.has(type) ? type : "QUERY") as AIResponse["type"];
     const text = stripMarkdown(parsed.reply || parsed.reply_bn || parsed.message || "আপনার অনুরোধটি প্রস্তুত করা হয়েছে।");
+    if (finalType !== "QUERY") {
+      const checked = checkEntryParty(finalType, (parsed.data || {}) as AIActionData, text, message, snapshot);
+      if ("ask" in checked) {
+        remember(message || "(ছবি/ফাইল)", checked.ask);
+        return reply(checked.ask);
+      }
+      remember(message || "(ছবি/ফাইল)", text);
+      return reply(text, checked.type as AIResponse["type"], checked.data);
+    }
     remember(message || "(ছবি/ফাইল)", text);
-    return reply(text, finalType, finalType === "QUERY" ? {} : ((parsed.data || {}) as AIActionData));
+    return reply(text);
   } catch (error) {
     console.warn("[AI] Gemini থেকে উত্তর আসেনি:", error);
     if (hasAttachment) {
@@ -1630,10 +1718,11 @@ function requirePositive(value: number, label: string) {
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => "\\" + m);
 
-const PAGE_FOR: Record<"customers" | "suppliers" | "sardars", string> = {
+const PAGE_FOR: Record<"customers" | "suppliers" | "sardars" | "workers", string> = {
   customers: "গ্রাহক",
   suppliers: "সাপ্লায়ার",
   sardars: "সর্দার",
+  workers: "শ্রমিক/স্টাফ",
 };
 
 /**
@@ -1641,7 +1730,7 @@ const PAGE_FOR: Record<"customers" | "suppliers" | "sardars", string> = {
  * কখনো নিজে থেকে নতুন গ্রাহক/সাপ্লায়ার বানায় না (যাতে একই মানুষের দুটো খাতা না হয়)।
  */
 async function requireParty(
-  table: "customers" | "suppliers" | "sardars",
+  table: "customers" | "suppliers" | "sardars" | "workers",
   name: string,
   givenId?: string | null,
 ): Promise<{ id: string; name: string; kind?: string }> {
@@ -1841,6 +1930,23 @@ export const saveAiActionToDatabase = async (
       } as any);
       if (error) throw new Error(error.message);
       return { success: true, message: `${sardar.name}-কে ${tk(amount)} ${isAdvance ? "দাদন" : "পেমেন্ট"} খাতায় সেভ হয়েছে।` };
+    }
+
+    // ---------- শ্রমিক / স্টাফকে টাকা (staff pages: worker_payments, payment_type "payment") ----------
+    if (type === "WORKER_PAYMENT") {
+      const amount = num(d.amount || d.paidAmount || d.totalAmount);
+      requirePositive(amount, "পেমেন্টের টাকা");
+      const worker = await requireParty("workers", d.workerName || d.worker_name, d.workerId);
+      const { error } = await supabase.from("worker_payments").insert({
+        worker_id: worker.id,
+        amount,
+        payment_date: entryDate,
+        payment_type: "payment",
+        note: d.description || "AI সহকারী থেকে",
+        created_by: userId,
+      } as any);
+      if (error) throw new Error(error.message);
+      return { success: true, message: `${worker.name}-কে ${tk(amount)} পেমেন্ট খাতায় সেভ হয়েছে।` };
     }
 
     // ---------- কাঁচা ইট ----------
