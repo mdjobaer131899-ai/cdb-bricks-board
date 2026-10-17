@@ -48,6 +48,7 @@ const PRESETS: Array<[Preset, string]> = [
 
 const COST_LABELS: Record<string, string> = {
   purchases: "মালামাল ও কাঁচামাল (বাকিসহ)",
+  landRent: "জমি ভাড়া (বাকিসহ)",
   expenses: "দৈনিক খরচ ও বিল",
   sardar: "সরদার পেমেন্ট",
   worker: "শ্রমিক ও বেতন",
@@ -65,7 +66,7 @@ const OUT_LABELS: Record<string, string> = {
   expenses: "দৈনিক খরচ ও বিল",
   sardar: "সরদার পেমেন্ট",
   worker: "শ্রমিক ও বেতন",
-  supplier: "সাপ্লায়ারকে পরিশোধ",
+  supplier: "সাপ্লায়ার ও জমি ভাড়া পরিশোধ",
   vehicle: "গাড়ি খরচ",
   ownerWithdraw: "মালিকের উত্তোলন",
   loanGiven: "ঋণ দেওয়া",
@@ -231,7 +232,7 @@ function IncomeExpensePage() {
           <section className="rounded-[20px] border bg-card p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <h2 className="text-base font-bold">সাপ্লায়ারের কাছে দেনা</h2>
+                <h2 className="text-base font-bold">সাপ্লায়ার ও জমির মালিকের কাছে দেনা</h2>
                 <p className="text-xs text-muted-foreground">কেনা মালের বিল − দেওয়া টাকা (সব মৌসুম মিলিয়ে)</p>
               </div>
               {dues.isLoading ? <Skeleton className="h-7 w-24" /> : (

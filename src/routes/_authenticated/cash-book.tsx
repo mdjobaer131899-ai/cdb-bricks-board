@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownUp, BadgeDollarSign, Banknote, CalendarRange, Check, ChevronRight, Crown, HardHat, History,
-  Landmark, ListFilter, Lock, Pencil, Plus, Printer, Receipt, ShoppingCart, Trash2, Users2, Zap,
+  Landmark, LandPlot, ListFilter, Lock, Pencil, Plus, Printer, Receipt, ShoppingCart, Trash2, Users2, Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -144,6 +144,7 @@ function headLook(head: string, dir: "in" | "out") {
   if (head === "সরদার পেমেন্ট") return { Icon: Users2, tone: red };
   if (head === "ডেলি শ্রমিক") return { Icon: HardHat, tone: red };
   if (head.startsWith("বেতন")) return { Icon: BadgeDollarSign, tone: red };
+  if (head.includes("জমি")) return { Icon: LandPlot, tone: stone };
   if (head.includes("মালামাল") || head.includes("ইট দিয়ে")) return { Icon: ShoppingCart, tone: stone };
   if (head.includes("বিদ্যুৎ") || head.includes("কারেন্ট")) return { Icon: Zap, tone: stone };
   return { Icon: Receipt, tone: red };
@@ -568,6 +569,7 @@ function CashBookPage() {
                 />
               );
             })}
+            {can("/purchases") && <EntryTile icon={LandPlot} tone="stone" label="জমি ভাড়া" to="/purchases" search={{ f: "land" }} />}
             {can("/opening-balances") && <EntryTile icon={History} tone="amber" label="পূর্বের দেনা" to="/opening-balances" />}
             {can("/owners") && <EntryTile icon={Crown} tone="amber" label="মালিকের উত্তোলন" to="/owners" />}
           </div>
@@ -621,12 +623,13 @@ const TILE_TONES: Record<string, string> = {
   stone: "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200",
 };
 
-function EntryTile({ icon: Icon, tone, label, onClick, to }: {
+function EntryTile({ icon: Icon, tone, label, onClick, to, search }: {
   icon: React.ComponentType<{ className?: string }>;
   tone: keyof typeof TILE_TONES;
   label: string;
   onClick?: () => void;
   to?: string;
+  search?: Record<string, string>;
 }) {
   const inner = (
     <>
@@ -637,7 +640,7 @@ function EntryTile({ icon: Icon, tone, label, onClick, to }: {
     </>
   );
   const cls = "flex min-h-[92px] flex-col items-center justify-center gap-1.5 rounded-2xl border bg-card px-1 py-2.5 text-center transition active:scale-95";
-  if (to) return <Link to={to as never} className={cls}>{inner}</Link>;
+  if (to) return <Link to={to as never} search={search as never} className={cls}>{inner}</Link>;
   return <button type="button" onClick={onClick} className={cls}>{inner}</button>;
 }
 
