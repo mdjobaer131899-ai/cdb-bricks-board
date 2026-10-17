@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Banknote, History, LandPlot, Loader2, Pencil, Phone, Plus, Printer, Trash2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ArrowLeft, Banknote, History, LandPlot, Loader2, Pencil, Phone, Plus, Printer, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,14 +19,78 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
 
 /**
- * Land rent (জমি ভাড়া). A land owner is a supplier with material_type = LAND_TYPE;
- * the rent owed is a purchases row with item_name = LAND_ITEM; money given is a
- * supplier_payments row. So hand cash, the cash book, profit/loss and dues all count
- * it with no extra table. A previous-season due is a bill dated before the season
- * starts, so it is not this season's cost but still adds to what is owed.
+ * Contract-style payables kept as folders on the purchases page:
+ *  - জমি ভাড়া: land owners, rent per season
+ *  - পরিচ্ছন্ন কর্মী: sweepers on a fixed season contract, paid weekly
+ * A person is a suppliers row with material_type = cfg.type; what they are owed is a
+ * purchases row with item_name = cfg.item; money given is a supplier_payments row.
+ * So hand cash, the cash book, profit/loss and dues all count it with no extra table.
+ * A previous-season due is a bill dated before the season starts, so it is not this
+ * season's cost but still adds to what is owed.
  */
-export const LAND_TYPE = "জমি ভাড়া";
-export const LAND_ITEM = "জমি ভাড়া";
+export type ContractConfig = {
+  key: "land" | "clean";
+  type: string; // suppliers.material_type
+  item: string; // purchases.item_name
+  title: string;
+  subtitle: string;
+  person: string; // "জমির মালিক"
+  personOf: string; // "জমির মালিকের" (possessive)
+  bill: string; // "ভাড়া" / "চুক্তি"
+  billLong: string; // "এই মৌসুমের ভাড়া"
+  billHelp: string;
+  infoLabel: string;
+  showArea: boolean;
+  payTitle: string;
+  emptyText: string;
+  icon: LucideIcon;
+  chip: string;
+};
+
+export const LAND_CONTRACT: ContractConfig = {
+  key: "land",
+  type: "জমি ভাড়া",
+  item: "জমি ভাড়া",
+  title: "জমি ভাড়া",
+  subtitle: "জমির মালিক কত পাবেন, কত দেওয়া হলো, কত বাকি",
+  person: "জমির মালিক",
+  personOf: "জমির মালিকের",
+  bill: "ভাড়া",
+  billLong: "এই মৌসুমের ভাড়া",
+  billHelp: "জমির মালিক এই মৌসুমে কত টাকা পাবেন। এটা এই মৌসুমের খরচে ধরা হবে।",
+  infoLabel: "জমির বিবরণ (দাগ, মৌজা, কোথায়)",
+  showArea: true,
+  payTitle: "জমির মালিককে টাকা দিন",
+  emptyText: "এখনো কোনো জমির মালিক যোগ করা হয়নি। উপরে \"জমির মালিক\" চেপে নাম, ভাড়া আর পূর্বের বকেয়া (থাকলে) দিন।",
+  icon: LandPlot,
+  chip: "bg-lime-100 text-lime-800 dark:bg-lime-950/60 dark:text-lime-200",
+};
+
+export const CLEANER_CONTRACT: ContractConfig = {
+  key: "clean",
+  type: "পরিচ্ছন্ন কর্মী",
+  item: "পরিচ্ছন্ন কর্মী",
+  title: "পরিচ্ছন্ন কর্মী",
+  subtitle: "সুইপারের মৌসুমের চুক্তি, প্রতি সপ্তাহের টাকা আর কত বাকি",
+  person: "পরিচ্ছন্ন কর্মী",
+  personOf: "পরিচ্ছন্ন কর্মীর",
+  bill: "চুক্তি",
+  billLong: "এই মৌসুমের চুক্তি",
+  billHelp: "মৌসুমের শুরুতে মোট কত টাকায় চুক্তি হলো। প্রতি সপ্তাহের টাকা এখান থেকে কমবে।",
+  infoLabel: "কাজের বিবরণ (কোন এলাকা, কী কাজ)",
+  showArea: false,
+  payTitle: "সপ্তাহের টাকা দিন",
+  emptyText: "এখনো কোনো পরিচ্ছন্ন কর্মী যোগ করা হয়নি। উপরে \"পরিচ্ছন্ন কর্মী\" চেপে নাম আর মৌসুমের চুক্তির টাকা দিন।",
+  icon: Sparkles,
+  chip: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200",
+};
+
+export const CONTRACTS = [LAND_CONTRACT, CLEANER_CONTRACT];
+/** purchases.item_name values that belong to a contract folder, not to materials */
+export const CONTRACT_ITEMS = new Set(CONTRACTS.map((c) => c.item));
+/** suppliers.material_type values of contract folders */
+export const CONTRACT_TYPES = new Set(CONTRACTS.map((c) => c.type));
+
 const PREV_NOTE = "পূর্বের বকেয়া";
 const LAND_UNITS = ["শতাংশ", "বিঘা", "কাঠা", "একর"];
 const METHODS: Array<[string, string]> = [["cash", "নগদ"], ["bkash", "বিকাশ"], ["nagad", "নগদ (মোবাইল)"], ["bank", "ব্যাংক"]];
@@ -41,7 +106,8 @@ type OwnerForm = { id?: string; name: string; phone: string; land: string; note:
 type BillForm = { id?: string; owner_id: string; kind: "rent" | "prev"; date: string; area: string; unit: string; amount: string; note: string };
 type PayForm = { id?: string; owner_id: string; date: string; amount: string; method: string; note: string };
 
-export function LandRentFolder({ onBack }: { onBack: () => void }) {
+export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: () => void }) {
+  const Icon = cfg.icon;
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
@@ -51,9 +117,9 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
   const prevDate = seasonStart ? dayBefore(seasonStart) : today;
 
   const ownersQ = useQuery({
-    queryKey: ["land-owners"],
+    queryKey: ["contract-people", cfg.key],
     queryFn: async () => {
-      const { data, error } = await supabase.from("suppliers").select("id, name, phone, address, note").eq("material_type", LAND_TYPE).order("name");
+      const { data, error } = await supabase.from("suppliers").select("id, name, phone, address, note").eq("material_type", cfg.type).order("name");
       if (error) throw error;
       return (data ?? []) as Owner[];
     },
@@ -61,12 +127,12 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
   const ownerIds = (ownersQ.data ?? []).map((o) => o.id);
   // all-time: a due does not reset with the season
   const billsQ = useQuery({
-    queryKey: ["land-bills"],
+    queryKey: ["contract-bills", cfg.key],
     queryFn: () => fetchAllRows<Bill>(() => supabase.from("purchases")
-      .select("id, supplier_id, purchase_date, quantity, unit, total_amount, note").eq("item_name", LAND_ITEM).order("id")),
+      .select("id, supplier_id, purchase_date, quantity, unit, total_amount, note").eq("item_name", cfg.item).order("id")),
   });
   const paysQ = useQuery({
-    queryKey: ["land-payments", ownerIds.join(",")],
+    queryKey: ["contract-payments", cfg.key, ownerIds.join(",")],
     enabled: ownerIds.length > 0,
     queryFn: () => fetchAllRows<Pay>(() => supabase.from("supplier_payments")
       .select("id, supplier_id, payment_date, amount, method, note").in("supplier_id", ownerIds).order("id")),
@@ -75,11 +141,13 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
   const owners = ownersQ.data ?? [];
   const bills = billsQ.data ?? [];
   const pays = paysQ.data ?? [];
+  // the last 7 days, today included
+  const weekStart = new Date(new Date(`${today}T00:00:00Z`).getTime() - 6 * 86400000).toISOString().slice(0, 10);
   const isPrev = (b: Bill) => (seasonStart ? b.purchase_date < seasonStart : (b.note ?? "").startsWith(PREV_NOTE));
 
   const stats = useMemo(() => {
-    const m = new Map<string, { prev: number; rent: number; paid: number; due: number; area: string }>();
-    for (const o of owners) m.set(o.id, { prev: 0, rent: 0, paid: 0, due: 0, area: "" });
+    const m = new Map<string, { prev: number; rent: number; paid: number; due: number; area: string; lastDate: string; lastAmount: number; week: number }>();
+    for (const o of owners) m.set(o.id, { prev: 0, rent: 0, paid: 0, due: 0, area: "", lastDate: "", lastAmount: 0, week: 0 });
     for (const b of bills) {
       const s = b.supplier_id ? m.get(b.supplier_id) : undefined;
       if (!s) continue;
@@ -89,7 +157,13 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
         if (b.unit && Number(b.quantity) > 0) s.area = `${bn(Number(b.quantity))} ${b.unit}`;
       }
     }
-    for (const p of pays) { const s = m.get(p.supplier_id); if (s) s.paid += Number(p.amount || 0); }
+    for (const p of pays) {
+      const s = m.get(p.supplier_id);
+      if (!s) continue;
+      s.paid += Number(p.amount || 0);
+      if (!s.lastDate || p.payment_date > s.lastDate) { s.lastDate = p.payment_date; s.lastAmount = Number(p.amount || 0); }
+      if (p.payment_date >= weekStart) s.week += Number(p.amount || 0);
+    }
     for (const s of m.values()) s.due = s.prev + s.rent - s.paid;
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,7 +179,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
   const detail = owners.find((o) => o.id === detailId) ?? null;
 
   const invalidate = () => {
-    for (const key of [["land-owners"], ["land-bills"], ["land-payments"], ["suppliers"], ["purchases"], ["supplier-payments"], ["cash"], ["cash-book"], ["profit-loss"]]) {
+    for (const key of [["contract-people"], ["contract-bills"], ["contract-payments"], ["suppliers"], ["purchases"], ["supplier-payments"], ["cash"], ["cash-book"], ["profit-loss"]]) {
       qc.invalidateQueries({ queryKey: key });
     }
   };
@@ -114,7 +188,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
   const insertBill = async (ownerId: string, kind: "rent" | "prev", date: string, amount: number, area: number, unit: string, note: string) => {
     const qty = area > 0 ? area : 1;
     const { error } = await supabase.from("purchases").insert({
-      supplier_id: ownerId, item_name: LAND_ITEM, material_id: null, purchase_date: date,
+      supplier_id: ownerId, item_name: cfg.item, material_id: null, purchase_date: date,
       quantity: qty, unit: area > 0 ? unit : null, unit_price: Math.round((amount / qty) * 100) / 100, total_amount: amount,
       note: kind === "prev" ? [PREV_NOTE, note].filter(Boolean).join(" — ") : note || null, created_by: uid(),
     });
@@ -124,20 +198,20 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
   const saveOwner = useMutation({
     mutationFn: async () => {
       const f = ownerForm!;
-      if (!f.name.trim()) throw new Error("জমির মালিকের নাম দিন");
-      const payload = { name: f.name.trim(), phone: f.phone.trim() || null, address: f.land.trim() || null, note: f.note.trim() || null, material_type: LAND_TYPE };
+      if (!f.name.trim()) throw new Error(`${cfg.personOf} নাম দিন`);
+      const payload = { name: f.name.trim(), phone: f.phone.trim() || null, address: f.land.trim() || null, note: f.note.trim() || null, material_type: cfg.type };
       if (f.id) {
         const { error } = await supabase.from("suppliers").update(payload).eq("id", f.id);
         if (error) throw error;
         return;
       }
       const same = owners.find((o) => o.name.trim() === payload.name);
-      if (same) throw new Error(`"${payload.name}" নামে একজন জমির মালিক আগেই আছেন`);
+      if (same) throw new Error(`"${payload.name}" নামে একজন ${cfg.person} আগেই আছেন`);
       const { data, error } = await supabase.from("suppliers").insert(payload).select("id").single();
       if (error) throw error;
       const prev = Number(f.prevDue || 0), rent = Number(f.rent || 0);
       if (prev > 0) await insertBill(data.id, "prev", prevDate, prev, 0, "", "");
-      if (rent > 0) await insertBill(data.id, "rent", today, rent, 0, "", "এই মৌসুমের ভাড়া");
+      if (rent > 0) await insertBill(data.id, "rent", seasonStart && cfg.key === "clean" ? seasonStart : today, rent, 0, "", cfg.billLong);
     },
     onSuccess: () => { toast.success("সংরক্ষিত"); setOwnerForm(null); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
@@ -147,7 +221,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
     mutationFn: async () => {
       const f = billForm!;
       const amount = Number(f.amount);
-      if (!f.owner_id) throw new Error("জমির মালিক বেছে নিন");
+      if (!f.owner_id) throw new Error(`${cfg.person} বেছে নিন`);
       if (!(amount > 0)) throw new Error("টাকার পরিমাণ দিন");
       if (!f.date) throw new Error("তারিখ দিন");
       if (f.kind === "prev" && seasonStart && f.date >= seasonStart) throw new Error("পূর্বের বকেয়ার তারিখ এই মৌসুম শুরুর আগে হতে হবে");
@@ -172,10 +246,10 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
     mutationFn: async () => {
       const f = payForm!;
       const amount = Number(f.amount);
-      if (!f.owner_id) throw new Error("জমির মালিক বেছে নিন");
+      if (!f.owner_id) throw new Error(`${cfg.person} বেছে নিন`);
       if (!(amount > 0)) throw new Error("টাকার পরিমাণ দিন");
       if (!f.date) throw new Error("তারিখ দিন");
-      const payload = { supplier_id: f.owner_id, amount, payment_date: f.date, method: f.method, note: f.note || `${LAND_ITEM} পরিশোধ` };
+      const payload = { supplier_id: f.owner_id, amount, payment_date: f.date, method: f.method, note: f.note || `${cfg.item} পরিশোধ` };
       const { error } = f.id
         ? await supabase.from("supplier_payments").update(payload).eq("id", f.id)
         : await supabase.from("supplier_payments").insert({ ...payload, created_by: uid() });
@@ -191,17 +265,21 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
       if (error) throw error;
     },
     onSuccess: (_d, v) => { toast.success("মুছে ফেলা হয়েছে"); if (v.table === "suppliers") setDetailId(null); invalidate(); },
-    onError: (e: Error) => toast.error(e.message.includes("foreign key") ? "এই মালিকের হিসাব আছে, আগে সেগুলো মুছুন" : e.message),
+    onError: (e: Error) => toast.error(e.message.includes("foreign key") ? `এই ${cfg.personOf} হিসাব আছে, আগে সেগুলো মুছুন` : e.message),
   });
 
   const newBill = (owner_id = "", kind: BillForm["kind"] = "rent"): BillForm =>
-    ({ owner_id, kind, date: kind === "prev" ? prevDate : today, area: "", unit: LAND_UNITS[0], amount: "", note: "" });
-  const newPay = (owner_id = ""): PayForm => ({ owner_id, date: today, amount: "", method: "cash", note: "" });
+    ({ owner_id, kind, date: kind === "prev" ? prevDate : cfg.key === "clean" && seasonStart ? seasonStart : today, area: "", unit: LAND_UNITS[0], amount: "", note: "" });
+  // a weekly payer usually gives the same amount, so start from the last one
+  const newPay = (owner_id = ""): PayForm => {
+    const last = owner_id && cfg.key === "clean" ? stats.get(owner_id)?.lastAmount : 0;
+    return { owner_id, date: today, amount: last ? String(last) : "", method: "cash", note: "" };
+  };
 
   const print = () => printTable({
-    title: "জমি ভাড়ার হিসাব",
+    title: `${cfg.title} — হিসাব`,
     subtitle: season ? `${bnDate(season.from)} – ${bnDate(season.to)}` : undefined,
-    headers: ["জমির মালিক", "জমি", "পূর্বের বকেয়া", "এই মৌসুমের ভাড়া", "পরিশোধ", "বাকি"],
+    headers: [cfg.person, cfg.showArea ? "জমি" : "বিবরণ", "পূর্বের বকেয়া", cfg.billLong, "পরিশোধ", "বাকি"],
     rightCols: [2, 3, 4, 5],
     rows: owners.map((o) => {
       const s = stats.get(o.id)!;
@@ -218,8 +296,8 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
           <ArrowLeft className="h-5 w-5" aria-hidden="true" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="font-display truncate text-[24px] font-extrabold leading-tight">জমি ভাড়া</h1>
-          <p className="text-sm font-semibold text-muted-foreground">জমির মালিক কত পাবেন, কত দেওয়া হলো, কত বাকি</p>
+          <h1 className="font-display truncate text-[24px] font-extrabold leading-tight">{cfg.title}</h1>
+          <p className="text-sm font-semibold text-muted-foreground">{cfg.subtitle}</p>
         </div>
         <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl" onClick={print} aria-label="প্রিন্ট">
           <Printer className="h-5 w-5" />
@@ -227,7 +305,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
       </div>
 
       <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-        <div className="text-xs font-bold tracking-[0.12em] text-stone-300">মোট বাকি · জমির মালিকদের পাওনা</div>
+        <div className="text-xs font-bold tracking-[0.12em] text-stone-300">মোট বাকি · {cfg.person}দের পাওনা</div>
         {loading ? <Skeleton className="mt-3 h-10 w-40 bg-white/10" /> : (
           <div className={`mt-2 font-display num text-[40px] font-extrabold leading-none ${total.due < 0 ? "text-sky-300" : ""}`}>
             {total.due < 0 ? "অগ্রিম " : ""}{tk(Math.abs(total.due))}
@@ -239,7 +317,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
             <div className="num text-sm font-bold">{tk(total.prev)}</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
-            <div className="text-[11px] font-semibold text-stone-300">এই মৌসুমের ভাড়া</div>
+            <div className="text-[11px] font-semibold text-stone-300">{cfg.billLong}</div>
             <div className="num text-sm font-bold">{tk(total.rent)}</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
@@ -254,7 +332,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
           <Banknote className="h-5 w-5" /> টাকা দিন
         </Button>
         <Button variant="outline" className="h-12 gap-2 rounded-2xl text-base font-bold" onClick={() => setOwnerForm({ name: "", phone: "", land: "", note: "", prevDue: "", rent: "" })}>
-          <Plus className="h-5 w-5" /> জমির মালিক
+          <Plus className="h-5 w-5" /> {cfg.person}
         </Button>
       </div>
 
@@ -263,21 +341,21 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
           <><Skeleton className="h-28 rounded-2xl" /><Skeleton className="h-28 rounded-2xl" /></>
         ) : owners.length === 0 ? (
           <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-            এখনো কোনো জমির মালিক যোগ করা হয়নি। উপরে "জমির মালিক" চেপে নাম, ভাড়া আর পূর্বের বকেয়া (থাকলে) দিন।
+            {cfg.emptyText}
           </div>
         ) : owners.map((o) => {
           const s = stats.get(o.id)!;
           return (
             <div key={o.id} className="rounded-2xl border bg-card">
               <button type="button" onClick={() => setDetailId(o.id)} className="flex w-full items-start gap-3 p-3.5 text-left">
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-lime-100 text-lime-800 dark:bg-lime-950/60 dark:text-lime-200">
-                  <LandPlot className="h-5 w-5" />
+                <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${cfg.chip}`}>
+                  <Icon className="h-5 w-5" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-base font-bold leading-snug">{o.name}</span>
-                  <span className="block text-xs text-muted-foreground">{[s.area, o.address].filter(Boolean).join(" · ") || "জমির বিবরণ নেই"}</span>
+                  <span className="block text-xs text-muted-foreground">{[s.area, o.address].filter(Boolean).join(" · ") || "বিবরণ নেই"}</span>
                   <span className="num mt-1 block text-xs text-muted-foreground">
-                    {s.prev > 0 && <>পূর্বের {tk(s.prev)} · </>}ভাড়া {tk(s.rent)} · দেওয়া {tk(s.paid)}
+                    {s.prev > 0 && <>পূর্বের {tk(s.prev)} · </>}{cfg.bill} {tk(s.rent)} · দেওয়া {tk(s.paid)}
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
@@ -285,8 +363,19 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
                   <span className={`num font-display text-lg font-extrabold ${s.due > 0 ? "text-warning" : s.due < 0 ? "text-info" : "text-success"}`}>{tk(Math.abs(s.due))}</span>
                 </span>
               </button>
+              {s.prev + s.rent > 0 && (
+                <div className="px-3.5 pb-3">
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-success" style={{ width: `${Math.min(100, (s.paid / (s.prev + s.rent)) * 100)}%` }} />
+                  </div>
+                  <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                    <span>{bn(Math.round(Math.min(100, (s.paid / (s.prev + s.rent)) * 100)))}% দেওয়া হয়েছে</span>
+                    <span>{s.lastDate ? `শেষ টাকা ${bnDate(s.lastDate)}${s.week > 0 ? ` · এই সপ্তাহে ${tk(s.week)}` : ""}` : "এখনো টাকা দেওয়া হয়নি"}</span>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-1.5 border-t p-2">
-                <Button variant="ghost" className="h-10 gap-1 rounded-xl font-semibold" onClick={() => setBillForm(newBill(o.id))}><Plus className="h-4 w-4" /> ভাড়া লিখুন</Button>
+                <Button variant="ghost" className="h-10 gap-1 rounded-xl font-semibold" onClick={() => setBillForm(newBill(o.id))}><Plus className="h-4 w-4" /> {cfg.bill} লিখুন</Button>
                 <Button variant="ghost" className="h-10 gap-1 rounded-xl font-semibold text-primary" onClick={() => setPayForm(newPay(o.id))}><Banknote className="h-4 w-4" /> টাকা দিন</Button>
               </div>
             </div>
@@ -298,19 +387,19 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
       <Dialog open={!!ownerForm} onOpenChange={(o) => !o && setOwnerForm(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{ownerForm?.id ? "জমির মালিক সম্পাদনা" : "নতুন জমির মালিক"}</DialogTitle>
-            {!ownerForm?.id && <DialogDescription>নামের সাথে এই মৌসুমের ভাড়া আর পূর্বের বকেয়া (থাকলে) একসাথে লিখে দিতে পারেন।</DialogDescription>}
+            <DialogTitle>{ownerForm?.id ? `${cfg.person} সম্পাদনা` : `নতুন ${cfg.person}`}</DialogTitle>
+            {!ownerForm?.id && <DialogDescription>নামের সাথে {cfg.billLong} আর পূর্বের বকেয়া (থাকলে) একসাথে লিখে দিতে পারেন।</DialogDescription>}
           </DialogHeader>
           {ownerForm && (
             <div className="space-y-3">
-              <div className="space-y-1.5"><Label>জমির মালিকের নাম *</Label><Input className="h-11" value={ownerForm.name} onChange={(e) => setOwnerForm({ ...ownerForm, name: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>{cfg.personOf} নাম *</Label><Input className="h-11" value={ownerForm.name} onChange={(e) => setOwnerForm({ ...ownerForm, name: e.target.value })} /></div>
               <div className="space-y-1.5"><Label>ফোন</Label><Input className="h-11" inputMode="tel" value={ownerForm.phone} onChange={(e) => setOwnerForm({ ...ownerForm, phone: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>জমির বিবরণ (দাগ, মৌজা, কোথায়)</Label><Input className="h-11" value={ownerForm.land} onChange={(e) => setOwnerForm({ ...ownerForm, land: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>{cfg.infoLabel}</Label><Input className="h-11" value={ownerForm.land} onChange={(e) => setOwnerForm({ ...ownerForm, land: e.target.value })} /></div>
               {!ownerForm.id && (
                 <div className="grid grid-cols-2 gap-3 rounded-2xl border p-3">
-                  <div className="space-y-1.5"><Label>এই মৌসুমের ভাড়া (৳)</Label><Input className="h-11" type="number" inputMode="decimal" value={ownerForm.rent} onChange={(e) => setOwnerForm({ ...ownerForm, rent: e.target.value })} /></div>
+                  <div className="space-y-1.5"><Label>{cfg.billLong} (৳)</Label><Input className="h-11" type="number" inputMode="decimal" value={ownerForm.rent} onChange={(e) => setOwnerForm({ ...ownerForm, rent: e.target.value })} /></div>
                   <div className="space-y-1.5"><Label>পূর্বের বকেয়া (৳)</Label><Input className="h-11" type="number" inputMode="decimal" value={ownerForm.prevDue} onChange={(e) => setOwnerForm({ ...ownerForm, prevDue: e.target.value })} /></div>
-                  <p className="col-span-2 text-xs text-muted-foreground">খালি রাখলে পরে "ভাড়া লিখুন" থেকে দিতে পারবেন।</p>
+                  <p className="col-span-2 text-xs text-muted-foreground">খালি রাখলে পরে "{cfg.bill} লিখুন" থেকে দিতে পারবেন।</p>
                 </div>
               )}
               <div className="space-y-1.5"><Label>নোট</Label><Textarea rows={2} value={ownerForm.note} onChange={(e) => setOwnerForm({ ...ownerForm, note: e.target.value })} /></div>
@@ -327,22 +416,22 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
       <Dialog open={!!billForm} onOpenChange={(o) => !o && setBillForm(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{billForm?.id ? "সম্পাদনা" : billForm?.kind === "prev" ? "পূর্বের বকেয়া" : "জমির ভাড়া লিখুন"}</DialogTitle>
+            <DialogTitle>{billForm?.id ? "সম্পাদনা" : billForm?.kind === "prev" ? "পূর্বের বকেয়া" : `${cfg.billLong} লিখুন`}</DialogTitle>
             <DialogDescription>
-              {billForm?.kind === "prev" ? "আগের মৌসুমের যে টাকা এখনো দেওয়া বাকি। এটা এই মৌসুমের খরচে ধরা হবে না, শুধু বাকিতে যোগ হবে।" : "জমির মালিক এই মৌসুমে কত টাকা পাবেন। এটা এই মৌসুমের খরচে ধরা হবে।"}
+              {billForm?.kind === "prev" ? "আগের মৌসুমের যে টাকা এখনো দেওয়া বাকি। এটা এই মৌসুমের খরচে ধরা হবে না, শুধু বাকিতে যোগ হবে।" : cfg.billHelp}
             </DialogDescription>
           </DialogHeader>
           {billForm && (
             <div className="space-y-3">
               {!billForm.id && (
                 <div className="grid grid-cols-2 gap-1.5">
-                  {([["rent", "এই মৌসুমের ভাড়া"], ["prev", "পূর্বের বকেয়া"]] as const).map(([k, l]) => (
-                    <button key={k} type="button" onClick={() => setBillForm({ ...billForm, kind: k, date: k === "prev" ? prevDate : today })}
+                  {([["rent", cfg.billLong], ["prev", "পূর্বের বকেয়া"]] as const).map(([k, l]) => (
+                    <button key={k} type="button" onClick={() => setBillForm({ ...billForm, kind: k, date: k === "prev" ? prevDate : cfg.key === "clean" && seasonStart ? seasonStart : today })}
                       className={`h-11 rounded-xl text-sm font-bold ${billForm.kind === k ? "bg-primary text-primary-foreground" : "border bg-background"}`}>{l}</button>
                   ))}
                 </div>
               )}
-              <OwnerSelect owners={owners} value={billForm.owner_id} onChange={(v) => setBillForm({ ...billForm, owner_id: v })} />
+              <OwnerSelect label={cfg.person} owners={owners} value={billForm.owner_id} onChange={(v) => setBillForm({ ...billForm, owner_id: v })} />
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label>টাকা *</Label><Input className="h-11" type="number" inputMode="decimal" value={billForm.amount} onChange={(e) => setBillForm({ ...billForm, amount: e.target.value })} /></div>
                 <div className="space-y-1.5">
@@ -350,7 +439,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
                   <Input className="h-11" type="date" value={billForm.date} max={billForm.kind === "prev" && seasonStart ? prevDate : undefined} onChange={(e) => setBillForm({ ...billForm, date: e.target.value })} />
                 </div>
               </div>
-              {billForm.kind === "rent" && (
+              {billForm.kind === "rent" && cfg.showArea && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5"><Label>জমির পরিমাণ</Label><Input className="h-11" type="number" inputMode="decimal" placeholder="ঐচ্ছিক" value={billForm.area} onChange={(e) => setBillForm({ ...billForm, area: e.target.value })} /></div>
                   <div className="space-y-1.5">
@@ -376,12 +465,12 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
       <Dialog open={!!payForm} onOpenChange={(o) => !o && setPayForm(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{payForm?.id ? "পরিশোধ সম্পাদনা" : "জমির মালিককে টাকা দিন"}</DialogTitle>
-            <DialogDescription>টাকা বাকি থেকে কমবে, আর ক্যাশ বইয়ে "জমি ভাড়া পরিশোধ" হিসেবে খরচ উঠবে।</DialogDescription>
+            <DialogTitle>{payForm?.id ? "পরিশোধ সম্পাদনা" : cfg.payTitle}</DialogTitle>
+            <DialogDescription>টাকা বাকি থেকে কমবে, আর ক্যাশ বইয়ে "{cfg.item} পরিশোধ" হিসেবে খরচ উঠবে।</DialogDescription>
           </DialogHeader>
           {payForm && (
             <div className="space-y-3">
-              <OwnerSelect owners={owners} value={payForm.owner_id} onChange={(v) => setPayForm({ ...payForm, owner_id: v })} />
+              <OwnerSelect label={cfg.person} owners={owners} value={payForm.owner_id} onChange={(v) => setPayForm({ ...payForm, owner_id: v })} />
               {payForm.owner_id && stats.get(payForm.owner_id) && (
                 <p className="rounded-xl bg-muted/60 p-2.5 text-sm">
                   এখন বাকি <b className="num">{tk(stats.get(payForm.owner_id)!.due)}</b>
@@ -417,7 +506,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
           {detail && (() => {
             const s = stats.get(detail.id)!;
             const rows = [
-              ...bills.filter((b) => b.supplier_id === detail.id).map((b) => ({ key: `b${b.id}`, date: b.purchase_date, kind: isPrev(b) ? "prev" as const : "rent" as const, label: isPrev(b) ? PREV_NOTE : `ভাড়া${b.unit && Number(b.quantity) > 0 ? ` (${bn(Number(b.quantity))} ${b.unit})` : ""}`, plus: Number(b.total_amount), minus: 0, note: b.note, bill: b, pay: null as Pay | null })),
+              ...bills.filter((b) => b.supplier_id === detail.id).map((b) => ({ key: `b${b.id}`, date: b.purchase_date, kind: isPrev(b) ? "prev" as const : "rent" as const, label: isPrev(b) ? PREV_NOTE : `${cfg.bill}${b.unit && Number(b.quantity) > 0 ? ` (${bn(Number(b.quantity))} ${b.unit})` : ""}`, plus: Number(b.total_amount), minus: 0, note: b.note, bill: b, pay: null as Pay | null })),
               ...pays.filter((p) => p.supplier_id === detail.id).map((p) => ({ key: `p${p.id}`, date: p.payment_date, kind: "pay" as const, label: `পরিশোধ${p.method && p.method !== "cash" ? ` (${METHODS.find(([k]) => k === p.method)?.[1] ?? p.method})` : ""}`, plus: 0, minus: Number(p.amount), note: p.note, bill: null as Bill | null, pay: p })),
             ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.kind === "pay" ? 1 : -1));
             let run = 0;
@@ -426,7 +515,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
               <div className="space-y-4">
                 <SheetHeader className="text-left">
                   <SheetTitle className="break-words">{detail.name}</SheetTitle>
-                  <SheetDescription>{[detail.address, s.area].filter(Boolean).join(" · ") || "জমির হিসাব"}</SheetDescription>
+                  <SheetDescription>{[detail.address, s.area].filter(Boolean).join(" · ") || cfg.title}</SheetDescription>
                 </SheetHeader>
                 {detail.phone && (
                   <a href={`tel:${detail.phone}`} className="flex h-11 items-center justify-center gap-2 rounded-xl border text-sm font-semibold"><Phone className="h-4 w-4" />{detail.phone}</a>
@@ -438,7 +527,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   <Button className="h-11 gap-1 rounded-xl text-sm font-bold" onClick={() => setPayForm(newPay(detail.id))}><Banknote className="h-4 w-4" />টাকা দিন</Button>
-                  <Button variant="outline" className="h-11 gap-1 rounded-xl text-sm font-bold" onClick={() => setBillForm(newBill(detail.id))}><Plus className="h-4 w-4" />ভাড়া</Button>
+                  <Button variant="outline" className="h-11 gap-1 rounded-xl text-sm font-bold" onClick={() => setBillForm(newBill(detail.id))}><Plus className="h-4 w-4" />{cfg.bill}</Button>
                   <Button variant="outline" className="h-11 gap-1 rounded-xl text-sm font-bold" onClick={() => setBillForm(newBill(detail.id, "prev"))}><History className="h-4 w-4" />পূর্বের বকেয়া</Button>
                 </div>
                 <div className="divide-y rounded-2xl border">
@@ -446,7 +535,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
                     <div key={r.key} className="flex items-center gap-2 px-3 py-2.5">
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold">{r.label}</div>
-                        <div className="text-xs text-muted-foreground">{bnDate(r.date)}{r.note && r.note !== PREV_NOTE && r.note !== `${LAND_ITEM} পরিশোধ` ? ` · ${r.note.replace(`${PREV_NOTE} — `, "")}` : ""}</div>
+                        <div className="text-xs text-muted-foreground">{bnDate(r.date)}{r.note && r.note !== PREV_NOTE && r.note !== `${cfg.item} পরিশোধ` ? ` · ${r.note.replace(`${PREV_NOTE} — `, "")}` : ""}</div>
                       </div>
                       <div className="shrink-0 text-right">
                         <div className={`num text-sm font-bold ${r.minus ? "text-success" : ""}`}>{r.minus ? `−${tk(r.minus)}` : `+${tk(r.plus)}`}</div>
@@ -469,7 +558,7 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
                 {isAdmin && (
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" className="h-10 gap-1 rounded-xl" onClick={() => setOwnerForm({ id: detail.id, name: detail.name, phone: detail.phone ?? "", land: detail.address ?? "", note: detail.note ?? "", prevDue: "", rent: "" })}><Pencil className="h-4 w-4" />নাম/তথ্য বদলান</Button>
-                    <Button variant="outline" className="h-10 gap-1 rounded-xl border-destructive/40 text-destructive" disabled={withRun.length > 0} onClick={() => confirm(`"${detail.name}" মুছবেন?`) && del.mutate({ table: "suppliers", id: detail.id })}><Trash2 className="h-4 w-4" />মালিক মুছুন</Button>
+                    <Button variant="outline" className="h-10 gap-1 rounded-xl border-destructive/40 text-destructive" disabled={withRun.length > 0} onClick={() => confirm(`"${detail.name}" মুছবেন?`) && del.mutate({ table: "suppliers", id: detail.id })}><Trash2 className="h-4 w-4" />মুছুন</Button>
                   </div>
                 )}
               </div>
@@ -481,10 +570,10 @@ export function LandRentFolder({ onBack }: { onBack: () => void }) {
   );
 }
 
-function OwnerSelect({ owners, value, onChange }: { owners: Owner[]; value: string; onChange: (v: string) => void }) {
+function OwnerSelect({ label, owners, value, onChange }: { label: string; owners: Owner[]; value: string; onChange: (v: string) => void }) {
   return (
     <div className="space-y-1.5">
-      <Label>জমির মালিক *</Label>
+      <Label>{label} *</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-11"><SelectValue placeholder="বেছে নিন" /></SelectTrigger>
         <SelectContent>{owners.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}</SelectContent>

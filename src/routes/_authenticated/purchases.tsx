@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Clock, LandPlot, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wrench } from "lucide-react";
-import { LAND_ITEM, LAND_TYPE, LandRentFolder } from "@/components/land-rent-folder";
+import { ArrowLeft, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wrench } from "lucide-react";
+import { CLEANER_CONTRACT, CONTRACT_ITEMS, CONTRACT_TYPES, ContractFolder, LAND_CONTRACT } from "@/components/contract-folder";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,7 +28,7 @@ import { printTable } from "@/lib/print-table";
    on the suppliers page (cash or bricks).
    ========================================================= */
 
-type Folder = "raw" | "other" | "land";
+type Folder = "raw" | "other" | "land" | "clean";
 
 export const Route = createFileRoute("/_authenticated/purchases")({
   head: () => ({
@@ -39,7 +39,7 @@ export const Route = createFileRoute("/_authenticated/purchases")({
   }),
   // Which history folder is open lives in the URL (?f=raw|other) so the phone back button returns here
   validateSearch: (search: Record<string, unknown>): { f?: Folder } =>
-    search.f === "raw" || search.f === "other" || search.f === "land" ? { f: search.f } : {},
+    search.f === "raw" || search.f === "other" || search.f === "land" || search.f === "clean" ? { f: search.f } : {},
   component: PurchasesPage,
 });
 
@@ -156,7 +156,7 @@ function PurchasesPage() {
     queryKey: ["supplier-payments"],
     queryFn: async () => {
       const { data, error } = await sdb.from("supplier_payments").select("supplier_id, amount");
-      // land rent has its own folder and totals
+      // land rent and sweeper contracts have their own folders and totals
       if (error) throw error;
       return data ?? [];
     },
@@ -185,7 +185,7 @@ function PurchasesPage() {
 
   /* ---------- history ---------- */
   const entries: Entry[] = useMemo(() => {
-    const fromPurchases: Entry[] = (purQ.data ?? []).filter((p) => p.item_name !== LAND_ITEM).map((p) => {
+    const fromPurchases: Entry[] = (purQ.data ?? []).filter((p) => !CONTRACT_ITEMS.has(p.item_name)).map((p) => {
       const it = items.find((i) => i.id === p.material_id) ?? itemByName(p.item_name);
       return {
         key: `p${p.id}`,
@@ -229,7 +229,7 @@ function PurchasesPage() {
     const bought = sumOf(entries);
     const cashBills = sumOf(entries.filter((e) => e.source === "expense"));
     const credit = bought - cashBills;
-    const landIds = new Set((supQ.data ?? []).filter((x: any) => x.material_type === LAND_TYPE).map((x: any) => x.id));
+    const landIds = new Set((supQ.data ?? []).filter((x: any) => CONTRACT_TYPES.has(x.material_type)).map((x: any) => x.id));
     const paid = (payQ.data ?? []).filter((p) => !landIds.has(p.supplier_id)).reduce((a, p) => a + Number(p.amount || 0), 0);
     return { bought, paid: paid + cashBills, due: credit - paid };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -837,20 +837,23 @@ function PurchasesPage() {
                 <span className="text-[11px] font-semibold text-muted-foreground">{bn(t.rows.length)}টি এন্ট্রি · ইতিহাস দেখুন</span>
               </button>
             ))}
-            <button
-              type="button"
-              onClick={() => openFolder("land")}
-              className="col-span-2 flex items-center gap-3 rounded-2xl border bg-card p-3.5 text-left transition hover:bg-muted/50 active:scale-[0.99]"
-            >
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-lime-100 text-lime-800 dark:bg-lime-950/60 dark:text-lime-200">
-                <LandPlot className="h-5 w-5" aria-hidden="true" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-base font-bold leading-tight">জমি ভাড়া</span>
-                <span className="block text-xs text-muted-foreground">জমির মালিক কত পাবেন, কত দেওয়া হলো, কত বাকি</span>
-              </span>
-              <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            </button>
+            {[LAND_CONTRACT, CLEANER_CONTRACT].map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => openFolder(c.key)}
+                className="col-span-2 flex items-center gap-3 rounded-2xl border bg-card p-3.5 text-left transition hover:bg-muted/50 active:scale-[0.99]"
+              >
+                <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${c.chip}`}>
+                  <c.icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-bold leading-tight">{c.title}</span>
+                  <span className="block text-xs text-muted-foreground">{c.subtitle}</span>
+                </span>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </button>
+            ))}
           </section>
         )}
 
@@ -860,7 +863,8 @@ function PurchasesPage() {
   }
 
   /* ================= folder: land rent ================= */
-  if (folder === "land") return <LandRentFolder onBack={closeFolder} />;
+  if (folder === "land") return <ContractFolder key="land" cfg={LAND_CONTRACT} onBack={closeFolder} />;
+  if (folder === "clean") return <ContractFolder key="clean" cfg={CLEANER_CONTRACT} onBack={closeFolder} />;
 
   /* ================= folder: history only ================= */
   const folderItems = folder === "raw" ? rawItems : otherItems;

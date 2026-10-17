@@ -31,7 +31,7 @@ export type ProfitLoss = {
   sales: number;
   /** Part of sales delivered against last year's advance (opening customer_brick_due) */
   salesFromOldAdvance: number;
-  costs: { expenses: number; purchases: number; landRent: number; sardar: number; worker: number; vehicle: number };
+  costs: { expenses: number; purchases: number; landRent: number; cleaning: number; sardar: number; worker: number; vehicle: number };
   totalCost: number;
   profit: number;
 };
@@ -52,8 +52,9 @@ export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLo
   const costs = {
     expenses: total(exp),
     // land rent (জমি ভাড়া) is its own line; previous-season dues are dated before the season so not counted
-    purchases: total(pur.filter((p) => p.item_name !== "জমি ভাড়া"), "total_amount"),
+    purchases: total(pur.filter((p) => p.item_name !== "জমি ভাড়া" && p.item_name !== "পরিচ্ছন্ন কর্মী"), "total_amount"),
     landRent: total(pur.filter((p) => p.item_name === "জমি ভাড়া"), "total_amount"),
+    cleaning: total(pur.filter((p) => p.item_name === "পরিচ্ছন্ন কর্মী"), "total_amount"),
     sardar: total(sar),
     worker: total(wrk),
     vehicle: total(veh),

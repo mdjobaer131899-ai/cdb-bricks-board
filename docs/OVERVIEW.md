@@ -107,6 +107,7 @@ supabase/
 | `/cash-book`-এর "নতুন এন্ট্রি" বোতাম | এন্ট্রির খাত বাছাই | গ্রাহকের টাকা (`IncomeDialog`), খরচের প্রতিটি খাত (`AddExpenseDialog`, খাত আগে থেকে বসানো), আর মালিক/ঋণ/জের পাতার লিংক। খরচের ফর্ম: এক ফর্ম থেকে খরচ, সরদার, ডেলি, বেতন, ভেকু, কাঁচামাল ও যন্ত্রাংশের এন্ট্রি (`AddExpenseDialog`) | [cash-box-panel.tsx](../src/components/cash-box-panel.tsx#L353) |
 | `/purchases` | মালামাল ও সাপ্লায়ার | কেনা জিনিস (বাকিসহ) ও সাপ্লায়ারকে পরিশোধ | `purchases`, `supplier_payments`, `suppliers` |
 | `/purchases?f=land` | জমি ভাড়া | জমির মালিক (সাপ্লায়ার, ধরন "জমি ভাড়া"), এই মৌসুমের ভাড়া ও পূর্বের বকেয়া (বিল), পরিশোধ, বাকি আর মালিকভিত্তিক খাতা | `suppliers`, `purchases` (`item_name='জমি ভাড়া'`), `supplier_payments` |
+| `/purchases?f=clean` | পরিচ্ছন্ন কর্মী | সুইপারের মৌসুমের চুক্তি (বিল, মৌসুম শুরুর তারিখে), প্রতি সপ্তাহের টাকা (পরিশোধ), কত শতাংশ দেওয়া হলো আর কত বাকি | `suppliers` (`material_type='পরিচ্ছন্ন কর্মী'`), `purchases`, `supplier_payments` |
 | `/owners` | মালিক ও ঋণ | মালিকের বিনিয়োগ ও উত্তোলন | `owners`, `owner_transactions` |
 | `/loans` | ঋণ | ঋণ নেওয়া/দেওয়া ও পরিশোধ | `loans`, `loan_payments` |
 | `/opening-balances` | পূর্বের বকেয়া ও জের | গত বছরের পাওনা-দেনা আর তার পরিশোধ | `opening_balances`, `opening_payments` |
