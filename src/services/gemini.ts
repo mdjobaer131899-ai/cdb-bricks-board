@@ -1096,20 +1096,53 @@ type PartyHit =
 const NAME_STOP = new Set(["মোঃ", "মো", "মোহাম্মদ", "মুহাম্মদ", "md", "mohammad", "শেখ", "মিয়া", "মিয়া", "ভাই", "সাহেব", "হাজী",
   "বাবু", "ম্যানেজার", "ডেলি", "মেস্তুরি", "মিস্ত্রি", "সর্দার", "সরদার", "মাস্টার", "ড্রাইভার", "কয়লা", "কয়লা", "ডিজেল", "লোড"]);
 
+/** Edit distance, for small spelling differences (মনসুর / মুনসুর) */
+function editDistance(a: string, b: string): number {
+  const A = [...a], B = [...b];
+  let prev = Array.from({ length: B.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= A.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= B.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (A[i - 1] === B[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[B.length];
+}
+
+/**
+ * How well a name matches the message. The whole name inside the message wins (100+).
+ * Otherwise each part of the name adds its own score, so "আলী মনসুর" matches
+ * "আলী মুনসুর" (two parts) better than "অহিদ আলী" (one part).
+ */
 function nameScore(name: string, msg: string, words: Set<string>): number {
   const n = clean(name);
   if (n.length < 2) return 0;
   if (msg.includes(n)) return 100 + n.length;
-  let best = 0;
+  let total = 0;
   for (const t of n.split(" ")) {
     if (t.length < 3 || NAME_STOP.has(t)) continue;
-    // বাংলা বিভক্তি (রহিমের, রহিমকে, রহিম এর) মেলানোর জন্য শব্দের শুরু মিলানো
+    let best = 0;
     for (const w of words) {
-      if (w === t || (w.startsWith(t) && w.length - t.length <= 3)) best = Math.max(best, t.length);
+      // বাংলা বিভক্তি (রহিমের, রহিমকে) মেলানোর জন্য শব্দের শুরু মিলানো
+      if (w === t || (w.startsWith(t) && w.length - t.length <= 3)) { best = Math.max(best, t.length); continue; }
+      // ছোট বানান-ভুল: ৪-৫ অক্ষরে ১টা, বড় শব্দে ২টা অক্ষর আলাদা চলবে
+      if (t.length >= 4 && Math.abs(w.length - t.length) <= 2) {
+        const d = editDistance(w, t);
+        if (d <= (t.length >= 6 ? 2 : 1)) best = Math.max(best, t.length - d);
+      }
     }
+    total += best;
   }
-  return best;
+  return total;
 }
+
+/** Words that say which list the person is in ("আলী মুনসুর গ্রাহক") */
+const KIND_HINT: Array<[PartyHit["kind"], string[]]> = [
+  ["customer", ["গ্রাহক", "কাস্টমার", "ক্রেতা", "customer"]],
+  ["supplier", ["সাপ্লায়ার", "সাপ্লায়ার", "সাপ্লাইয়ার", "supplier"]],
+  ["sardar", ["সর্দার", "সরদার", "sardar"]],
+  ["worker", ["শ্রমিক", "স্টাফ", "কর্মচারী", "বেতন"]],
+  ["opening", ["পূর্বের", "জের", "পুরোনো বকেয়া"]],
+];
 
 function findParties(s: KilnSnapshot, msg: string): PartyHit[] {
   const words = new Set(msg.split(" ").filter(Boolean));
@@ -1148,13 +1181,22 @@ function findParties(s: KilnSnapshot, msg: string): PartyHit[] {
   if (!hits.length) return [];
   const top = Math.max(...hits.map((h) => h.score));
   const seen = new Set<string>();
-  return hits.filter((h) => {
+  let best = hits.filter((h) => {
     if (h.score !== top) return false;
     const key = `${h.kind}:${h.item.id}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  // "গ্রাহক", "সাপ্লায়ার"... in the message picks that list when the name is in several
+  if (best.length > 1) {
+    for (const [kind, hint] of KIND_HINT) {
+      if (!hasAny(msg, hint)) continue;
+      const only = best.filter((h) => h.kind === kind);
+      if (only.length) { best = only; break; }
+    }
+  }
+  return best;
 }
 
 function partyDetail(s: KilnSnapshot, h: PartyHit): string {
@@ -1234,6 +1276,10 @@ function instantReply(rawMsg: string, s: KilnSnapshot, w: WeatherInfo | null): s
   // নাম ধরে খোঁজ
   const hits = findParties(s, msg);
   if (hits.length === 1) return partyDetail(s, hits[0]);
+  // the same person in more than one list (e.g. both a customer and a supplier): show all of it
+  if (hits.length > 1 && new Set(hits.map((h) => clean(h.item.name))).size === 1) {
+    return hits.map((h) => partyDetail(s, h)).join("\n\n");
+  }
   if (hits.length > 1 && hits.length <= 6) {
     return [
       "এই নামে একাধিক জন পেয়েছি:",
