@@ -31,13 +31,13 @@ export type ProfitLoss = {
   sales: number;
   /** Part of sales delivered against last year's advance (opening customer_brick_due) */
   salesFromOldAdvance: number;
-  costs: { expenses: number; purchases: number; landRent: number; cleaning: number; vehicleRent: number; sardar: number; worker: number; vehicle: number };
+  costs: { expenses: number; purchases: number; landRent: number; cleaning: number; vehicleRent: number; sardar: number; worker: number; ownerSalary: number; vehicle: number };
   totalCost: number;
   profit: number;
 };
 
 export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLoss> {
-  const [sales, exp, pur, sar, wrk, veh] = await Promise.all([
+  const [sales, exp, pur, sar, wrk, veh, own] = await Promise.all([
     fetchAllRows<{ total_amount: number; opening_balance_id: string | null }>(() =>
       ranged(sdb.from("sales_entries").select("id, total_amount, opening_balance_id").eq("status", "approved").order("id"), "sale_date", filter)),
     fetchAllRows<{ amount: number }>(() => ranged(sdb.from("expenses").select("id, amount").order("id"), "expense_date", filter)),
@@ -45,6 +45,8 @@ export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLo
     fetchAllRows<{ amount: number }>(() => ranged(sdb.from("sardar_payments").select("id, amount").order("id"), "payment_date", filter)),
     fetchAllRows<{ amount: number }>(() => ranged(sdb.from("worker_payments").select("id, amount").order("id"), "payment_date", filter)),
     fetchAllRows<{ amount: number }>(() => ranged(sdb.from("vehicle_expenses").select("id, amount").order("id"), "expense_date", filter)),
+    // owner salary taken (counted when paid, like staff salaries)
+    fetchAllRows<{ amount: number }>(() => ranged(sdb.from("owner_transactions").select("id, amount").eq("txn_type", "salary").order("id"), "txn_date", filter)),
   ]);
 
   const salesTotal = total(sales, "total_amount");
@@ -59,6 +61,7 @@ export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLo
     vehicleRent: total(pur.filter((p) => p.item_name === "গাড়ি ভাড়া"), "total_amount"),
     sardar: total(sar),
     worker: total(wrk),
+    ownerSalary: total(own),
     vehicle: total(veh),
   };
   const totalCost = Object.values(costs).reduce((a, b) => a + b, 0);

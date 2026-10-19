@@ -54,6 +54,7 @@ const COST_LABELS: Record<string, string> = {
   expenses: "দৈনিক খরচ ও বিল",
   sardar: "সরদার পেমেন্ট",
   worker: "শ্রমিক ও বেতন",
+  ownerSalary: "মালিকের বেতন",
   vehicle: "গাড়ি খরচ",
 };
 
@@ -70,6 +71,7 @@ const OUT_LABELS: Record<string, string> = {
   worker: "শ্রমিক ও বেতন",
   supplier: "সাপ্লায়ার, গাড়ি ভাড়া, জমি ভাড়া ও পরিচ্ছন্ন কর্মী পরিশোধ",
   vehicle: "গাড়ি খরচ",
+  ownerSalary: "মালিকের বেতন",
   ownerWithdraw: "মালিকের উত্তোলন",
   loanGiven: "ঋণ দেওয়া",
   loanRepaid: "নেওয়া ঋণ পরিশোধ",

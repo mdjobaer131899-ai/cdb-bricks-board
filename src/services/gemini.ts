@@ -805,6 +805,7 @@ function cashBlock(s: KilnSnapshot): string {
     worker: "শ্রমিক পেমেন্ট",
     supplier: "সাপ্লায়ার পেমেন্ট",
     vehicle: "গাড়ি খরচ",
+    ownerSalary: "মালিকের বেতন",
     ownerWithdraw: "মালিকের উত্তোলন",
     loanGiven: "ঋণ দেওয়া",
     loanRepaid: "ঋণ পরিশোধ",

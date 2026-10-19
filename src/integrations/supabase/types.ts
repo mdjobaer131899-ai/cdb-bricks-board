@@ -65,6 +65,24 @@ export type Database = {
           },
         ]
       }
+      app_secrets: {
+        Row: {
+          created_at: string
+          key: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          key: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -1321,6 +1339,7 @@ export type Database = {
           effective_from: string
           id: string
           note: string | null
+          owner_id: string | null
           sardar_id: string | null
           worker_id: string | null
         }
@@ -1331,6 +1350,7 @@ export type Database = {
           effective_from: string
           id?: string
           note?: string | null
+          owner_id?: string | null
           sardar_id?: string | null
           worker_id?: string | null
         }
@@ -1341,10 +1361,18 @@ export type Database = {
           effective_from?: string
           id?: string
           note?: string | null
+          owner_id?: string | null
           sardar_id?: string | null
           worker_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "pay_rates_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pay_rates_sardar_id_fkey"
             columns: ["sardar_id"]
@@ -1610,6 +1638,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_ok_at: string | null
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_ok_at?: string | null
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_ok_at?: string | null
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       raw_material_purchases: {
         Row: {
@@ -2568,6 +2629,30 @@ export type Database = {
           type?: string
           updated_at?: string
           vehicle_no?: string
+        }
+        Relationships: []
+      }
+      weather_alert_log: {
+        Row: {
+          id: string
+          level: string
+          sent_at: string
+          signal_key: string
+          title: string
+        }
+        Insert: {
+          id?: string
+          level: string
+          sent_at?: string
+          signal_key: string
+          title: string
+        }
+        Update: {
+          id?: string
+          level?: string
+          sent_at?: string
+          signal_key?: string
+          title?: string
         }
         Relationships: []
       }
