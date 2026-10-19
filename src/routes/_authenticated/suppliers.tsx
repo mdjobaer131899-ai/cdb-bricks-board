@@ -18,6 +18,7 @@ import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
 import { SettleWithBricksDialog } from "@/components/settle-with-bricks-dialog";
+import { CONTRACT_TYPES } from "@/components/contract-folder";
 
 export const Route = createFileRoute("/_authenticated/suppliers")({
   head: () => ({ meta: [{ title: "সরবরাহকারী — CDB Bricks" }] }),
@@ -25,7 +26,7 @@ export const Route = createFileRoute("/_authenticated/suppliers")({
 });
 
 const OTHER_MATERIAL = "অন্যান্য";
-const MATERIAL_TYPES = ["মাটি", "কয়লা", "তুষ", "বালু", "ডিজেল", "ইঞ্জিন মালামাল", "গাড়ি ভাড়া", OTHER_MATERIAL];
+const MATERIAL_TYPES = ["মাটি", "কয়লা", "তুষ", "বালু", "ডিজেল", "ইঞ্জিন মালামাল", OTHER_MATERIAL];
 
 type SupplierForm = {
   id?: string;
@@ -59,7 +60,8 @@ function SuppliersPage() {
     queryFn: async () => {
       const { data, error } = await sdb.from("suppliers").select("*").order("name");
       if (error) throw error;
-      return data ?? [];
+      // land owners, sweepers and vehicle owners are kept in their own folders on /purchases
+      return (data ?? []).filter((x: any) => !CONTRACT_TYPES.has(x.material_type ?? ""));
     },
   });
 

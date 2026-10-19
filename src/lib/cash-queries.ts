@@ -121,7 +121,7 @@ export async function fetchCashDay(dayIso: string) {
       .order("created_at", { ascending: false }),
     sdb
       .from("supplier_payments")
-      .select("id, amount, note, payment_date, method, supplier:suppliers(name)")
+      .select("id, amount, note, payment_date, method, supplier:suppliers(name, material_type)")
       .eq("payment_date", dayIso)
       .order("created_at", { ascending: false }),
     sdb
@@ -174,7 +174,7 @@ export async function fetchCashDay(dayIso: string) {
     ...((sup.data ?? []) as any[]).map((p) => ({
       id: p.id,
       kind: "supplier" as const,
-      category: `সরবরাহকারী পেমেন্ট — ${p.supplier?.name ?? "—"}${p.method === "bricks" ? " (ইট দিয়ে)" : ""}`,
+      category: `${p.supplier?.material_type === "গাড়ি ভাড়া" ? "গাড়ি ভাড়া" : p.supplier?.material_type === "জমি ভাড়া" ? "জমি ভাড়া" : p.supplier?.material_type === "পরিচ্ছন্ন কর্মী" ? "পরিচ্ছন্ন কর্মী" : "সরবরাহকারী পেমেন্ট"} — ${p.supplier?.name ?? "—"}${p.method === "bricks" ? " (ইট দিয়ে)" : ""}`,
       amount: Number(p.amount),
       note: p.note,
       date: p.payment_date,
@@ -217,7 +217,7 @@ export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHis
     ...A(exp).map((r) => ({ id: `e${r.id}`, date: r.expense_date, dir: "out" as const, head: r.category, detail: r.note ?? "", amount: Number(r.amount) })),
     ...A(sar).map((r) => ({ id: `s${r.id}`, date: r.payment_date, dir: "out" as const, head: "সরদার পেমেন্ট", detail: r.sardar?.name ?? "—", amount: Number(r.amount) })),
     ...A(wrk).map((r) => ({ id: `w${r.id}`, date: r.payment_date, dir: "out" as const, head: r.worker?.role === "daily" ? "ডেলি শ্রমিক" : "বেতন (মেস্তুরি/ম্যানেজার)", detail: r.worker?.name ?? "—", amount: Number(r.amount) })),
-    ...A(sup).map((r) => ({ id: `p${r.id}`, date: r.payment_date, dir: "out" as const, head: r.method === "bricks" ? "বাকি পরিশোধ — ইট দিয়ে" : r.supplier?.material_type === "জমি ভাড়া" ? "জমি ভাড়া পরিশোধ" : r.supplier?.material_type === "পরিচ্ছন্ন কর্মী" ? "পরিচ্ছন্ন কর্মী পরিশোধ" : "মালামাল ক্রয় পরিশোধ", detail: r.supplier?.name ?? "—", amount: Number(r.amount) })),
+    ...A(sup).map((r) => ({ id: `p${r.id}`, date: r.payment_date, dir: "out" as const, head: r.method === "bricks" ? "বাকি পরিশোধ — ইট দিয়ে" : r.supplier?.material_type === "জমি ভাড়া" ? "জমি ভাড়া পরিশোধ" : r.supplier?.material_type === "পরিচ্ছন্ন কর্মী" ? "পরিচ্ছন্ন কর্মী পরিশোধ" : r.supplier?.material_type === "গাড়ি ভাড়া" ? "গাড়ি ভাড়া পরিশোধ" : "মালামাল ক্রয় পরিশোধ", detail: r.supplier?.name ?? "—", amount: Number(r.amount) })),
     ...A(own).map((r) => ({ id: `o${r.id}`, date: r.txn_date, dir: r.txn_type === "invest" ? ("in" as const) : ("out" as const), head: r.txn_type === "invest" ? "মালিকের বিনিয়োগ" : "মালিকের উত্তোলন", detail: r.owner?.name ?? "—", amount: Number(r.amount) })),
     ...A(loans).map((r) => ({ id: `l${r.id}`, date: r.loan_date, dir: r.direction === "taken" ? ("in" as const) : ("out" as const), head: r.direction === "taken" ? "ঋণ নেওয়া" : "ঋণ দেওয়া", detail: r.party_name, amount: Number(r.amount) })),
     ...A(lpay).map((r) => ({ id: `lp${r.id}`, date: r.payment_date, dir: r.loan?.direction === "given" ? ("in" as const) : ("out" as const), head: r.loan?.direction === "given" ? "দেওয়া ঋণ ফেরত" : "নেওয়া ঋণ পরিশোধ", detail: r.loan?.party_name ?? "—", amount: Number(r.amount) })),

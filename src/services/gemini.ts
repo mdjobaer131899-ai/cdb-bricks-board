@@ -938,9 +938,20 @@ function linkedOpening(s: KilnSnapshot, by: { customerId?: string; sardarId?: st
   return list.map(openingDetail).join("\n\n");
 }
 
+/** people kept in the contract folders on /purchases (suppliers.material_type) */
+const CONTRACT_PERSON: Record<string, { icon: string; who: string; bill: string }> = {
+  "গাড়ি ভাড়া": { icon: "🚚", who: "গাড়ির মালিক", bill: "মোট গাড়ি ভাড়া" },
+  "জমি ভাড়া": { icon: "🌾", who: "জমির মালিক", bill: "মোট জমি ভাড়া" },
+  "পরিচ্ছন্ন কর্মী": { icon: "🧹", who: "পরিচ্ছন্ন কর্মী", bill: "মোট চুক্তি" },
+};
+const supplierWho = (sp: SupplierLine) => CONTRACT_PERSON[sp.material]?.who ?? "সাপ্লায়ার";
+
 function supplierDetail(sp: SupplierLine): string {
-  const lines = [`🚛 সাপ্লায়ার: ${sp.name}${sp.material ? ` (${sp.material})` : ""}${sp.phone ? ` 📞 ${sp.phone}` : ""}`];
-  lines.push(`• মোট কেনা: ${tk(sp.purchase)}`);
+  const c = CONTRACT_PERSON[sp.material];
+  const lines = [c
+    ? `${c.icon} ${c.who}: ${sp.name}${sp.phone ? ` 📞 ${sp.phone}` : ""}`
+    : `🚛 সাপ্লায়ার: ${sp.name}${sp.material ? ` (${sp.material})` : ""}${sp.phone ? ` 📞 ${sp.phone}` : ""}`];
+  lines.push(`• ${c ? c.bill : "মোট কেনা"}: ${tk(sp.purchase)}`);
   lines.push(`• মোট পরিশোধ: ${tk(sp.paid)}`);
   if (sp.due > 0.5) lines.push(`👉 ${sp.name} আমাদের কাছে আরও ${tk(sp.due)} পাবে`);
   else if (sp.due < -0.5) lines.push(`👉 ${sp.name}-কে ${tk(-sp.due)} বেশি দেওয়া হয়েছে`);
@@ -988,11 +999,13 @@ function workerList(s: KilnSnapshot, daily: boolean | null): string {
 }
 
 function supplierList(s: KilnSnapshot): string {
-  if (!s.suppliers.length) return "🚛 এখনো কোনো সাপ্লায়ার যোগ করা হয়নি।";
-  const totalDue = s.suppliers.reduce((a, x) => a + Math.max(0, x.due), 0);
+  // vehicle/land owners and sweepers have their own folders, so they are not listed as suppliers
+  const list = s.suppliers.filter((x) => !CONTRACT_PERSON[x.material]);
+  if (!list.length) return "🚛 এখনো কোনো সাপ্লায়ার যোগ করা হয়নি।";
+  const totalDue = list.reduce((a, x) => a + Math.max(0, x.due), 0);
   return [
-    `🚛 সাপ্লায়ার মোট ${bn(s.suppliers.length)} জন, তাদের মোট পাওনা ${tk(totalDue)}:`,
-    listLines(s.suppliers, (x, i) => `${bn(i + 1)}. ${x.name}${x.material ? ` (${x.material})` : ""}: কেনা ${tk(x.purchase)}, দেওয়া ${tk(x.paid)}, পাবে ${tk(x.due)}`),
+    `🚛 সাপ্লায়ার মোট ${bn(list.length)} জন, তাদের মোট পাওনা ${tk(totalDue)}:`,
+    listLines(list, (x, i) => `${bn(i + 1)}. ${x.name}${x.material ? ` (${x.material})` : ""}: কেনা ${tk(x.purchase)}, দেওয়া ${tk(x.paid)}, পাবে ${tk(x.due)}`),
   ].join("\n");
 }
 
@@ -1052,9 +1065,18 @@ function loanBlock(s: KilnSnapshot): string {
 }
 
 function vehicleBlock(s: KilnSnapshot): string {
+  const lines: string[] = [];
+  // hired vehicles: owners in the গাড়ি ভাড়া folder (all-time rent − payments)
+  const owners = s.suppliers.filter((x) => x.material === "গাড়ি ভাড়া");
+  if (owners.length) {
+    const sum = (k: "purchase" | "paid" | "due") => owners.reduce((a, x) => a + x[k], 0);
+    lines.push(`🚚 গাড়ি ভাড়া — গাড়ির মালিক ${bn(owners.length)} জন`);
+    lines.push(`• মোট ভাড়া ${tk(sum("purchase"))}, দেওয়া ${tk(sum("paid"))}, বাকি ${tk(sum("due"))}`);
+    lines.push(listLines(owners, (x, i) => `${bn(i + 1)}. ${x.name}: ভাড়া ${tk(x.purchase)}, দেওয়া ${tk(x.paid)}, ${x.due < -0.5 ? `অগ্রিম ${tk(-x.due)}` : `বাকি ${tk(x.due)}`}`));
+  }
   const active = s.vehicles.filter((v) => v.active);
-  if (!active.length) return "🚚 কোনো সক্রিয় গাড়ি যোগ করা নেই।";
-  return [`🚚 সক্রিয় গাড়ি ${bn(active.length)}টি:`, ...active.map((v) => `   • ${v.no} (${v.type})${v.driver ? `, চালক ${v.driver}` : ""}`)].join("\n");
+  if (active.length) lines.push([`🚚 নিজেদের গাড়ি ${bn(active.length)}টি:`, ...active.map((v) => `   • ${v.no} (${v.type})${v.driver ? `, চালক ${v.driver}` : ""}`)].join("\n"));
+  return lines.length ? lines.join("\n") : "🚚 এখনো কোনো গাড়ির মালিক বা গাড়ি যোগ করা নেই। কেনাকাটা পাতার \"গাড়ি ভাড়া\" ফোল্ডারে যোগ করুন।";
 }
 
 function overallSummary(s: KilnSnapshot, p?: Period): string {
@@ -1142,7 +1164,7 @@ function nameScore(name: string, msg: string, words: Set<string>): number {
 /** Words that say which list the person is in ("আলী মুনসুর গ্রাহক") */
 const KIND_HINT: Array<[PartyHit["kind"], string[]]> = [
   ["customer", ["গ্রাহক", "কাস্টমার", "ক্রেতা", "customer"]],
-  ["supplier", ["সাপ্লায়ার", "সাপ্লায়ার", "সাপ্লাইয়ার", "supplier"]],
+  ["supplier", ["সাপ্লায়ার", "সাপ্লায়ার", "সাপ্লাইয়ার", "supplier", "গাড়ি", "গাড়ি", "ট্রিপ", "ভাড়া"]],
   ["sardar", ["সর্দার", "সরদার", "sardar"]],
   ["worker", ["শ্রমিক", "স্টাফ", "কর্মচারী", "বেতন"]],
   ["opening", ["পূর্বের", "জের", "পুরোনো বকেয়া"]],
@@ -1287,7 +1309,7 @@ function instantReply(rawMsg: string, s: KilnSnapshot, w: WeatherInfo | null): s
   if (hits.length > 1 && hits.length <= 6) {
     return [
       "এই নামে একাধিক জন পেয়েছি:",
-      ...hits.map((h, i) => `${bn(i + 1)}. ${h.item.name} (${KIND_BN[h.kind]})`),
+      ...hits.map((h, i) => `${bn(i + 1)}. ${h.item.name} (${h.kind === "supplier" ? supplierWho(h.item) : KIND_BN[h.kind]})`),
       "পুরো নাম লিখে আবার জিজ্ঞেস করুন।",
     ].join("\n");
   }
@@ -1412,7 +1434,7 @@ function buildAiContext(s: KilnSnapshot, w: WeatherInfo | null): string {
     `[শ্রমিক ও স্টাফ — ${s.workers.length} জন; বাকি ধনাত্মক = সে পাবে]`,
     ...workers,
     "",
-    `[সাপ্লায়ার — ${s.suppliers.length} জন; বাকি = সাপ্লায়ার পাবে]`,
+    `[সাপ্লায়ার, গাড়ির মালিক, জমির মালিক ও পরিচ্ছন্ন কর্মী — ${s.suppliers.length} জন; ধরন "গাড়ি ভাড়া" = গাড়ির মালিক (ট্রিপের ভাড়া), "জমি ভাড়া" = জমির মালিক; বাকি = সে পাবে]`,
     ...suppliers,
     "",
     "[পূর্বের জের: নাম|ধরন|মোট|শোধ|বাকি|পরিশোধের তারিখ:টাকা]",
@@ -1459,7 +1481,7 @@ data-এর ফিল্ড:
 - SARDAR_PAYMENT: sardarName, amount, paymentType ("advance" = দাদন/অগ্রিম, "payment" = মজুরি/পাওনা পরিশোধ), description, date
 - WORKER_PAYMENT: workerName, amount, description, date (ডেলি শ্রমিক, ম্যানেজার, মেস্তুরি বা অন্য স্টাফকে টাকা দিলে; সর্দারকে নয়)
 - KACHA_BRICK: sardarName, quantity, rate (প্রতি হাজার ইটের মজুরি, বললে), description, date
-- SUPPLIER_PAYMENT: supplierName, expenseCategory, amount, description, date
+- SUPPLIER_PAYMENT: supplierName, expenseCategory, amount, description, date (সাপ্লায়ার, গাড়ির মালিককে গাড়ি ভাড়া, জমির মালিককে জমি ভাড়া বা পরিচ্ছন্ন কর্মীকে টাকা দিলে; নাম ওই তালিকা থেকে)
 - QUERY: data খালি রাখবে
 date সবসময় YYYY-MM-DD; না বললে আজকের তারিখ।
 customerName, sardarName, workerName, supplierName খাতার তালিকার নামের সাথে হুবহু মিলিয়ে লিখবে। সর্দারের তালিকার কাউকে টাকা দিলে SARDAR_PAYMENT, শ্রমিক/স্টাফ তালিকার কাউকে দিলে WORKER_PAYMENT। reply-তে যার নাম বলবে data-তেও ঠিক সেই নাম দেবে, অন্য কারো নাম কখনো নয়। খাতায় নেই এমন নাম হলে reply-তে জানাবে যে আগে সেই নাম যোগ করতে হবে।

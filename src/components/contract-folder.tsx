@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeft, Banknote, History, LandPlot, Loader2, Pencil, Phone, Plus, Printer, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Banknote, History, LandPlot, Loader2, Pencil, Phone, Plus, Printer, Sparkles, Trash2, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +22,8 @@ import { printTable } from "@/lib/print-table";
  * Contract-style payables kept as folders on the purchases page:
  *  - জমি ভাড়া: land owners, rent per season
  *  - পরিচ্ছন্ন কর্মী: sweepers on a fixed season contract, paid weekly
+ *  - গাড়ি ভাড়া: vehicle owners paid per trip (quantity = trips, unit "ট্রিপ", unit_price = rate);
+ *    part may be paid on the spot, the rest stays due. Owners are often also customers.
  * A person is a suppliers row with material_type = cfg.type; what they are owed is a
  * purchases row with item_name = cfg.item; money given is a supplier_payments row.
  * So hand cash, the cash book, profit/loss and dues all count it with no extra table.
@@ -29,7 +31,7 @@ import { printTable } from "@/lib/print-table";
  * season's cost but still adds to what is owed.
  */
 export type ContractConfig = {
-  key: "land" | "clean";
+  key: "land" | "clean" | "vehicle";
   type: string; // suppliers.material_type
   item: string; // purchases.item_name
   title: string;
@@ -45,6 +47,8 @@ export type ContractConfig = {
   emptyText: string;
   icon: LucideIcon;
   chip: string;
+  /** bills are trips × rate per trip, with an optional "paid now" */
+  trips?: boolean;
 };
 
 export const LAND_CONTRACT: ContractConfig = {
@@ -85,13 +89,35 @@ export const CLEANER_CONTRACT: ContractConfig = {
   chip: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200",
 };
 
-export const CONTRACTS = [LAND_CONTRACT, CLEANER_CONTRACT];
+export const VEHICLE_CONTRACT: ContractConfig = {
+  key: "vehicle",
+  type: "গাড়ি ভাড়া",
+  item: "গাড়ি ভাড়া",
+  title: "গাড়ি ভাড়া",
+  subtitle: "কোন গাড়ি কত ট্রিপ দিল, কত ভাড়া, কত দেওয়া হলো, কত বাকি",
+  person: "গাড়ির মালিক",
+  personOf: "গাড়ির মালিকের",
+  bill: "ভাড়া",
+  billLong: "এই মৌসুমের ভাড়া",
+  billHelp: "কত ট্রিপ, প্রতি ট্রিপ কত টাকা আর কী কাজ। সাথে সাথে কিছু টাকা দিলে নিচে লিখুন, বাকিটা বাকি থাকবে।",
+  infoLabel: "গাড়ির বিবরণ (নম্বর, ধরন)",
+  showArea: false,
+  payTitle: "গাড়ির মালিককে টাকা দিন",
+  emptyText: "এখনো কোনো গাড়ির মালিক যোগ করা হয়নি। উপরে \"গাড়ির মালিক\" চেপে নাম দিন, তারপর \"ভাড়া লিখুন\" থেকে ট্রিপ লিখুন।",
+  icon: Truck,
+  chip: "bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-200",
+  trips: true,
+};
+
+export const CONTRACTS = [LAND_CONTRACT, CLEANER_CONTRACT, VEHICLE_CONTRACT];
 /** purchases.item_name values that belong to a contract folder, not to materials */
 export const CONTRACT_ITEMS = new Set(CONTRACTS.map((c) => c.item));
 /** suppliers.material_type values of contract folders */
 export const CONTRACT_TYPES = new Set(CONTRACTS.map((c) => c.type));
 
 const PREV_NOTE = "পূর্বের বকেয়া";
+const TRIP = "ট্রিপ";
+const TRIP_WORK = ["বালু আনা", "মাটি আনা", "বালু ফেলা", "মাটি ফেলা", "কয়লা আনা", "ইট পৌঁছানো"];
 const LAND_UNITS = ["শতাংশ", "বিঘা", "কাঠা", "একর"];
 const METHODS: Array<[string, string]> = [["cash", "নগদ"], ["bkash", "বিকাশ"], ["nagad", "নগদ (মোবাইল)"], ["bank", "ব্যাংক"]];
 
@@ -99,11 +125,11 @@ const tk = (n: number) => `৳${bn(Math.round(n))}`;
 const dayBefore = (d: string) => new Date(new Date(`${d}T00:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10);
 
 type Owner = { id: string; name: string; phone: string | null; address: string | null; note: string | null };
-type Bill = { id: string; supplier_id: string | null; purchase_date: string; quantity: number; unit: string | null; total_amount: number; note: string | null };
+type Bill = { id: string; supplier_id: string | null; purchase_date: string; quantity: number; unit: string | null; unit_price: number; total_amount: number; note: string | null };
 type Pay = { id: string; supplier_id: string; payment_date: string; amount: number; method: string | null; note: string | null };
 
 type OwnerForm = { id?: string; name: string; phone: string; land: string; note: string; prevDue: string; rent: string };
-type BillForm = { id?: string; owner_id: string; kind: "rent" | "prev"; date: string; area: string; unit: string; amount: string; note: string };
+type BillForm = { id?: string; owner_id: string; kind: "rent" | "prev"; date: string; area: string; unit: string; amount: string; note: string; trips: string; rate: string; paid: string };
 type PayForm = { id?: string; owner_id: string; date: string; amount: string; method: string; note: string };
 
 export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: () => void }) {
@@ -125,11 +151,21 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
     },
   });
   const ownerIds = (ownersQ.data ?? []).map((o) => o.id);
+  // vehicle owners are often customers too: suggest their names so the spelling matches
+  const customersQ = useQuery({
+    queryKey: ["contract-customer-names"],
+    enabled: !!cfg.trips,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("customers").select("name").order("name");
+      if (error) throw error;
+      return (data ?? []).map((c) => c.name as string);
+    },
+  });
   // all-time: a due does not reset with the season
   const billsQ = useQuery({
     queryKey: ["contract-bills", cfg.key],
     queryFn: () => fetchAllRows<Bill>(() => supabase.from("purchases")
-      .select("id, supplier_id, purchase_date, quantity, unit, total_amount, note").eq("item_name", cfg.item).order("id")),
+      .select("id, supplier_id, purchase_date, quantity, unit, unit_price, total_amount, note").eq("item_name", cfg.item).order("id")),
   });
   const paysQ = useQuery({
     queryKey: ["contract-payments", cfg.key, ownerIds.join(",")],
@@ -146,16 +182,19 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
   const isPrev = (b: Bill) => (seasonStart ? b.purchase_date < seasonStart : (b.note ?? "").startsWith(PREV_NOTE));
 
   const stats = useMemo(() => {
-    const m = new Map<string, { prev: number; rent: number; paid: number; due: number; area: string; lastDate: string; lastAmount: number; week: number }>();
-    for (const o of owners) m.set(o.id, { prev: 0, rent: 0, paid: 0, due: 0, area: "", lastDate: "", lastAmount: 0, week: 0 });
+    const m = new Map<string, { prev: number; rent: number; paid: number; due: number; area: string; lastDate: string; lastAmount: number; week: number; trips: number; rate: number; rateDate: string }>();
+    for (const o of owners) m.set(o.id, { prev: 0, rent: 0, paid: 0, due: 0, area: "", lastDate: "", lastAmount: 0, week: 0, trips: 0, rate: 0, rateDate: "" });
     for (const b of bills) {
       const s = b.supplier_id ? m.get(b.supplier_id) : undefined;
       if (!s) continue;
       if (isPrev(b)) s.prev += Number(b.total_amount || 0);
       else {
         s.rent += Number(b.total_amount || 0);
-        if (b.unit && Number(b.quantity) > 0) s.area = `${bn(Number(b.quantity))} ${b.unit}`;
+        if (b.unit === TRIP) s.trips += Number(b.quantity || 0);
+        else if (b.unit && Number(b.quantity) > 0) s.area = `${bn(Number(b.quantity))} ${b.unit}`;
       }
+      // the owner's latest rate per trip pre-fills the next bill
+      if (b.unit === TRIP && Number(b.unit_price) > 0 && b.purchase_date >= s.rateDate) { s.rate = Number(b.unit_price); s.rateDate = b.purchase_date; }
     }
     for (const p of pays) {
       const s = m.get(p.supplier_id);
@@ -169,7 +208,8 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owners, bills, pays, seasonStart]);
 
-  const total = [...stats.values()].reduce((a, s) => ({ prev: a.prev + s.prev, rent: a.rent + s.rent, paid: a.paid + s.paid, due: a.due + s.due }), { prev: 0, rent: 0, paid: 0, due: 0 });
+  const total = [...stats.values()].reduce((a, s) => ({ prev: a.prev + s.prev, rent: a.rent + s.rent, paid: a.paid + s.paid, due: a.due + s.due, trips: a.trips + s.trips }), { prev: 0, rent: 0, paid: 0, due: 0, trips: 0 });
+  const lastTripRate = [...bills].filter((b) => b.unit === TRIP && Number(b.unit_price) > 0).sort((a, b) => (a.purchase_date < b.purchase_date ? 1 : -1))[0]?.unit_price ?? 0;
   const loading = ownersQ.isLoading || billsQ.isLoading || (ownerIds.length > 0 && paysQ.isLoading);
 
   const [ownerForm, setOwnerForm] = useState<OwnerForm | null>(null);
@@ -220,23 +260,37 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
   const saveBill = useMutation({
     mutationFn: async () => {
       const f = billForm!;
-      const amount = Number(f.amount);
+      const tripBill = !!cfg.trips && f.kind === "rent";
+      const trips = Number(f.trips || 0), rate = Number(f.rate || 0);
+      if (tripBill && !(trips > 0)) throw new Error("কত ট্রিপ, লিখুন");
+      if (tripBill && !(rate > 0)) throw new Error("প্রতি ট্রিপের ভাড়া লিখুন");
+      const amount = tripBill ? Math.round(trips * rate * 100) / 100 : Number(f.amount);
+      const paidNow = tripBill && !f.id ? Number(f.paid || 0) : 0;
       if (!f.owner_id) throw new Error(`${cfg.person} বেছে নিন`);
       if (!(amount > 0)) throw new Error("টাকার পরিমাণ দিন");
       if (!f.date) throw new Error("তারিখ দিন");
+      if (paidNow < 0) throw new Error("দেওয়া টাকা ঠিক করে লিখুন");
       if (f.kind === "prev" && seasonStart && f.date >= seasonStart) throw new Error("পূর্বের বকেয়ার তারিখ এই মৌসুম শুরুর আগে হতে হবে");
-      const area = Number(f.area || 0);
+      const area = tripBill ? trips : Number(f.area || 0);
+      const unit = tripBill ? TRIP : f.unit;
       if (f.id) {
         const qty = area > 0 ? area : 1;
         const { error } = await supabase.from("purchases").update({
-          supplier_id: f.owner_id, purchase_date: f.date, quantity: qty, unit: area > 0 ? f.unit : null,
+          supplier_id: f.owner_id, purchase_date: f.date, quantity: qty, unit: area > 0 ? unit : null,
           unit_price: Math.round((amount / qty) * 100) / 100, total_amount: amount,
           note: f.kind === "prev" ? [PREV_NOTE, f.note.replace(new RegExp(`^${PREV_NOTE}( — )?`), "")].filter(Boolean).join(" — ") : f.note || null,
         }).eq("id", f.id);
         if (error) throw error;
         return;
       }
-      await insertBill(f.owner_id, f.kind, f.date, amount, area, f.unit, f.note);
+      await insertBill(f.owner_id, f.kind, f.date, amount, area, unit, f.note);
+      // money handed over with the bill: a normal payment on the same day
+      if (paidNow > 0) {
+        const { error } = await supabase.from("supplier_payments").insert({
+          supplier_id: f.owner_id, amount: paidNow, payment_date: f.date, method: "cash", note: `${cfg.item} পরিশোধ`, created_by: uid(),
+        });
+        if (error) throw new Error(`ভাড়া লেখা হয়েছে, কিন্তু দেওয়া টাকা সেভ হয়নি। "টাকা দিন" থেকে আবার দিন। (${error.message})`);
+      }
     },
     onSuccess: () => { toast.success("সংরক্ষিত"); setBillForm(null); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
@@ -268,8 +322,9 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
     onError: (e: Error) => toast.error(e.message.includes("foreign key") ? `এই ${cfg.personOf} হিসাব আছে, আগে সেগুলো মুছুন` : e.message),
   });
 
+  const rateFor = (owner_id: string) => String((owner_id && stats.get(owner_id)?.rate) || lastTripRate || "");
   const newBill = (owner_id = "", kind: BillForm["kind"] = "rent"): BillForm =>
-    ({ owner_id, kind, date: kind === "prev" ? prevDate : cfg.key === "clean" && seasonStart ? seasonStart : today, area: "", unit: LAND_UNITS[0], amount: "", note: "" });
+    ({ owner_id, kind, date: kind === "prev" ? prevDate : cfg.key === "clean" && seasonStart ? seasonStart : today, area: "", unit: LAND_UNITS[0], amount: "", note: "", trips: "", rate: cfg.trips ? rateFor(owner_id) : "", paid: "" });
   // a weekly payer usually gives the same amount, so start from the last one
   const newPay = (owner_id = ""): PayForm => {
     const last = owner_id && cfg.key === "clean" ? stats.get(owner_id)?.lastAmount : 0;
@@ -279,11 +334,15 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
   const print = () => printTable({
     title: `${cfg.title} — হিসাব`,
     subtitle: season ? `${bnDate(season.from)} – ${bnDate(season.to)}` : undefined,
-    headers: [cfg.person, cfg.showArea ? "জমি" : "বিবরণ", "পূর্বের বকেয়া", cfg.billLong, "পরিশোধ", "বাকি"],
-    rightCols: [2, 3, 4, 5],
+    headers: cfg.trips
+      ? [cfg.person, "গাড়ি", "পূর্বের বকেয়া", TRIP, cfg.billLong, "পরিশোধ", "বাকি"]
+      : [cfg.person, cfg.showArea ? "জমি" : "বিবরণ", "পূর্বের বকেয়া", cfg.billLong, "পরিশোধ", "বাকি"],
+    rightCols: cfg.trips ? [2, 3, 4, 5, 6] : [2, 3, 4, 5],
     rows: owners.map((o) => {
       const s = stats.get(o.id)!;
-      return [o.name, s.area || o.address || "", tk(s.prev), tk(s.rent), tk(s.paid), tk(s.due)];
+      return cfg.trips
+        ? [o.name, o.address || "", tk(s.prev), bn(s.trips), tk(s.rent), tk(s.paid), tk(s.due)]
+        : [o.name, s.area || o.address || "", tk(s.prev), tk(s.rent), tk(s.paid), tk(s.due)];
     }),
     totals: [["মোট পাবে", tk(total.prev + total.rent)], ["মোট পরিশোধ", tk(total.paid)], ["মোট বাকি", tk(total.due)]],
   });
@@ -313,8 +372,8 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
         )}
         <div className="mt-3.5 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
-            <div className="text-[11px] font-semibold text-stone-300">পূর্বের বকেয়া</div>
-            <div className="num text-sm font-bold">{tk(total.prev)}</div>
+            <div className="text-[11px] font-semibold text-stone-300">{cfg.trips ? "এই মৌসুমে ট্রিপ" : "পূর্বের বকেয়া"}</div>
+            <div className="num text-sm font-bold">{cfg.trips ? bn(total.trips) : tk(total.prev)}</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
             <div className="text-[11px] font-semibold text-stone-300">{cfg.billLong}</div>
@@ -325,6 +384,9 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
             <div className="num text-sm font-bold text-emerald-300">{tk(total.paid)}</div>
           </div>
         </div>
+        {cfg.trips && total.prev > 0 && (
+          <div className="num mt-2 text-xs text-stone-300">পূর্বের বকেয়া {tk(total.prev)} বাকির মধ্যে ধরা আছে</div>
+        )}
       </section>
 
       <div className="grid grid-cols-2 gap-2">
@@ -355,7 +417,7 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
                   <span className="block break-words text-base font-bold leading-snug">{o.name}</span>
                   <span className="block text-xs text-muted-foreground">{[s.area, o.address].filter(Boolean).join(" · ") || "বিবরণ নেই"}</span>
                   <span className="num mt-1 block text-xs text-muted-foreground">
-                    {s.prev > 0 && <>পূর্বের {tk(s.prev)} · </>}{cfg.bill} {tk(s.rent)} · দেওয়া {tk(s.paid)}
+                    {s.prev > 0 && <>পূর্বের {tk(s.prev)} · </>}{cfg.trips && <>{bn(s.trips)} {TRIP} · </>}{cfg.bill} {tk(s.rent)} · দেওয়া {tk(s.paid)}
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
@@ -388,18 +450,27 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{ownerForm?.id ? `${cfg.person} সম্পাদনা` : `নতুন ${cfg.person}`}</DialogTitle>
-            {!ownerForm?.id && <DialogDescription>নামের সাথে {cfg.billLong} আর পূর্বের বকেয়া (থাকলে) একসাথে লিখে দিতে পারেন।</DialogDescription>}
+            {!ownerForm?.id && <DialogDescription>{cfg.trips ? `নাম, ফোন আর পূর্বের বকেয়া (থাকলে) দিন। ট্রিপ পরে "${cfg.bill} লিখুন" থেকে লিখবেন।` : <>নামের সাথে {cfg.billLong} আর পূর্বের বকেয়া (থাকলে) একসাথে লিখে দিতে পারেন।</>}</DialogDescription>}
           </DialogHeader>
           {ownerForm && (
             <div className="space-y-3">
-              <div className="space-y-1.5"><Label>{cfg.personOf} নাম *</Label><Input className="h-11" value={ownerForm.name} onChange={(e) => setOwnerForm({ ...ownerForm, name: e.target.value })} /></div>
+              <div className="space-y-1.5">
+                <Label>{cfg.personOf} নাম *</Label>
+                <Input className="h-11" list={cfg.trips ? "contract-customer-names" : undefined} value={ownerForm.name} onChange={(e) => setOwnerForm({ ...ownerForm, name: e.target.value })} />
+                {cfg.trips && (
+                  <>
+                    <datalist id="contract-customer-names">{(customersQ.data ?? []).map((n) => <option key={n} value={n} />)}</datalist>
+                    <p className="text-xs text-muted-foreground">গ্রাহক হলে তালিকা থেকে নামটা বেছে নিন, তাতে বানান এক থাকবে।</p>
+                  </>
+                )}
+              </div>
               <div className="space-y-1.5"><Label>ফোন</Label><Input className="h-11" inputMode="tel" value={ownerForm.phone} onChange={(e) => setOwnerForm({ ...ownerForm, phone: e.target.value })} /></div>
               <div className="space-y-1.5"><Label>{cfg.infoLabel}</Label><Input className="h-11" value={ownerForm.land} onChange={(e) => setOwnerForm({ ...ownerForm, land: e.target.value })} /></div>
               {!ownerForm.id && (
                 <div className="grid grid-cols-2 gap-3 rounded-2xl border p-3">
-                  <div className="space-y-1.5"><Label>{cfg.billLong} (৳)</Label><Input className="h-11" type="number" inputMode="decimal" value={ownerForm.rent} onChange={(e) => setOwnerForm({ ...ownerForm, rent: e.target.value })} /></div>
+                  {!cfg.trips && <div className="space-y-1.5"><Label>{cfg.billLong} (৳)</Label><Input className="h-11" type="number" inputMode="decimal" value={ownerForm.rent} onChange={(e) => setOwnerForm({ ...ownerForm, rent: e.target.value })} /></div>}
                   <div className="space-y-1.5"><Label>পূর্বের বকেয়া (৳)</Label><Input className="h-11" type="number" inputMode="decimal" value={ownerForm.prevDue} onChange={(e) => setOwnerForm({ ...ownerForm, prevDue: e.target.value })} /></div>
-                  <p className="col-span-2 text-xs text-muted-foreground">খালি রাখলে পরে "{cfg.bill} লিখুন" থেকে দিতে পারবেন।</p>
+                  {!cfg.trips && <p className="col-span-2 text-xs text-muted-foreground">খালি রাখলে পরে "{cfg.bill} লিখুন" থেকে দিতে পারবেন।</p>}
                 </div>
               )}
               <div className="space-y-1.5"><Label>নোট</Label><Textarea rows={2} value={ownerForm.note} onChange={(e) => setOwnerForm({ ...ownerForm, note: e.target.value })} /></div>
@@ -416,7 +487,7 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
       <Dialog open={!!billForm} onOpenChange={(o) => !o && setBillForm(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{billForm?.id ? "সম্পাদনা" : billForm?.kind === "prev" ? "পূর্বের বকেয়া" : `${cfg.billLong} লিখুন`}</DialogTitle>
+            <DialogTitle>{billForm?.id ? "সম্পাদনা" : billForm?.kind === "prev" ? "পূর্বের বকেয়া" : cfg.trips ? `${cfg.bill} লিখুন` : `${cfg.billLong} লিখুন`}</DialogTitle>
             <DialogDescription>
               {billForm?.kind === "prev" ? "আগের মৌসুমের যে টাকা এখনো দেওয়া বাকি। এটা এই মৌসুমের খরচে ধরা হবে না, শুধু বাকিতে যোগ হবে।" : cfg.billHelp}
             </DialogDescription>
@@ -431,14 +502,53 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
                   ))}
                 </div>
               )}
-              <OwnerSelect label={cfg.person} owners={owners} value={billForm.owner_id} onChange={(v) => setBillForm({ ...billForm, owner_id: v })} />
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label>টাকা *</Label><Input className="h-11" type="number" inputMode="decimal" value={billForm.amount} onChange={(e) => setBillForm({ ...billForm, amount: e.target.value })} /></div>
-                <div className="space-y-1.5">
-                  <Label>{billForm.kind === "prev" ? "কোন তারিখ পর্যন্ত" : "তারিখ"}</Label>
-                  <Input className="h-11" type="date" value={billForm.date} max={billForm.kind === "prev" && seasonStart ? prevDate : undefined} onChange={(e) => setBillForm({ ...billForm, date: e.target.value })} />
+              <OwnerSelect label={cfg.person} owners={owners} value={billForm.owner_id}
+                onChange={(v) => setBillForm({ ...billForm, owner_id: v, rate: cfg.trips && !billForm.id ? rateFor(v) : billForm.rate })} />
+              {cfg.trips && billForm.kind === "rent" ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5"><Label>কত ট্রিপ *</Label><Input className="h-11" type="number" inputMode="numeric" value={billForm.trips} onChange={(e) => setBillForm({ ...billForm, trips: e.target.value })} /></div>
+                    <div className="space-y-1.5"><Label>প্রতি ট্রিপ (৳) *</Label><Input className="h-11" type="number" inputMode="decimal" value={billForm.rate} onChange={(e) => setBillForm({ ...billForm, rate: e.target.value })} /></div>
+                  </div>
+                  <div className="space-y-1.5"><Label>তারিখ</Label><Input className="h-11" type="date" value={billForm.date} onChange={(e) => setBillForm({ ...billForm, date: e.target.value })} /></div>
+                  <p className="rounded-xl bg-muted/60 p-2.5 text-sm">
+                    মোট ভাড়া <b className="num">{tk(Number(billForm.trips || 0) * Number(billForm.rate || 0))}</b>
+                    {Number(billForm.trips) > 0 && Number(billForm.rate) > 0 && <span className="text-muted-foreground"> ({bn(Number(billForm.trips))} {TRIP} × {tk(Number(billForm.rate))})</span>}
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label>কী কাজ</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {TRIP_WORK.map((w) => (
+                        <button key={w} type="button" onClick={() => setBillForm({ ...billForm, note: w })}
+                          className={`h-9 rounded-full px-3 text-xs font-semibold ${billForm.note === w ? "bg-primary text-primary-foreground" : "border bg-background"}`}>{w}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {!billForm.id && (
+                    <div className="space-y-1.5 rounded-2xl border p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label>এখন কত দিলেন (৳)</Label>
+                        <button type="button" className="text-xs font-bold text-primary"
+                          onClick={() => setBillForm({ ...billForm, paid: String(Math.round(Number(billForm.trips || 0) * Number(billForm.rate || 0) * 100) / 100) })}>পুরোটা</button>
+                      </div>
+                      <Input className="h-11" type="number" inputMode="decimal" placeholder="না দিলে খালি রাখুন" value={billForm.paid} onChange={(e) => setBillForm({ ...billForm, paid: e.target.value })} />
+                      {Number(billForm.paid) > 0 && (
+                        <p className="num text-xs text-muted-foreground">
+                          এই ভাড়ার বাকি থাকবে {tk(Number(billForm.trips || 0) * Number(billForm.rate || 0) - Number(billForm.paid))} · ক্যাশ বইয়ে "{cfg.item} পরিশোধ" হিসেবে উঠবে
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5"><Label>টাকা *</Label><Input className="h-11" type="number" inputMode="decimal" value={billForm.amount} onChange={(e) => setBillForm({ ...billForm, amount: e.target.value })} /></div>
+                  <div className="space-y-1.5">
+                    <Label>{billForm.kind === "prev" ? "কোন তারিখ পর্যন্ত" : "তারিখ"}</Label>
+                    <Input className="h-11" type="date" value={billForm.date} max={billForm.kind === "prev" && seasonStart ? prevDate : undefined} onChange={(e) => setBillForm({ ...billForm, date: e.target.value })} />
+                  </div>
                 </div>
-              </div>
+              )}
               {billForm.kind === "rent" && cfg.showArea && (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5"><Label>জমির পরিমাণ</Label><Input className="h-11" type="number" inputMode="decimal" placeholder="ঐচ্ছিক" value={billForm.area} onChange={(e) => setBillForm({ ...billForm, area: e.target.value })} /></div>
@@ -506,7 +616,7 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
           {detail && (() => {
             const s = stats.get(detail.id)!;
             const rows = [
-              ...bills.filter((b) => b.supplier_id === detail.id).map((b) => ({ key: `b${b.id}`, date: b.purchase_date, kind: isPrev(b) ? "prev" as const : "rent" as const, label: isPrev(b) ? PREV_NOTE : `${cfg.bill}${b.unit && Number(b.quantity) > 0 ? ` (${bn(Number(b.quantity))} ${b.unit})` : ""}`, plus: Number(b.total_amount), minus: 0, note: b.note, bill: b, pay: null as Pay | null })),
+              ...bills.filter((b) => b.supplier_id === detail.id).map((b) => ({ key: `b${b.id}`, date: b.purchase_date, kind: isPrev(b) ? "prev" as const : "rent" as const, label: isPrev(b) ? PREV_NOTE : b.unit === TRIP ? `${cfg.bill} (${bn(Number(b.quantity))} ${TRIP} × ${tk(Number(b.unit_price))})` : `${cfg.bill}${b.unit && Number(b.quantity) > 0 ? ` (${bn(Number(b.quantity))} ${b.unit})` : ""}`, plus: Number(b.total_amount), minus: 0, note: b.note, bill: b, pay: null as Pay | null })),
               ...pays.filter((p) => p.supplier_id === detail.id).map((p) => ({ key: `p${p.id}`, date: p.payment_date, kind: "pay" as const, label: `পরিশোধ${p.method && p.method !== "cash" ? ` (${METHODS.find(([k]) => k === p.method)?.[1] ?? p.method})` : ""}`, plus: 0, minus: Number(p.amount), note: p.note, bill: null as Bill | null, pay: p })),
             ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.kind === "pay" ? 1 : -1));
             let run = 0;
@@ -544,7 +654,11 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
                       {isAdmin && (
                         <div className="flex shrink-0">
                           <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="সম্পাদনা" onClick={() => {
-                            if (r.bill) setBillForm({ id: r.bill.id, owner_id: detail.id, kind: r.kind === "prev" ? "prev" : "rent", date: r.bill.purchase_date, area: r.bill.unit ? String(r.bill.quantity) : "", unit: r.bill.unit ?? LAND_UNITS[0], amount: String(r.bill.total_amount), note: (r.bill.note ?? "").replace(new RegExp(`^${PREV_NOTE}( — )?`), "") });
+                            if (r.bill) {
+                              const trip = r.bill.unit === TRIP;
+                              setBillForm({ id: r.bill.id, owner_id: detail.id, kind: r.kind === "prev" ? "prev" : "rent", date: r.bill.purchase_date, area: r.bill.unit && !trip ? String(r.bill.quantity) : "", unit: r.bill.unit && !trip ? r.bill.unit : LAND_UNITS[0], amount: String(r.bill.total_amount), note: (r.bill.note ?? "").replace(new RegExp(`^${PREV_NOTE}( — )?`), ""),
+                                trips: trip ? String(r.bill.quantity) : cfg.trips ? "1" : "", rate: trip ? String(r.bill.unit_price) : cfg.trips ? String(r.bill.total_amount) : "", paid: "" });
+                            }
                             if (r.pay) setPayForm({ id: r.pay.id, owner_id: detail.id, date: r.pay.payment_date, amount: String(r.pay.amount), method: r.pay.method ?? "cash", note: r.pay.note ?? "" });
                           }}><Pencil className="h-4 w-4" /></Button>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" aria-label="মুছুন" onClick={() => {

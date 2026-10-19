@@ -31,7 +31,7 @@ export type ProfitLoss = {
   sales: number;
   /** Part of sales delivered against last year's advance (opening customer_brick_due) */
   salesFromOldAdvance: number;
-  costs: { expenses: number; purchases: number; landRent: number; cleaning: number; sardar: number; worker: number; vehicle: number };
+  costs: { expenses: number; purchases: number; landRent: number; cleaning: number; vehicleRent: number; sardar: number; worker: number; vehicle: number };
   totalCost: number;
   profit: number;
 };
@@ -52,9 +52,11 @@ export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLo
   const costs = {
     expenses: total(exp),
     // land rent (জমি ভাড়া) is its own line; previous-season dues are dated before the season so not counted
-    purchases: total(pur.filter((p) => p.item_name !== "জমি ভাড়া" && p.item_name !== "পরিচ্ছন্ন কর্মী"), "total_amount"),
+    purchases: total(pur.filter((p) => p.item_name !== "জমি ভাড়া" && p.item_name !== "পরিচ্ছন্ন কর্মী" && p.item_name !== "গাড়ি ভাড়া"), "total_amount"),
     landRent: total(pur.filter((p) => p.item_name === "জমি ভাড়া"), "total_amount"),
     cleaning: total(pur.filter((p) => p.item_name === "পরিচ্ছন্ন কর্মী"), "total_amount"),
+    // hired vehicles, per trip (গাড়ি ভাড়া folder); "vehicle" below is the old vehicle_expenses table
+    vehicleRent: total(pur.filter((p) => p.item_name === "গাড়ি ভাড়া"), "total_amount"),
     sardar: total(sar),
     worker: total(wrk),
     vehicle: total(veh),
@@ -63,7 +65,8 @@ export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLo
   return { sales: salesTotal, salesFromOldAdvance, costs, totalCost, profit: salesTotal - totalCost };
 }
 
-export type SupplierDue = { id: string; name: string; bill: number; paid: number; due: number };
+/** type: suppliers.material_type, e.g. "গাড়ি ভাড়া" for a vehicle owner */
+export type SupplierDue = { id: string; name: string; type: string | null; bill: number; paid: number; due: number };
 
 /**
  * What each supplier is still owed: all purchases − all supplier payments, over all time
@@ -72,7 +75,7 @@ export type SupplierDue = { id: string; name: string; bill: number; paid: number
  */
 export async function fetchSupplierDues(): Promise<{ total: number; suppliers: SupplierDue[] }> {
   const [sup, pur, pay] = await Promise.all([
-    fetchAllRows<{ id: string; name: string }>(() => supabase.from("suppliers").select("id, name").order("id")),
+    fetchAllRows<{ id: string; name: string; material_type: string | null }>(() => supabase.from("suppliers").select("id, name, material_type").order("id")),
     fetchAllRows<{ supplier_id: string | null; total_amount: number }>(() => supabase.from("purchases").select("id, supplier_id, total_amount").order("id")),
     fetchAllRows<{ supplier_id: string | null; amount: number }>(() => supabase.from("supplier_payments").select("id, supplier_id, amount").order("id")),
   ]);
@@ -81,7 +84,8 @@ export async function fetchSupplierDues(): Promise<{ total: number; suppliers: S
   const get = (id: string) => {
     let s = map.get(id);
     if (!s) {
-      s = { id, name: sup.find((x) => x.id === id)?.name ?? "নাম ছাড়া", bill: 0, paid: 0, due: 0 };
+      const row = sup.find((x) => x.id === id);
+      s = { id, name: row?.name ?? "নাম ছাড়া", type: row?.material_type ?? null, bill: 0, paid: 0, due: 0 };
       map.set(id, s);
     }
     return s;

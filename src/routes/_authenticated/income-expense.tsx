@@ -50,6 +50,7 @@ const COST_LABELS: Record<string, string> = {
   purchases: "মালামাল ও কাঁচামাল (বাকিসহ)",
   landRent: "জমি ভাড়া (বাকিসহ)",
   cleaning: "পরিচ্ছন্ন কর্মী (চুক্তি)",
+  vehicleRent: "গাড়ি ভাড়া (বাকিসহ)",
   expenses: "দৈনিক খরচ ও বিল",
   sardar: "সরদার পেমেন্ট",
   worker: "শ্রমিক ও বেতন",
@@ -67,7 +68,7 @@ const OUT_LABELS: Record<string, string> = {
   expenses: "দৈনিক খরচ ও বিল",
   sardar: "সরদার পেমেন্ট",
   worker: "শ্রমিক ও বেতন",
-  supplier: "সাপ্লায়ার, জমি ভাড়া ও পরিচ্ছন্ন কর্মী পরিশোধ",
+  supplier: "সাপ্লায়ার, গাড়ি ভাড়া, জমি ভাড়া ও পরিচ্ছন্ন কর্মী পরিশোধ",
   vehicle: "গাড়ি খরচ",
   ownerWithdraw: "মালিকের উত্তোলন",
   loanGiven: "ঋণ দেওয়া",
@@ -233,7 +234,7 @@ function IncomeExpensePage() {
           <section className="rounded-[20px] border bg-card p-4">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <h2 className="text-base font-bold">সাপ্লায়ার, জমির মালিক ও কর্মীর কাছে দেনা</h2>
+                <h2 className="text-base font-bold">সাপ্লায়ার, গাড়ি, জমির মালিক ও কর্মীর কাছে দেনা</h2>
                 <p className="text-xs text-muted-foreground">কেনা মালের বিল − দেওয়া টাকা (সব মৌসুম মিলিয়ে)</p>
               </div>
               {dues.isLoading ? <Skeleton className="h-7 w-24" /> : (
@@ -248,7 +249,7 @@ function IncomeExpensePage() {
                 <div key={s.id} className="flex items-center justify-between gap-2 py-2.5 text-sm">
                   <div className="min-w-0">
                     <div className="break-words font-semibold">{s.name}</div>
-                    <div className="num text-xs text-muted-foreground">বিল {tk(s.bill)} · দেওয়া {tk(s.paid)}</div>
+                    <div className="num text-xs text-muted-foreground">{["গাড়ি ভাড়া", "জমি ভাড়া", "পরিচ্ছন্ন কর্মী"].includes(s.type ?? "") ? `${s.type} · ` : ""}বিল {tk(s.bill)} · দেওয়া {tk(s.paid)}</div>
                   </div>
                   <b className={`num shrink-0 ${s.due > 0 ? "text-warning" : "text-info"}`}>
                     {s.due < 0 ? "অগ্রিম " : ""}{tk(Math.abs(s.due))}

@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wrench } from "lucide-react";
-import { CLEANER_CONTRACT, CONTRACT_ITEMS, CONTRACT_TYPES, ContractFolder, LAND_CONTRACT } from "@/components/contract-folder";
+import { CLEANER_CONTRACT, CONTRACT_ITEMS, CONTRACT_TYPES, ContractFolder, LAND_CONTRACT, VEHICLE_CONTRACT } from "@/components/contract-folder";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,7 +28,7 @@ import { printTable } from "@/lib/print-table";
    on the suppliers page (cash or bricks).
    ========================================================= */
 
-type Folder = "raw" | "other" | "land" | "clean";
+type Folder = "raw" | "other" | "land" | "clean" | "vehicle";
 
 export const Route = createFileRoute("/_authenticated/purchases")({
   head: () => ({
@@ -39,7 +39,7 @@ export const Route = createFileRoute("/_authenticated/purchases")({
   }),
   // Which history folder is open lives in the URL (?f=raw|other) so the phone back button returns here
   validateSearch: (search: Record<string, unknown>): { f?: Folder } =>
-    search.f === "raw" || search.f === "other" || search.f === "land" || search.f === "clean" ? { f: search.f } : {},
+    search.f === "raw" || search.f === "other" || search.f === "land" || search.f === "clean" || search.f === "vehicle" ? { f: search.f } : {},
   component: PurchasesPage,
 });
 
@@ -353,7 +353,7 @@ function PurchasesPage() {
       if (f.supplier_id === NEW_SUP) {
         const sname = f.new_supplier.trim();
         if (!sname) throw new Error(isVehicle(it.name) ? "কার গাড়ি, সেই নাম লিখুন" : "বিক্রেতার নাম লিখুন");
-        const found = (supQ.data ?? []).find((s) => s.name.trim() === sname);
+        const found = (supQ.data ?? []).find((s) => s.name.trim() === sname && !CONTRACT_TYPES.has(s.material_type ?? ""));
         if (found) supplierId = found.id;
         else {
           const { data, error } = await supabase.from("suppliers").insert({ name: sname }).select("id").single();
@@ -524,7 +524,7 @@ function PurchasesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value={NEW_SUP}>+ নতুন নাম</SelectItem>
-                            {(supQ.data ?? []).map((s) => (
+                            {(supQ.data ?? []).filter((s) => !CONTRACT_TYPES.has(s.material_type ?? "")).map((s) => (
                               <SelectItem key={s.id} value={s.id}>
                                 {s.name}
                               </SelectItem>
@@ -813,7 +813,7 @@ function PurchasesPage() {
             {(
               [
                 { key: "raw" as const, title: "কাঁচামাল", sub: "মাটি, বালু, কয়লা, তুষ, ডিজেল…", rows: rawEntries, chip: "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200", icon: Mountain },
-                { key: "other" as const, title: "অন্যান্য মালামাল ও খরচ", sub: "ইঞ্জিন মালামাল, কারেন্ট বিল, গাড়ি ভাড়া…", rows: otherEntries, chip: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200", icon: Wrench },
+                { key: "other" as const, title: "অন্যান্য মালামাল ও খরচ", sub: "ইঞ্জিন মালামাল, কারেন্ট বিল…", rows: otherEntries, chip: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200", icon: Wrench },
               ]
             ).map((t) => (
               <button
@@ -837,7 +837,7 @@ function PurchasesPage() {
                 <span className="text-[11px] font-semibold text-muted-foreground">{bn(t.rows.length)}টি এন্ট্রি · ইতিহাস দেখুন</span>
               </button>
             ))}
-            {[LAND_CONTRACT, CLEANER_CONTRACT].map((c) => (
+            {[VEHICLE_CONTRACT, LAND_CONTRACT, CLEANER_CONTRACT].map((c) => (
               <button
                 key={c.key}
                 type="button"
@@ -865,6 +865,7 @@ function PurchasesPage() {
   /* ================= folder: land rent ================= */
   if (folder === "land") return <ContractFolder key="land" cfg={LAND_CONTRACT} onBack={closeFolder} />;
   if (folder === "clean") return <ContractFolder key="clean" cfg={CLEANER_CONTRACT} onBack={closeFolder} />;
+  if (folder === "vehicle") return <ContractFolder key="vehicle" cfg={VEHICLE_CONTRACT} onBack={closeFolder} />;
 
   /* ================= folder: history only ================= */
   const folderItems = folder === "raw" ? rawItems : otherItems;
