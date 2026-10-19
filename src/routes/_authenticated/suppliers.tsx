@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
@@ -68,18 +69,21 @@ function SuppliersPage() {
     },
   });
 
+  // dues are all-time (not reset by the season), like fetchSupplierDues and the expense form
   const purchasesQ = useQuery({
-    queryKey: ["purchases-by-supplier"],
-    queryFn: async () => {
-      // সব কেনাকাটা (কাঁচামাল সহ) এখন একটাই খাতায়: purchases
-      const { data, error } = await sdb.from("purchases").select("supplier_id,total_amount");
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryKey: ["purchases-by-supplier", "all-time"],
+    queryFn: () => fetchAllRows<{ supplier_id: string | null; total_amount: number }>(() =>
+      supabase.from("purchases").select("id, supplier_id, total_amount").order("id")),
+  });
+  const paidQ = useQuery({
+    queryKey: ["supplier-payments", "all-time"],
+    queryFn: () => fetchAllRows<{ supplier_id: string; amount: number }>(() =>
+      supabase.from("supplier_payments").select("id, supplier_id, amount").order("id")),
   });
 
+  // the payment history tab lists this season's payments
   const paymentsQ = useQuery({
-    queryKey: ["supplier-payments"],
+    queryKey: ["supplier-payments", "season-list"],
     queryFn: async () => {
       const { data, error } = await sdb.from("supplier_payments").select("*").order("payment_date", { ascending: false });
       if (error) throw error;
@@ -95,13 +99,13 @@ function SuppliersPage() {
       cur.purchased += Number(p.total_amount) || 0;
       m.set(p.supplier_id, cur);
     });
-    (paymentsQ.data ?? []).forEach((p: any) => {
+    (paidQ.data ?? []).forEach((p: any) => {
       const cur = m.get(p.supplier_id) ?? { purchased: 0, paid: 0 };
       cur.paid += Number(p.amount) || 0;
       m.set(p.supplier_id, cur);
     });
     return m;
-  }, [purchasesQ.data, paymentsQ.data]);
+  }, [purchasesQ.data, paidQ.data]);
 
   // A brick settlement is undone by deleting its challan (collection and payment go with it)
   const delPayment = useMutation({
@@ -224,7 +228,8 @@ function SuppliersPage() {
                 <TableBody>
                   {filteredSuppliers.map((s: any) => {
                     const t = totals.get(s.id) ?? { purchased: 0, paid: 0 };
-                    const due = Math.max(0, t.purchased - t.paid);
+                    const net = t.purchased - t.paid;
+                    const due = Math.max(0, net);
                     return (
                       <TableRow key={s.id}>
                         <TableCell>
@@ -234,7 +239,7 @@ function SuppliersPage() {
                         <TableCell>{s.material_type ? <Badge variant="outline">{s.material_type}</Badge> : "—"}</TableCell>
                         <TableCell className="text-right tabular-nums">৳ {bn(t.purchased)}</TableCell>
                         <TableCell className="text-right tabular-nums">৳ {bn(t.paid)}</TableCell>
-                        <TableCell className="text-right tabular-nums font-medium">৳ {bn(due)}</TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${net < -0.5 ? "text-info" : ""}`}>{net < -0.5 ? `অগ্রিম ৳ ${bn(-net)}` : `৳ ${bn(due)}`}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             {isAdmin && <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Pencil className="h-3.5 w-3.5" /></Button>}

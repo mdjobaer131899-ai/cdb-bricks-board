@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
+import { fetchSupplierDues } from "@/lib/pl-queries";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
@@ -146,6 +147,10 @@ function PurchasesPage() {
     },
   });
 
+  // what is still owed is all-time (a due does not reset with the season), as on the suppliers page
+  const duesQ = useQuery({ queryKey: ["profit-loss", "supplier-dues"], queryFn: fetchSupplierDues });
+  const allTimeDue = (duesQ.data?.suppliers ?? []).filter((d) => !CONTRACT_TYPES.has(d.type ?? "")).reduce((a, d) => a + d.due, 0);
+
   const items = itemsQ.data ?? [];
   const cashItemNames = items.filter((i) => i.pay_mode === "cash").map((i) => i.name);
   const expQ = useQuery({
@@ -226,12 +231,11 @@ function PurchasesPage() {
   const totals = useMemo(() => {
     const bought = sumOf(entries);
     const cashBills = sumOf(entries.filter((e) => e.source === "expense"));
-    const credit = bought - cashBills;
     const landIds = new Set((supQ.data ?? []).filter((x: any) => CONTRACT_TYPES.has(x.material_type)).map((x: any) => x.id));
     const paid = (payQ.data ?? []).filter((p) => !landIds.has(p.supplier_id)).reduce((a, p) => a + Number(p.amount || 0), 0);
-    return { bought, paid: paid + cashBills, due: credit - paid };
+    return { bought, paid: paid + cashBills, due: allTimeDue };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, payQ.data, supQ.data]);
+  }, [entries, payQ.data, supQ.data, allTimeDue]);
 
   // "time to buy again" for items bought when they run out (coal, diesel)
   const reminders = useMemo(() => {
@@ -366,16 +370,16 @@ function PurchasesPage() {
 
         <section className="grid grid-cols-3 gap-2">
           <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
-            <span className="text-xs font-semibold text-muted-foreground">মোট ক্রয়</span>
+            <span className="text-xs font-semibold text-muted-foreground">এই মৌসুমে ক্রয়</span>
             <span className="num text-[15px] font-bold sm:text-lg">{tk(totals.bought)}</span>
           </div>
           <div className="flex flex-col gap-1 rounded-2xl border bg-card p-3">
-            <span className="text-xs font-semibold text-muted-foreground">পরিশোধ</span>
+            <span className="text-xs font-semibold text-muted-foreground">এই মৌসুমে পরিশোধ</span>
             <span className="num text-[15px] font-bold text-success sm:text-lg">{tk(totals.paid)}</span>
           </div>
           <Link to="/suppliers" className="flex flex-col gap-1 rounded-2xl border bg-card p-3 transition hover:bg-muted/50">
             <span className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-              বাকি <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              মোট বাকি <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
             <span className={`num text-[15px] font-bold sm:text-lg ${totals.due < 0 ? "text-info" : "text-warning"}`}>{tk(totals.due)}</span>
           </Link>
