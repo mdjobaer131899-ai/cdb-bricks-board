@@ -111,9 +111,9 @@ export const VEHICLE_CONTRACT: ContractConfig = {
 
 export const CONTRACTS = [LAND_CONTRACT, CLEANER_CONTRACT, VEHICLE_CONTRACT];
 /** purchases.item_name values that belong to a contract folder, not to materials */
-export const CONTRACT_ITEMS = new Set(CONTRACTS.map((c) => c.item));
+export const CONTRACT_ITEMS = new Set([...CONTRACTS.map((c) => c.item), "ভেকু"]); // ভেকু: veku-folder.tsx
 /** suppliers.material_type values of contract folders */
-export const CONTRACT_TYPES = new Set(CONTRACTS.map((c) => c.type));
+export const CONTRACT_TYPES = new Set([...CONTRACTS.map((c) => c.type), "ভেকু"]);
 
 const PREV_NOTE = "পূর্বের বকেয়া";
 const TRIP = "ট্রিপ";

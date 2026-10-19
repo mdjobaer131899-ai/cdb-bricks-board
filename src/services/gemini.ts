@@ -945,6 +945,7 @@ const CONTRACT_PERSON: Record<string, { icon: string; who: string; bill: string 
   "গাড়ি ভাড়া": { icon: "🚚", who: "গাড়ির মালিক", bill: "মোট গাড়ি ভাড়া" },
   "জমি ভাড়া": { icon: "🌾", who: "জমির মালিক", bill: "মোট জমি ভাড়া" },
   "পরিচ্ছন্ন কর্মী": { icon: "🧹", who: "পরিচ্ছন্ন কর্মী", bill: "মোট চুক্তি" },
+  "ভেকু": { icon: "🚜", who: "ভেকু", bill: "মোট কাজের বিল (ঘণ্টা)" },
 };
 const supplierWho = (sp: SupplierLine) => CONTRACT_PERSON[sp.material]?.who ?? "সাপ্লায়ার";
 

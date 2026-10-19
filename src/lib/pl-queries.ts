@@ -32,7 +32,7 @@ export type ProfitLoss = {
   sales: number;
   /** Part of sales delivered against last year's advance (opening customer_brick_due) */
   salesFromOldAdvance: number;
-  costs: { expenses: number; purchases: number; landRent: number; cleaning: number; vehicleRent: number; sardar: number; worker: number; ownerSalary: number; vehicle: number };
+  costs: { expenses: number; purchases: number; landRent: number; cleaning: number; vehicleRent: number; veku: number; sardar: number; worker: number; ownerSalary: number; vehicle: number };
   totalCost: number;
   profit: number;
   /** fixed assets bought (expenses with the "সম্পদ — " category): cash out, not counted as cost */
@@ -57,11 +57,13 @@ export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLo
   const costs = {
     expenses: total(exp.filter((e) => !isAssetCategory(e.category))),
     // land rent (জমি ভাড়া) is its own line; previous-season dues are dated before the season so not counted
-    purchases: total(pur.filter((p) => p.item_name !== "জমি ভাড়া" && p.item_name !== "পরিচ্ছন্ন কর্মী" && p.item_name !== "গাড়ি ভাড়া"), "total_amount"),
+    purchases: total(pur.filter((p) => !["জমি ভাড়া", "পরিচ্ছন্ন কর্মী", "গাড়ি ভাড়া", "ভেকু"].includes(p.item_name)), "total_amount"),
     landRent: total(pur.filter((p) => p.item_name === "জমি ভাড়া"), "total_amount"),
     cleaning: total(pur.filter((p) => p.item_name === "পরিচ্ছন্ন কর্মী"), "total_amount"),
     // hired vehicles, per trip (গাড়ি ভাড়া folder); "vehicle" below is the old vehicle_expenses table
     vehicleRent: total(pur.filter((p) => p.item_name === "গাড়ি ভাড়া"), "total_amount"),
+    // excavator work billed by the hour (veku-folder.tsx); money handed over is a payment, not counted again
+    veku: total(pur.filter((p) => p.item_name === "ভেকু"), "total_amount"),
     sardar: total(sar),
     worker: total(wrk),
     ownerSalary: total(own),

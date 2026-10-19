@@ -51,6 +51,7 @@ const COST_LABELS: Record<string, string> = {
   landRent: "জমি ভাড়া (বাকিসহ)",
   cleaning: "পরিচ্ছন্ন কর্মী (চুক্তি)",
   vehicleRent: "গাড়ি ভাড়া (বাকিসহ)",
+  veku: "ভেকুর কাজ (ঘণ্টার বিল)",
   expenses: "দৈনিক খরচ ও বিল",
   sardar: "সরদার পেমেন্ট",
   worker: "শ্রমিক ও বেতন",
@@ -70,7 +71,7 @@ const OUT_LABELS: Record<string, string> = {
   assets: "সম্পদ কেনা (ভেকু, বিদ্যুৎ লাইন…)",
   sardar: "সরদার পেমেন্ট",
   worker: "শ্রমিক ও বেতন",
-  supplier: "সাপ্লায়ার, গাড়ি ভাড়া, জমি ভাড়া ও পরিচ্ছন্ন কর্মী পরিশোধ",
+  supplier: "সাপ্লায়ার, ভেকু, গাড়ি ভাড়া, জমি ভাড়া ও পরিচ্ছন্ন কর্মী পরিশোধ",
   vehicle: "গাড়ি খরচ",
   ownerSalary: "মালিকের বেতন",
   ownerWithdraw: "মালিকের উত্তোলন",
@@ -257,7 +258,7 @@ function IncomeExpensePage() {
                 <div key={s.id} className="flex items-center justify-between gap-2 py-2.5 text-sm">
                   <div className="min-w-0">
                     <div className="break-words font-semibold">{s.name}</div>
-                    <div className="num text-xs text-muted-foreground">{["গাড়ি ভাড়া", "জমি ভাড়া", "পরিচ্ছন্ন কর্মী"].includes(s.type ?? "") ? `${s.type} · ` : ""}বিল {tk(s.bill)} · দেওয়া {tk(s.paid)}</div>
+                    <div className="num text-xs text-muted-foreground">{["গাড়ি ভাড়া", "জমি ভাড়া", "পরিচ্ছন্ন কর্মী", "ভেকু"].includes(s.type ?? "") ? `${s.type} · ` : ""}বিল {tk(s.bill)} · দেওয়া {tk(s.paid)}</div>
                   </div>
                   <b className={`num shrink-0 ${s.due > 0 ? "text-warning" : "text-info"}`}>
                     {s.due < 0 ? "অগ্রিম " : ""}{tk(Math.abs(s.due))}

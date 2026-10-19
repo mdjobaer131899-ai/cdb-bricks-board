@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Trash2, Wrench } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Tractor, Trash2, Wrench } from "lucide-react";
 import { CLEANER_CONTRACT, CONTRACT_ITEMS, CONTRACT_TYPES, ContractFolder, LAND_CONTRACT, VEHICLE_CONTRACT } from "@/components/contract-folder";
+import { VekuFolder } from "@/components/veku-folder";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,7 +29,7 @@ import { printTable } from "@/lib/print-table";
    on the suppliers page (cash or bricks).
    ========================================================= */
 
-type Folder = "raw" | "other" | "land" | "clean" | "vehicle";
+type Folder = "raw" | "other" | "land" | "clean" | "vehicle" | "veku";
 
 export const Route = createFileRoute("/_authenticated/purchases")({
   head: () => ({
@@ -39,7 +40,7 @@ export const Route = createFileRoute("/_authenticated/purchases")({
   }),
   // Which history folder is open lives in the URL (?f=raw|other) so the phone back button returns here
   validateSearch: (search: Record<string, unknown>): { f?: Folder } =>
-    search.f === "raw" || search.f === "other" || search.f === "land" || search.f === "clean" || search.f === "vehicle" ? { f: search.f } : {},
+    search.f === "raw" || search.f === "other" || search.f === "land" || search.f === "clean" || search.f === "vehicle" || search.f === "veku" ? { f: search.f } : {},
   component: PurchasesPage,
 });
 
@@ -837,6 +838,20 @@ function PurchasesPage() {
                 <span className="text-[11px] font-semibold text-muted-foreground">{bn(t.rows.length)}টি এন্ট্রি · ইতিহাস দেখুন</span>
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => openFolder("veku")}
+              className="col-span-2 flex items-center gap-3 rounded-2xl border bg-card p-3.5 text-left transition hover:bg-muted/50 active:scale-[0.99]"
+            >
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-yellow-100 text-yellow-900 dark:bg-yellow-950/60 dark:text-yellow-200">
+                <Tractor className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-bold leading-tight">ভেকু</span>
+                <span className="block text-xs text-muted-foreground">কত ঘণ্টা কাজ, ডিজেল-মবিল-চালকের টাকা, কত বাকি</span>
+              </span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </button>
             {[VEHICLE_CONTRACT, LAND_CONTRACT, CLEANER_CONTRACT].map((c) => (
               <button
                 key={c.key}
@@ -866,6 +881,7 @@ function PurchasesPage() {
   if (folder === "land") return <ContractFolder key="land" cfg={LAND_CONTRACT} onBack={closeFolder} />;
   if (folder === "clean") return <ContractFolder key="clean" cfg={CLEANER_CONTRACT} onBack={closeFolder} />;
   if (folder === "vehicle") return <ContractFolder key="vehicle" cfg={VEHICLE_CONTRACT} onBack={closeFolder} />;
+  if (folder === "veku") return <VekuFolder onBack={closeFolder} />;
 
   /* ================= folder: history only ================= */
   const folderItems = folder === "raw" ? rawItems : otherItems;

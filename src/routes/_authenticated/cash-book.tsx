@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownUp, BadgeDollarSign, Banknote, CalendarRange, Check, ChevronRight, Crown, HardHat, History,
-  Landmark, LandPlot, ListFilter, Sparkles, Lock, Pencil, Plus, Printer, Receipt, ShoppingCart, Trash2, Truck, Users2, Warehouse, Zap,
+  Landmark, LandPlot, ListFilter, Sparkles, Lock, Pencil, Plus, Printer, Receipt, ShoppingCart, Tractor, Trash2, Truck, Users2, Warehouse, Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -147,6 +147,7 @@ function headLook(head: string, dir: "in" | "out") {
   if (head.includes("জমি")) return { Icon: LandPlot, tone: stone };
   if (head.includes("পরিচ্ছন্ন")) return { Icon: Sparkles, tone: stone };
   if (head.includes("গাড়ি")) return { Icon: Truck, tone: stone };
+  if (head.includes("ভেকু")) return { Icon: Tractor, tone: stone };
   if (head.startsWith("সম্পদ")) return { Icon: Warehouse, tone: blue };
   if (head.includes("মালামাল") || head.includes("ইট দিয়ে")) return { Icon: ShoppingCart, tone: stone };
   if (head.includes("বিদ্যুৎ") || head.includes("কারেন্ট")) return { Icon: Zap, tone: stone };
@@ -572,6 +573,7 @@ function CashBookPage() {
                 />
               );
             })}
+            {can("/purchases") && <EntryTile icon={Tractor} tone="stone" label="ভেকু" to="/purchases" search={{ f: "veku" }} />}
             {can("/purchases") && <EntryTile icon={Truck} tone="stone" label="গাড়ি ভাড়া" to="/purchases" search={{ f: "vehicle" }} />}
             {can("/purchases") && <EntryTile icon={LandPlot} tone="stone" label="জমি ভাড়া" to="/purchases" search={{ f: "land" }} />}
             {can("/purchases") && <EntryTile icon={Sparkles} tone="stone" label="পরিচ্ছন্ন কর্মী" to="/purchases" search={{ f: "clean" }} />}

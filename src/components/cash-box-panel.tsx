@@ -31,7 +31,8 @@ import { toast } from "sonner";
 import { CONTRACT_TYPES } from "@/components/contract-folder";
 
 export const EXPENSE_HEADS = [
-  "সরদার", "ডেলি", "মেস্তুরি ও ম্যানেজার", "ভেকু",
+  // ভেকু has its own folder (/purchases?f=veku); the cash book links there
+  "সরদার", "ডেলি", "মেস্তুরি ও ম্যানেজার",
   "কাঁচামাল", "যন্ত্রাংশ / মালামাল", "বিদ্যুৎ বিল", "আনুষাঙ্গিক",
   // fixed assets: category "সম্পদ — …" (ASSET_PREFIX), cash out but not a season cost
   "সম্পদ",
