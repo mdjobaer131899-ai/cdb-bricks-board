@@ -33,6 +33,8 @@ import { CONTRACT_TYPES } from "@/components/contract-folder";
 export const EXPENSE_HEADS = [
   "সরদার", "ডেলি", "মেস্তুরি ও ম্যানেজার", "ভেকু",
   "কাঁচামাল", "যন্ত্রাংশ / মালামাল", "বিদ্যুৎ বিল", "আনুষাঙ্গিক",
+  // fixed assets: category "সম্পদ — …" (ASSET_PREFIX), cash out but not a season cost
+  "সম্পদ",
 ];
 const RAW_KINDS = [
   { name: "কয়লা", unit: "টন" },
@@ -629,7 +631,7 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
         qc.invalidateQueries({ queryKey: ["suppliers"] });
       } else {
         const sub = item.trim();
-        if (head === "আনুষাঙ্গিক" && !sub) throw new Error("খরচের বিবরণ লিখুন");
+        if ((head === "আনুষাঙ্গিক" || head === "সম্পদ") && !sub) throw new Error(head === "সম্পদ" ? "কী কেনা হলো লিখুন" : "খরচের বিবরণ লিখুন");
         const category = sub ? `${head} — ${sub}` : head;
         await createFn({ data: { category, amount: amt, expense_date: date, note: n } });
       }
@@ -822,6 +824,14 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
                   </b>
                 </div>
               )}
+            </div>
+          )}
+
+          {head === "সম্পদ" && (
+            <div className="space-y-1">
+              <Label>কী কেনা হলো *</Label>
+              <Input value={item} onChange={(e) => setItem(e.target.value)} placeholder="যেমন: ভেকুর অংশ, ট্রান্সফরমার" />
+              <p className="text-[11px] text-muted-foreground">অনেক বছর কাজে লাগবে এমন জিনিস। হাতে নগদ থেকে কমবে, কিন্তু এই মৌসুমের লাভ-ক্ষতিতে খরচ ধরা হবে না।</p>
             </div>
           )}
 

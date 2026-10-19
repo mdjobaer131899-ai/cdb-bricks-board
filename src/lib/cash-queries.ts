@@ -12,6 +12,13 @@ import { sdb } from "@/lib/season-db";
  * তাই যেকোনো এন্ট্রি সাথে সাথে মূল ক্যাশে প্রভাব ফেলে।
  */
 
+/**
+ * expenses.category prefix for fixed assets (the kiln's share of an excavator, a power line,
+ * a transformer): cash goes out, but it is not this season's cost in the P&L.
+ */
+export const ASSET_PREFIX = "সম্পদ — ";
+export const isAssetCategory = (c: string | null | undefined) => (c ?? "").normalize("NFC").startsWith(ASSET_PREFIX.normalize("NFC"));
+
 /** collections.method used when bricks are given against a supplier due (see settle_supplier_with_bricks) */
 export const BRICK_SETTLE_COLLECTION = "ইট দিয়ে সমন্বয়";
 
@@ -51,7 +58,7 @@ function applyRange<T>(q: T, column: string, f: DateFilter): T {
 export async function fetchCashSummary(filter: DateFilter = {}) {
   const [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay] = await Promise.all([
     applyRange(sdb.from("collections").select("amount").is("contract_id", null), "payment_date", filter),
-    applyRange(sdb.from("expenses").select("amount"), "expense_date", filter),
+    applyRange(sdb.from("expenses").select("amount, category"), "expense_date", filter),
     applyRange(sdb.from("sardar_payments").select("amount"), "payment_date", filter),
     applyRange(sdb.from("worker_payments").select("amount"), "payment_date", filter),
     applyRange(sdb.from("supplier_payments").select("amount"), "payment_date", filter),
@@ -84,8 +91,11 @@ export async function fetchCashSummary(filter: DateFilter = {}) {
     openingCollected: s(opayIn),
   };
   const income = Object.values(incomeBreakdown).reduce((a, b) => a + b, 0);
+  const expRows = (exp.data ?? []) as any[];
   const breakdown = {
-    expenses: sum(exp.data as any),
+    expenses: s(expRows.filter((r) => !isAssetCategory(r.category))),
+    // fixed assets: cash out, but not a running cost
+    assets: s(expRows.filter((r) => isAssetCategory(r.category))),
     sardar: sum(sar.data as any),
     worker: sum(wrk.data as any),
     supplier: sum(sup.data as any),

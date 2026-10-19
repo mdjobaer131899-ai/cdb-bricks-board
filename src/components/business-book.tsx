@@ -6,7 +6,7 @@ import { ArrowDownLeft, ArrowUpRight, ChevronRight, FileDown, Loader2, TrendingD
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { bn, bnDate, todayBD } from "@/lib/format";
-import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/cash-queries";
+import { fetchCashHistory, fetchCashSummary, isAssetCategory, type CashHistoryRow } from "@/lib/cash-queries";
 import { exportReportPdf } from "@/lib/pdf-export";
 import { useSeason } from "@/lib/season-context";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -485,7 +485,7 @@ export function BusinessBook() {
     const groupMap = new Map<string, number>();
     const opRows: CashHistoryRow[] = [];
     for (const r of cash.history) {
-      if (r.dir !== "out" || NON_OPERATING.has(r.head)) continue;
+      if (r.dir !== "out" || NON_OPERATING.has(r.head) || isAssetCategory(r.head)) continue;
       opRows.push(r);
       const head = r.head || "অন্যান্য";
       groupMap.set(head, (groupMap.get(head) ?? 0) + r.amount);
@@ -504,6 +504,7 @@ export function BusinessBook() {
       { label: "ঋণ নেওয়া", value: ib.loanTaken ?? 0, dir: "in" as const },
       { label: "পুরোনো পাওনা আদায়", value: ib.openingCollected ?? 0, dir: "in" as const },
       { label: "মালিকের উত্তোলন", value: b.ownerWithdraw ?? 0, dir: "out" as const },
+      { label: "সম্পদ কেনা", value: b.assets ?? 0, dir: "out" as const },
       { label: "পূর্বের দেনা পরিশোধ", value: b.openingPaid ?? 0, dir: "out" as const },
       { label: "ঋণ দেওয়া/শোধ", value: (b.loanGiven ?? 0) + (b.loanRepaid ?? 0), dir: "out" as const },
     ].filter((x) => x.value > 0);

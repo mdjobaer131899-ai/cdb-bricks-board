@@ -801,6 +801,7 @@ function cashBlock(s: KilnSnapshot): string {
   };
   const outLabels: Record<string, string> = {
     expenses: "সাধারণ খরচ",
+    assets: "সম্পদ কেনা (ভেকু, বিদ্যুৎ লাইন — খরচে ধরা হয় না)",
     sardar: "সর্দার পেমেন্ট",
     worker: "শ্রমিক পেমেন্ট",
     supplier: "সাপ্লায়ার পেমেন্ট",

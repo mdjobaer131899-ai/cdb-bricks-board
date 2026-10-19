@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownUp, BadgeDollarSign, Banknote, CalendarRange, Check, ChevronRight, Crown, HardHat, History,
-  Landmark, LandPlot, ListFilter, Sparkles, Lock, Pencil, Plus, Printer, Receipt, ShoppingCart, Trash2, Truck, Users2, Zap,
+  Landmark, LandPlot, ListFilter, Sparkles, Lock, Pencil, Plus, Printer, Receipt, ShoppingCart, Trash2, Truck, Users2, Warehouse, Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -147,6 +147,7 @@ function headLook(head: string, dir: "in" | "out") {
   if (head.includes("জমি")) return { Icon: LandPlot, tone: stone };
   if (head.includes("পরিচ্ছন্ন")) return { Icon: Sparkles, tone: stone };
   if (head.includes("গাড়ি")) return { Icon: Truck, tone: stone };
+  if (head.startsWith("সম্পদ")) return { Icon: Warehouse, tone: blue };
   if (head.includes("মালামাল") || head.includes("ইট দিয়ে")) return { Icon: ShoppingCart, tone: stone };
   if (head.includes("বিদ্যুৎ") || head.includes("কারেন্ট")) return { Icon: Zap, tone: stone };
   return { Icon: Receipt, tone: red };
@@ -565,7 +566,7 @@ function CashBookPage() {
                 <EntryTile
                   key={h}
                   icon={Icon}
-                  tone={h === "কাঁচামাল" || h === "যন্ত্রাংশ / মালামাল" || h === "বিদ্যুৎ বিল" ? "stone" : "red"}
+                  tone={h === "সম্পদ" ? "blue" : h === "কাঁচামাল" || h === "যন্ত্রাংশ / মালামাল" || h === "বিদ্যুৎ বিল" ? "stone" : "red"}
                   label={h}
                   onClick={() => { setEntrySheet(false); setExpenseHead(h); }}
                 />

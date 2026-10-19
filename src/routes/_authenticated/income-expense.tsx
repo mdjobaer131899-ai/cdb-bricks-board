@@ -67,6 +67,7 @@ const IN_LABELS: Record<string, string> = {
 };
 const OUT_LABELS: Record<string, string> = {
   expenses: "দৈনিক খরচ ও বিল",
+  assets: "সম্পদ কেনা (ভেকু, বিদ্যুৎ লাইন…)",
   sardar: "সরদার পেমেন্ট",
   worker: "শ্রমিক ও বেতন",
   supplier: "সাপ্লায়ার, গাড়ি ভাড়া, জমি ভাড়া ও পরিচ্ছন্ন কর্মী পরিশোধ",
@@ -221,6 +222,11 @@ function IncomeExpensePage() {
                   );
                 })}
               </div>
+            )}
+            {(pl.data?.assets ?? 0) > 0 && (
+              <p className="mt-3 rounded-xl bg-sky-50 p-2.5 text-xs text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+                এ ছাড়া সম্পদ কেনা হয়েছে {tk(pl.data!.assets)} (ভেকুর অংশ, বিদ্যুৎ লাইন ইত্যাদি)। হাতে নগদ থেকে কমেছে, কিন্তু এই মৌসুমের খরচে ধরা হয়নি।
+              </p>
             )}
             {(pl.data?.salesFromOldAdvance ?? 0) > 0 && (
               <p className="mt-3 rounded-xl bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">

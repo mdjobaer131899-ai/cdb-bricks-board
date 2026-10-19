@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchAllRows } from "@/lib/fetch-all";
+import { isAssetCategory } from "@/lib/cash-queries";
 
 export { fetchAllRows };
 
@@ -34,13 +35,15 @@ export type ProfitLoss = {
   costs: { expenses: number; purchases: number; landRent: number; cleaning: number; vehicleRent: number; sardar: number; worker: number; ownerSalary: number; vehicle: number };
   totalCost: number;
   profit: number;
+  /** fixed assets bought (expenses with the "সম্পদ — " category): cash out, not counted as cost */
+  assets: number;
 };
 
 export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLoss> {
   const [sales, exp, pur, sar, wrk, veh, own] = await Promise.all([
     fetchAllRows<{ total_amount: number; opening_balance_id: string | null }>(() =>
       ranged(sdb.from("sales_entries").select("id, total_amount, opening_balance_id").eq("status", "approved").order("id"), "sale_date", filter)),
-    fetchAllRows<{ amount: number }>(() => ranged(sdb.from("expenses").select("id, amount").order("id"), "expense_date", filter)),
+    fetchAllRows<{ amount: number; category: string }>(() => ranged(sdb.from("expenses").select("id, amount, category").order("id"), "expense_date", filter)),
     fetchAllRows<{ total_amount: number; item_name: string }>(() => ranged(sdb.from("purchases").select("id, total_amount, item_name").order("id"), "purchase_date", filter)),
     fetchAllRows<{ amount: number }>(() => ranged(sdb.from("sardar_payments").select("id, amount").order("id"), "payment_date", filter)),
     fetchAllRows<{ amount: number }>(() => ranged(sdb.from("worker_payments").select("id, amount").order("id"), "payment_date", filter)),
@@ -52,7 +55,7 @@ export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLo
   const salesTotal = total(sales, "total_amount");
   const salesFromOldAdvance = total(sales.filter((s) => !!s.opening_balance_id), "total_amount");
   const costs = {
-    expenses: total(exp),
+    expenses: total(exp.filter((e) => !isAssetCategory(e.category))),
     // land rent (জমি ভাড়া) is its own line; previous-season dues are dated before the season so not counted
     purchases: total(pur.filter((p) => p.item_name !== "জমি ভাড়া" && p.item_name !== "পরিচ্ছন্ন কর্মী" && p.item_name !== "গাড়ি ভাড়া"), "total_amount"),
     landRent: total(pur.filter((p) => p.item_name === "জমি ভাড়া"), "total_amount"),
@@ -65,7 +68,8 @@ export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLo
     vehicle: total(veh),
   };
   const totalCost = Object.values(costs).reduce((a, b) => a + b, 0);
-  return { sales: salesTotal, salesFromOldAdvance, costs, totalCost, profit: salesTotal - totalCost };
+  const assets = total(exp.filter((e) => isAssetCategory(e.category)));
+  return { sales: salesTotal, salesFromOldAdvance, costs, totalCost, profit: salesTotal - totalCost, assets };
 }
 
 /** type: suppliers.material_type, e.g. "গাড়ি ভাড়া" for a vehicle owner */
