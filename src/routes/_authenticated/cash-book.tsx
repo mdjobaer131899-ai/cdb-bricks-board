@@ -1,9 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowDownUp, BadgeDollarSign, Banknote, CalendarRange, Check, ChevronRight, Crown, HardHat, History,
-  Landmark, LandPlot, ListFilter, Sparkles, Lock, Pencil, Plus, Printer, Receipt, ShoppingCart, Tractor, Trash2, Truck, Users2, Warehouse, Zap,
-} from "lucide-react";
+import { ArrowDownUp, CalendarRange, Check, ChevronRight, ListFilter, Lock, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -11,14 +8,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { toast } from "sonner";
 import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/cash-queries";
 import { EXPENSE_HEADS, ExpenseEntryDialog, type HeadKey } from "@/components/expense-entry";
+import { INCOME_HEADS, IncomeEntryDialog, type IncomeKey } from "@/components/income-entry";
+import { HeadTiles } from "@/components/money-form-parts";
+import { TONE_CLASS, isIncome, moneyHead, type MoneyKey } from "@/lib/money-heads";
 import { usePageAccess } from "@/lib/page-permissions";
 import { printTable } from "@/lib/print-table";
 
@@ -35,16 +33,6 @@ export const Route = createFileRoute("/_authenticated/cash-book")({
 
 const tk = (n: number) => `৳${bn(Math.round(n))}`;
 
-const METHODS: Array<[string, string]> = [
-  ["cash", "হাতে নগদ"],
-  ["bkash", "বিকাশ"],
-  ["nagad", "নগদ (মোবাইল)"],
-  ["bank", "ব্যাংক"],
-];
-
-const OLD_DUE_HEAD = "পূর্বের দায় পরিশোধ";
-/** Rows created by settle_supplier_with_bricks; they must be changed from the challan, not here */
-const BRICK_SETTLE_HEADS = new Set(["ইট বিক্রি — বাকির বদলে", "বাকি পরিশোধ — ইট দিয়ে"]);
 
 type Range = { from: string; to: string };
 type Preset = "today" | "month" | "last" | "season" | "custom";
@@ -119,45 +107,16 @@ async function verifyAdminPasswordClient(password: string): Promise<boolean> {
   return !error;
 }
 
-function parseRowNameAndHead(head: string, detail?: string | null) {
-  const cleanDetail = detail && detail !== "—" ? detail.trim() : "";
-  const cleanHead = (head || "").trim();
-  const separatorMatch = cleanHead.match(/^(.+?)\s*[—\-:]\s*(.+)$/);
-
-  if (!cleanDetail && separatorMatch) return { displayName: separatorMatch[2].trim(), displayHead: separatorMatch[1].trim() };
-  if (cleanDetail && separatorMatch) return { displayName: cleanDetail, displayHead: separatorMatch[1].trim() };
-  if (!cleanDetail) return { displayName: cleanHead, displayHead: "সাধারণ" };
-  return { displayName: cleanDetail, displayHead: cleanHead };
+/** Name on the line (who or what) and its head, the same words on every page (money-heads.ts) */
+function parseRowNameAndHead(row: CashHistoryRow) {
+  const name = row.detail && row.detail !== "—" ? row.detail : row.head;
+  return { displayName: name, displayHead: row.note ? `${row.head} · ${row.note}` : row.head };
 }
 
-/** Icon and colour chip for a cash-book head */
-function headLook(head: string, dir: "in" | "out") {
-  const green = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300";
-  const red = "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300";
-  const amber = "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300";
-  const stone = "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200";
-  const blue = "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300";
-  if (head.startsWith("মালিকের")) return { Icon: Crown, tone: amber };
-  if (head.includes("ঋণ")) return { Icon: Landmark, tone: blue };
-  if (head === OLD_DUE_HEAD || head === "গত বছরের পাওনা আদায়") return { Icon: History, tone: amber };
-  if (dir === "in") return { Icon: Banknote, tone: green };
-  if (head === "সরদার পেমেন্ট") return { Icon: Users2, tone: red };
-  if (head === "ডেলি শ্রমিক") return { Icon: HardHat, tone: red };
-  if (head.startsWith("বেতন")) return { Icon: BadgeDollarSign, tone: red };
-  if (head.includes("জমি")) return { Icon: LandPlot, tone: stone };
-  if (head.includes("পরিচ্ছন্ন")) return { Icon: Sparkles, tone: stone };
-  if (head.includes("গাড়ি")) return { Icon: Truck, tone: stone };
-  if (head.includes("ভেকু")) return { Icon: Tractor, tone: stone };
-  if (head.startsWith("সম্পদ")) return { Icon: Warehouse, tone: blue };
-  if (head.includes("মালামাল") || head.includes("ইট দিয়ে")) return { Icon: ShoppingCart, tone: stone };
-  if (head.includes("বিদ্যুৎ") || head.includes("কারেন্ট")) return { Icon: Zap, tone: stone };
-  return { Icon: Receipt, tone: red };
-}
-
-async function fetchCustomers() {
-  const { data, error } = await sdb.from("customers").select("id, name").order("name");
-  if (error) throw error;
-  return (data ?? []) as Array<{ id: string; name: string }>;
+/** Icon and colour of a head */
+function lookOf(key: MoneyKey) {
+  const h = moneyHead(key);
+  return { Icon: h.icon, tone: TONE_CLASS[h.tone] };
 }
 
 function CashBookPage() {
@@ -173,15 +132,21 @@ function CashBookPage() {
   const [dateSheet, setDateSheet] = useState(false);
   const [headSheet, setHeadSheet] = useState(false);
   const [entrySheet, setEntrySheet] = useState(false);
-  const [incomeOpen, setIncomeOpen] = useState(false);
+  const [incomeHead, setIncomeHead] = useState<IncomeKey | null>(null);
   const [expenseHead, setExpenseHead] = useState<HeadKey | null>(null);
   const [selected, setSelected] = useState<CashHistoryRow | null>(null);
   const [editRow, setEditRow] = useState<CashHistoryRow | null>(null);
   const [deleteRow, setDeleteRow] = useState<CashHistoryRow | null>(null);
 
-  const customers = useQuery({ queryKey: ["customers-min"], queryFn: fetchCustomers });
-  // veku, vehicle, land and sweeper entries need the purchases page's permission, as before
-  const expenseHeads = EXPENSE_HEADS.filter((h) => !["veku", "vehicle", "land", "clean"].includes(h.key) || can("/purchases"));
+  // heads kept behind the page that owns them, as before
+  const allowed = (k: MoneyKey) =>
+    ["veku", "vehicle", "land", "clean"].includes(k) ? can("/purchases")
+    : ["ownerInvest", "ownerSalary", "ownerWithdraw"].includes(k) ? can("/owners")
+    : ["loanIn", "loanBack", "loanGive", "loanRepay"].includes(k) ? can("/loans")
+    : ["openingIn", "openingOut"].includes(k) ? can("/opening-balances")
+    : true;
+  const expenseHeads = EXPENSE_HEADS.filter((h) => allowed(h.key));
+  const incomeHeads = INCOME_HEADS.filter(allowed);
 
   const invalidate = () => {
     for (const key of [
@@ -238,9 +203,9 @@ function CashBookPage() {
 
   const all = history.data ?? [];
   const heads = useMemo(() => {
-    const m = new Map<string, { dir: "in" | "out"; total: number; count: number }>();
+    const m = new Map<string, { dir: "in" | "out"; key: MoneyKey; total: number; count: number }>();
     for (const r of all) {
-      const c = m.get(r.head) ?? { dir: r.dir, total: 0, count: 0 };
+      const c = m.get(r.head) ?? { dir: r.dir, key: r.key, total: 0, count: 0 };
       c.total += r.amount; c.count += 1;
       m.set(r.head, c);
     }
@@ -253,7 +218,7 @@ function CashBookPage() {
       if (head && r.head !== head) return false;
       if (kind === "in") return r.dir === "in";
       if (kind === "out") return r.dir === "out";
-      if (kind === "old") return r.head === OLD_DUE_HEAD;
+      if (kind === "old") return r.key === "openingOut" || r.key === "openingIn";
       if (kind === "unbooked") return r.dir === "out" && !isBooked(r);
       if (kind === "booked") return r.dir === "out" && isBooked(r);
       return true;
@@ -292,7 +257,7 @@ function CashBookPage() {
     headers: ["তারিখ", "নাম / বিবরণ", "খাত", "আয়", "ব্যয়"],
     rightCols: [3, 4],
     rows: rows.map((r) => {
-      const { displayName, displayHead } = parseRowNameAndHead(r.head, r.detail);
+      const { displayName, displayHead } = parseRowNameAndHead(r);
       return [bnDate(r.date), displayName, displayHead, r.dir === "in" ? tk(r.amount) : "", r.dir === "out" ? tk(r.amount) : ""];
     }),
     totals: [["মোট আয়", tk(listIn)], ["মোট ব্যয়", tk(listOut)], ["নিট", tk(listIn - listOut)]],
@@ -457,8 +422,8 @@ function CashBookPage() {
                 </div>
                 <div className="divide-y">
                   {dayRows.map((r) => {
-                    const { displayName, displayHead } = parseRowNameAndHead(r.head, r.detail);
-                    const { Icon, tone } = headLook(r.head, r.dir);
+                    const { displayName, displayHead } = parseRowNameAndHead(r);
+                    const { Icon, tone } = lookOf(r.key);
                     const mk = marks.data?.[r.id];
                     const booked = r.dir === "out" && !!mk?.checked;
                     return (
@@ -524,7 +489,7 @@ function CashBookPage() {
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
             {heads.map(([h, v]) => {
-              const { Icon, tone } = headLook(h, v.dir);
+              const { Icon, tone } = lookOf(v.key);
               return (
                 <button
                   key={h}
@@ -553,28 +518,26 @@ function CashBookPage() {
             <SheetDescription>কী ধরনের লেনদেন বেছে নিন</SheetDescription>
           </SheetHeader>
 
-          <div className="mt-4 text-xs font-bold tracking-wide text-emerald-700 dark:text-emerald-300">টাকা এসেছে</div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <EntryTile icon={Banknote} tone="green" label="গ্রাহকের টাকা" onClick={() => { setEntrySheet(false); setIncomeOpen(true); }} />
-            {can("/owners") && <EntryTile icon={Crown} tone="amber" label="মালিকের বিনিয়োগ" to="/owners" />}
-            {can("/loans") && <EntryTile icon={Landmark} tone="blue" label="ঋণ নেওয়া" to="/loans" />}
-            {can("/opening-balances") && <EntryTile icon={History} tone="amber" label="গত বছরের পাওনা" to="/opening-balances" />}
-          </div>
-
-          <div className="mt-5 text-xs font-bold tracking-wide text-red-700 dark:text-red-300">টাকা গেছে</div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {/* every head opens the same expense form; the folders are for reading the ledgers */}
-            {expenseHeads.map((h) => (
-              <EntryTile key={h.key} icon={h.icon} tone={h.tone} label={h.label}
-                onClick={() => { setEntrySheet(false); setExpenseHead(h.key); }} />
-            ))}
-            {can("/opening-balances") && <EntryTile icon={History} tone="amber" label="পূর্বের দেনা" to="/opening-balances" />}
-            {can("/owners") && <EntryTile icon={Crown} tone="amber" label="মালিকের উত্তোলন" to="/owners" />}
+          <div className="mt-4">
+            {/* every head opens one of the two forms; the ledgers stay on their pages */}
+            <HeadTiles
+              keys={[...incomeHeads, ...expenseHeads.map((h) => h.key)]}
+              onPick={(k) => {
+                setEntrySheet(false);
+                if (isIncome(k)) setIncomeHead(k as IncomeKey);
+                else setExpenseHead(k as HeadKey);
+              }}
+            />
           </div>
         </SheetContent>
       </Sheet>
 
-      <IncomeDialog open={incomeOpen} onOpenChange={setIncomeOpen} customers={customers.data ?? []} onDone={invalidate} />
+      <IncomeEntryDialog
+        open={incomeHead !== null}
+        onOpenChange={(o) => { if (!o) setIncomeHead(null); }}
+        head={incomeHead}
+        onDone={invalidate}
+      />
       <ExpenseEntryDialog
         open={expenseHead !== null}
         onOpenChange={(o) => { if (!o) setExpenseHead(null); }}
@@ -603,35 +566,6 @@ function CashBookPage() {
       {deleteRow && <RowDeleteDialog key={deleteRow.id} row={deleteRow} onClose={() => setDeleteRow(null)} onDone={invalidate} />}
     </div>
   );
-}
-
-const TILE_TONES: Record<string, string> = {
-  green: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-  red: "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300",
-  amber: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
-  blue: "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-  stone: "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200",
-};
-
-function EntryTile({ icon: Icon, tone, label, onClick, to, search }: {
-  icon: React.ComponentType<{ className?: string }>;
-  tone: keyof typeof TILE_TONES;
-  label: string;
-  onClick?: () => void;
-  to?: string;
-  search?: Record<string, string>;
-}) {
-  const inner = (
-    <>
-      <span className={`grid h-10 w-10 place-items-center rounded-xl ${TILE_TONES[tone]}`}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <span className="text-[13px] font-bold leading-tight">{label}</span>
-    </>
-  );
-  const cls = "flex min-h-[92px] flex-col items-center justify-center gap-1.5 rounded-2xl border bg-card px-1 py-2.5 text-center transition active:scale-95";
-  if (to) return <Link to={to as never} search={search as never} className={cls}>{inner}</Link>;
-  return <button type="button" onClick={onClick} className={cls}>{inner}</button>;
 }
 
 function DateRangeForm({ initial, onApply }: { initial: Range; onApply: (r: Range) => void }) {
@@ -668,9 +602,9 @@ function RowDetail({ row, mark, lastPage, onSaveMark, onEdit, onDelete }: {
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const { displayName, displayHead } = parseRowNameAndHead(row.head, row.detail);
-  const { Icon, tone } = headLook(row.head, row.dir);
-  const locked = BRICK_SETTLE_HEADS.has(row.head);
+  const { displayName, displayHead } = parseRowNameAndHead(row);
+  const { Icon, tone } = lookOf(row.key);
+  const locked = !!row.locked;
   return (
     <div className="space-y-4">
       <SheetHeader className="text-left">
@@ -725,7 +659,7 @@ function RowEditDialog({ row, onClose, onDone }: { row: CashHistoryRow; onClose:
   const [amount, setAmount] = useState(String(row.amount));
   const [date, setDate] = useState(row.date?.slice(0, 10) ?? "");
   const [note, setNote] = useState("");
-  const { displayName, displayHead } = parseRowNameAndHead(row.head, row.detail);
+  const { displayName, displayHead } = parseRowNameAndHead(row);
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -764,7 +698,7 @@ function RowEditDialog({ row, onClose, onDone }: { row: CashHistoryRow; onClose:
 
 function RowDeleteDialog({ row, onClose, onDone }: { row: CashHistoryRow; onClose: () => void; onDone: () => void }) {
   const [password, setPassword] = useState("");
-  const { displayName, displayHead } = parseRowNameAndHead(row.head, row.detail);
+  const { displayName, displayHead } = parseRowNameAndHead(row);
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -791,96 +725,6 @@ function RowDeleteDialog({ row, onClose, onDone }: { row: CashHistoryRow; onClos
           <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={onClose}>বাতিল</Button>
             <Button type="submit" variant="destructive" disabled={mut.isPending}>মুছুন</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function IncomeDialog({ open, onOpenChange, customers, onDone }: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  customers: Array<{ id: string; name: string }>;
-  onDone: () => void;
-}) {
-  const [customerId, setCustomerId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(todayBD());
-  const [method, setMethod] = useState("cash");
-  const [note, setNote] = useState("");
-
-  const mut = useMutation({
-    mutationFn: async () => {
-      const amt = Number(amount);
-      if (!customerId) throw new Error("গ্রাহক নির্বাচন করুন");
-      if (!Number.isFinite(amt) || amt <= 0) throw new Error("টাকার পরিমাণ সঠিক নয়");
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw new Error(userError.message);
-      if (!user) throw new Error("আয় যোগ করার আগে আবার লগইন করুন।");
-
-      const { error } = await sdb.from("collections").insert({
-        customer_id: customerId,
-        contract_id: null,
-        amount: amt,
-        payment_date: date,
-        method: method || null,
-        note: note || null,
-        created_by: user.id,
-      });
-      if (error) throw new Error(error.message);
-    },
-    onSuccess: () => {
-      toast.success("আয় যোগ হয়েছে");
-      onOpenChange(false);
-      setCustomerId(""); setAmount(""); setNote("");
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>গ্রাহকের কাছ থেকে টাকা</DialogTitle>
-          <DialogDescription>ইট বিক্রি বা অগ্রিম বাবদ নগদ আয়</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
-          <div className="space-y-1">
-            <Label>গ্রাহক *</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger className="h-11"><SelectValue placeholder="গ্রাহক নির্বাচন করুন" /></SelectTrigger>
-              <SelectContent>
-                {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label>টাকা *</Label>
-              <Input type="number" inputMode="decimal" min="0" step="0.01" className="h-11" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
-            </div>
-            <div className="space-y-1">
-              <Label>তারিখ *</Label>
-              <Input type="date" className="h-11" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label>মাধ্যম</Label>
-            <Select value={method} onValueChange={setMethod}>
-              <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {METHODS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>নোট</Label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
-          </div>
-          <DialogFooter>
-            <Button type="submit" className="h-11" disabled={mut.isPending}>সংরক্ষণ</Button>
           </DialogFooter>
         </form>
       </DialogContent>

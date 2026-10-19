@@ -15,6 +15,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
+import { IncomeEntryDialog } from "@/components/income-entry";
+import { ExpenseEntryDialog } from "@/components/expense-entry";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/loans")({
@@ -43,6 +45,8 @@ function LoansPage() {
   const paidOf = (id: string) => (payQ.data ?? []).filter((p) => p.loan_id === id).reduce((a, b) => a + Number(b.amount), 0);
   const sumDir = (d: string) => (loansQ.data ?? []).filter((l) => l.direction === d).reduce((a, l) => a + Number(l.amount) - paidOf(l.id), 0);
 
+  // new loans and repayments: the two shared forms; lDlg / pDlg only edit saved rows
+  const [entry, setEntry] = useState<{ dir: "in"; head: "loanIn" | "loanBack"; id?: string } | { dir: "out"; head: "loanGive" | "loanRepay"; id?: string } | null>(null);
   const [lDlg, setLDlg] = useState<null | { id?: string; party_name: string; direction: string; amount: string; date: string; note: string }>(null);
   const saveL = useMutation({
     mutationFn: async () => {
@@ -90,7 +94,8 @@ function LoansPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={print}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button>
-          <Button onClick={() => setLDlg({ party_name: "", direction: "taken", amount: "", date: today, note: "" })}><Plus className="mr-1 h-4 w-4" /> নতুন ঋণ</Button>
+          <Button onClick={() => setEntry({ dir: "in", head: "loanIn" })}><Plus className="mr-1 h-4 w-4" /> ঋণ নিলাম</Button>
+          <Button variant="outline" onClick={() => setEntry({ dir: "out", head: "loanGive" })}><Plus className="mr-1 h-4 w-4" /> ঋণ দিলাম</Button>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -112,7 +117,7 @@ function LoansPage() {
                   <TableCell className="text-right tabular-nums">৳ {bn(paidOf(l.id))}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">৳ {bn(Number(l.amount) - paidOf(l.id))}</TableCell>
                   <TableCell className="text-right whitespace-nowrap">
-                    <Button size="sm" variant="outline" onClick={() => setPDlg({ loan_id: l.id, amount: "", date: today, note: "" })}>পরিশোধ</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEntry(l.direction === "taken" ? { dir: "out", head: "loanRepay", id: l.id } : { dir: "in", head: "loanBack", id: l.id })}>{l.direction === "taken" ? "শোধ দিলাম" : "ফেরত পেলাম"}</Button>
                     {isAdmin && <>
                       <Button size="sm" variant="ghost" onClick={() => setLDlg({ id: l.id, party_name: l.party_name, direction: l.direction, amount: String(l.amount), date: l.loan_date, note: l.note ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" variant="ghost" onClick={() => confirm("মুছবেন?") && delL.mutate(l.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
@@ -177,6 +182,10 @@ function LoansPage() {
           <DialogFooter><Button onClick={() => saveP.mutate()} disabled={saveP.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      <IncomeEntryDialog open={entry?.dir === "in"} onOpenChange={(o) => { if (!o) setEntry(null); }}
+        head={entry?.dir === "in" ? entry.head : null} lockHead partyId={entry?.id ?? null} onDone={inv} />
+      <ExpenseEntryDialog open={entry?.dir === "out"} onOpenChange={(o) => { if (!o) setEntry(null); }}
+        head={entry?.dir === "out" ? entry.head : null} lockHead partyId={entry?.id ?? null} onDone={inv} />
     </div>
   );
 }

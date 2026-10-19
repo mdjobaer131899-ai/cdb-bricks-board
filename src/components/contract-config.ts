@@ -134,7 +134,6 @@ export const CONTRACT_ITEMS = new Set([...CONTRACTS.map((c) => c.item), VEKU_ITE
 export const CONTRACT_TYPES = new Set([...CONTRACTS.map((c) => c.type), VEKU_TYPE]);
 
 /* ---------- cash expenses read back on the purchases page ---------- */
-/** Parts bought with no shop name are saved to expenses as "যন্ত্রাংশ / মালামাল — <item>" */
+/** Parts bought with no shop name are saved to expenses as "যন্ত্রাংশ / মালামাল — <item>" (money-heads.ts) */
 export const PARTS_HEAD = "যন্ত্রাংশ / মালামাল";
-export const PARTS_PREFIX = `${PARTS_HEAD} — `;
-export const POWER_BILL = "বিদ্যুৎ বিল";
+export { PARTS_PREFIX, POWER_BILL } from "@/lib/money-heads";

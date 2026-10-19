@@ -24,6 +24,7 @@ import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { createCollection, deleteCollection } from "@/lib/collections.functions";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { IncomeEntryDialog } from "@/components/income-entry";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/collections/")({
@@ -381,136 +382,13 @@ function MiniLedgerStat({ label, value, tone }: { label: string; value: string; 
   );
 }
 
+/** New customer money: the one money-in form (income-entry.tsx) */
 function AddCollectionDialog() {
-  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [customerId, setCustomerId] = useState<string>("");
-  const [contractId, setContractId] = useState<string>("none");
-  const [amount, setAmount] = useState<string>("");
-  const [date, setDate] = useState<string>(todayBD());
-  const [method, setMethod] = useState<string>("cash");
-  const [note, setNote] = useState<string>("");
-
-  const customersQ = useQuery({ queryKey: ["customers-all"], queryFn: fetchCustomers, enabled: open });
-  const contractsQ = useQuery({
-    queryKey: ["customer-contracts", customerId],
-    queryFn: () => fetchCustomerContracts(customerId),
-    enabled: open && !!customerId,
-  });
-
-  const createFn = useServerFn(createCollection);
-  const mut = useMutation({
-    mutationFn: createFn,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["collections-list"] });
-      qc.invalidateQueries({ queryKey: ["cash-ledger"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-due"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-trend"] });
-      qc.invalidateQueries({ queryKey: ["dashboard-month"] });
-      qc.invalidateQueries({ queryKey: ["dash", "today"] });
-      qc.invalidateQueries({ queryKey: ["contracts-all"] });
-      toast.success("কালেকশন যোগ করা হয়েছে");
-      setOpen(false);
-      setCustomerId(""); setContractId("none"); setAmount(""); setNote(""); setMethod("cash");
-      setDate(todayBD());
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const submit = () => {
-    const amt = Number(amount);
-    if (!customerId) return toast.error("গ্রাহক নির্বাচন করুন");
-    if (!Number.isFinite(amt) || amt <= 0) return toast.error("সঠিক পরিমাণ লিখুন");
-    if (!date) return toast.error("তারিখ দিন");
-    mut.mutate({
-      data: {
-        customer_id: customerId,
-        contract_id: contractId !== "none" ? contractId : null,
-        amount: amt,
-        payment_date: date,
-        method: method || null,
-        note: note || null,
-      },
-    });
-  };
-
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button><Plus className="mr-2 h-4 w-4" /> নতুন কালেকশন</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>নতুন কালেকশন</DialogTitle>
-          <DialogDescription>গ্রাহক থেকে নেওয়া টাকার এন্ট্রি। চুক্তি থাকলে সিলেক্ট করুন।</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>গ্রাহক *</Label>
-            <Select value={customerId} onValueChange={(v) => { setCustomerId(v); setContractId("none"); }}>
-              <SelectTrigger><SelectValue placeholder="গ্রাহক বাছাই করুন" /></SelectTrigger>
-              <SelectContent>
-                {(customersQ.data ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>চুক্তি (ঐচ্ছিক)</Label>
-            <Select value={contractId} onValueChange={setContractId} disabled={!customerId}>
-              <SelectTrigger><SelectValue placeholder="চুক্তি ছাড়া / সরাসরি ক্যাশ" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">— চুক্তি ছাড়া (সরাসরি ক্যাশ) —</SelectItem>
-                {(contractsQ.data ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.contract_no}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">
-              চুক্তি বাছাই করলে সেই চুক্তির পেমেন্ট লেজারেও যোগ হবে।
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>পরিমাণ (৳) *</Label>
-              <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>তারিখ *</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>মাধ্যম</Label>
-            <Select value={method} onValueChange={setMethod}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">নগদ</SelectItem>
-                <SelectItem value="bank">ব্যাংক</SelectItem>
-                <SelectItem value="bkash">বিকাশ</SelectItem>
-                <SelectItem value="nagad">নগদ (Nagad)</SelectItem>
-                <SelectItem value="cheque">চেক</SelectItem>
-                <SelectItem value="other">অন্যান্য</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>নোট</Label>
-            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="ঐচ্ছিক" />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>বাতিল</Button>
-          <Button onClick={submit} disabled={mut.isPending}>
-            {mut.isPending ? "সংরক্ষণ হচ্ছে..." : "সংরক্ষণ করুন"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" /> টাকা নিন</Button>
+      <IncomeEntryDialog open={open} onOpenChange={setOpen} head="sale" lockHead />
+    </>
   );
 }

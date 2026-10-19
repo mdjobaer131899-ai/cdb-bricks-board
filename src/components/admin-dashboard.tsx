@@ -166,9 +166,9 @@ function TodayStrip({ s }: { s: KilnSnapshot }) {
   const t = s.today;
   const sales = s.sales.filter((r) => r.sale_date === t && r.status !== "rejected");
   const pendingAll = s.sales.filter((r) => r.status === "pending").length;
-  const exp = s.expenses.filter((r) => r.expense_date === t);
   const customers = new Set(sales.map((r) => r.customer_id)).size;
-  const cats = new Set(exp.map((r) => r.category || "অন্যান্য")).size;
+  // money out today over every head (sardar, staff, sellers, bills …), the cash book's figure
+  const outToday = s.cashToday?.expense ?? 0;
 
   return (
     <SectionCard
@@ -193,9 +193,9 @@ function TodayStrip({ s }: { s: KilnSnapshot }) {
           <span className="text-xs text-muted-foreground">{bn(customers)} জন গ্রাহক</span>
         </div>
         <div className="flex flex-col gap-0.5 pl-2.5">
-          <span className="text-[13px] text-muted-foreground">খরচ</span>
-          <span className="font-display num text-[22px] font-bold leading-tight text-destructive">{tk(sum(exp, (r) => r.amount))}</span>
-          <span className="text-xs text-muted-foreground">{bn(cats)}টি খাতে</span>
+          <span className="text-[13px] text-muted-foreground">টাকা গেছে</span>
+          <Link to="/cash-book" className="font-display num text-[22px] font-bold leading-tight text-destructive">{tk(outToday)}</Link>
+          <span className="text-xs text-muted-foreground">সব খাত মিলিয়ে</span>
         </div>
       </div>
     </SectionCard>
@@ -238,7 +238,7 @@ function MoneyTiles({ s }: { s: KilnSnapshot }) {
   const tiles = [
     { label: "গ্রাহকের বাকি", dot: "bg-amber-600", color: "text-amber-700 dark:text-amber-400", value: sum(dues, (c) => c.balance), sub: `${bn(dues.length)} জন · আমরা পাবো`, to: "/collections" },
     { label: "গ্রাহকের অগ্রিম", dot: "bg-blue-600", color: "text-blue-700 dark:text-blue-300", value: sum(adv, (c) => -c.balance), sub: `${bn(adv.length)} জন · ইট দেওয়া বাকি`, to: "/advance-sales" },
-    { label: "সর্দার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(sardarOwed, (x) => x.due), sub: `${bn(sardarOwed.length)} জন সর্দার`, to: "/sardars" },
+    { label: "সরদার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(sardarOwed, (x) => x.due), sub: `${bn(sardarOwed.length)} জন সরদার`, to: "/sardars" },
     { label: "সাপ্লায়ার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(supplierOwed, (x) => x.due), sub: `${bn(supplierOwed.length)} জন সাপ্লায়ার`, to: "/purchases" },
   ];
   return (

@@ -384,13 +384,13 @@ export function AiAssistantFab() {
                       </div>
                     )}
 
-                    {/* ২. খরচ, কালেকশন, সর্দার, কাঁচা ইট ও সাপ্লায়ার কার্ড */}
+                    {/* ২. খরচ, কালেকশন, সরদার, কাঁচা ইট ও সাপ্লায়ার কার্ড */}
                     {["EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "WORKER_PAYMENT", "KACHA_BRICK", "SUPPLIER_PAYMENT"].includes(m.data?.type) && (
                       <div className="mt-3 p-3 bg-orange-50/70 dark:bg-slate-800 rounded-xl border border-orange-200 text-xs text-foreground space-y-1.5 shadow-xs">
                         <div className="font-bold text-orange-700 border-b border-orange-200 pb-1">
                           {m.data.type === "EXPENSE" && "💸 খরচের ভাউচার"}
                           {m.data.type === "COLLECTION" && "💵 নগদ জমা / কালেকশন"}
-                          {m.data.type === "SARDAR_PAYMENT" && "👷 সর্দার পেমেন্ট / দাদন"}
+                          {m.data.type === "SARDAR_PAYMENT" && "👷 সরদার পেমেন্ট / দাদন"}
                           {m.data.type === "WORKER_PAYMENT" && "🧑‍🏭 শ্রমিক / স্টাফ পেমেন্ট"}
                           {m.data.type === "KACHA_BRICK" && "🧱 কাঁচা ইট (মিল) এন্ট্রি"}
                           {m.data.type === "SUPPLIER_PAYMENT" && "🚛 সাপ্লায়ার পেমেন্ট"}

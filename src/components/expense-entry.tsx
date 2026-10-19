@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowLeft, BadgeDollarSign, HardHat, LandPlot, Loader2, Mountain, Plus, Receipt, Sparkles, Tractor, Truck, Users2,
-  Warehouse, Wrench, Zap,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, Loader2, Plus, Tractor } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BalanceStrip, Chips, Field, HeadTiles, Section, tk } from "@/components/money-form-parts";
+import { MONEY_HEADS, TONE_CLASS, moneyHead, type MoneyHead, type MoneyKey } from "@/lib/money-heads";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { getSeasonRange, sdb } from "@/lib/season-db";
@@ -18,11 +16,11 @@ import { fetchAllRows } from "@/lib/fetch-all";
 import { bn, todayBD } from "@/lib/format";
 import { createExpense } from "@/lib/expenses.functions";
 import { createSardarPayment } from "@/lib/sardars.functions";
-import { sardarEarned } from "@/lib/salary-accrual";
+import { salaryEarned, sardarEarned } from "@/lib/salary-accrual";
 import { ASSET_PREFIX } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import {
-  CONTRACT_TYPES, HOUR, LAND_UNITS, PARTS_HEAD, PARTS_PREFIX, POWER_BILL, PREV_NOTE, TRIP, TRIP_WORK, VEKU_ITEM,
+  CONTRACT_TYPES, HOUR, LAND_UNITS, PARTS_PREFIX, POWER_BILL, PREV_NOTE, TRIP, TRIP_WORK, VEKU_ITEM,
   VEKU_KINDS, VEKU_TYPE, contractByKey, dayBefore, makeVekuNote, parseVekuNote,
 } from "@/components/contract-config";
 
@@ -43,34 +41,15 @@ import {
  * Opened from the cash book, the purchases page and its folders, and the suppliers page.
  */
 
-export type HeadKey =
-  | "sardar" | "daily" | "staff" | "raw" | "parts" | "power" | "misc" | "veku" | "vehicle" | "land" | "clean" | "asset";
+export type HeadKey = Exclude<MoneyKey, "sale" | "openingIn" | "ownerInvest" | "loanIn" | "loanBack">;
+export type HeadDef = MoneyHead & { key: HeadKey };
 
-export type HeadDef = { key: HeadKey; label: string; icon: LucideIcon; tone: "red" | "stone" | "blue" };
-
-export const EXPENSE_HEADS: HeadDef[] = [
-  { key: "sardar", label: "সরদার", icon: Users2, tone: "red" },
-  { key: "daily", label: "ডেলি", icon: HardHat, tone: "red" },
-  { key: "staff", label: "মেস্তুরি ও ম্যানেজার", icon: BadgeDollarSign, tone: "red" },
-  { key: "raw", label: "কাঁচামাল", icon: Mountain, tone: "stone" },
-  { key: "parts", label: PARTS_HEAD, icon: Wrench, tone: "stone" },
-  { key: "power", label: POWER_BILL, icon: Zap, tone: "stone" },
-  { key: "veku", label: "ভেকু", icon: Tractor, tone: "stone" },
-  { key: "vehicle", label: "গাড়ি ভাড়া", icon: Truck, tone: "stone" },
-  { key: "land", label: "জমি ভাড়া", icon: LandPlot, tone: "stone" },
-  { key: "clean", label: "পরিচ্ছন্ন কর্মী", icon: Sparkles, tone: "stone" },
-  { key: "misc", label: "আনুষাঙ্গিক", icon: Receipt, tone: "red" },
-  { key: "asset", label: "সম্পদ", icon: Warehouse, tone: "blue" },
-];
-export const headDef = (k: HeadKey) => EXPENSE_HEADS.find((h) => h.key === k)!;
+/** every money-out head, from the one list in money-heads.ts */
+export const EXPENSE_HEADS = MONEY_HEADS.filter((h) => h.group !== "in") as HeadDef[];
+export const headDef = (k: HeadKey) => moneyHead(k) as HeadDef;
 /** heads that live on the purchases page (its folders) */
 export const PURCHASE_HEADS: HeadKey[] = ["raw", "parts", "power", "veku", "vehicle", "land", "clean"];
-
-export const TONES: Record<HeadDef["tone"], string> = {
-  red: "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300",
-  stone: "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200",
-  blue: "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-};
+export const TONES = TONE_CLASS;
 
 /** One saved row to change in place (admin). The head decides how it is shown. */
 export type ExpenseEdit =
@@ -83,19 +62,19 @@ type Sup = { id: string; name: string; material_type: string | null };
 type PartyBill = { supplier_id: string | null; purchase_date: string; item_name: string; unit: string | null; unit_price: number; total_amount: number; quantity: number };
 type PartyPay = { supplier_id: string; payment_date: string; amount: number; note: string | null };
 
-const tk = (n: number) => `৳${bn(Math.round(n))}`;
 const num = (s: string) => Number(s || 0) || 0;
 const nfc = (s: string) => s.normalize("NFC").trim();
 
 const SUPPLIER_HEADS = new Set<HeadKey>(["raw", "parts", "veku", "vehicle", "land", "clean"]);
 const CASH_HEADS = new Set<HeadKey>(["power", "misc", "asset"]);
+/** heads whose person is picked from a fixed list by id */
+const PICK_HEADS = new Set<HeadKey>(["sardar", "daily", "staff", "veku", "ownerSalary", "ownerWithdraw", "openingOut", "loanRepay"]);
 /** heads whose bill is usually written with the payment; the others start with the bill folded */
 const BILL_OPEN = new Set<HeadKey>(["raw", "parts", "vehicle"]);
 
 type Form = {
   personId: string; // sardar / worker / veku id
   party: string; // typed seller / owner name
-  mode: "payment" | "opening"; // sardar
   kindId: string; // raw / parts catalog item id
   vekuKind: string;
   work: string; // vehicle work chip
@@ -115,7 +94,7 @@ type Form = {
 };
 
 const blank = (today: string): Form => ({
-  personId: "", party: "", mode: "payment", kindId: "", vekuKind: "", work: "", what: "", qty: "", rate: "", total: "",
+  personId: "", party: "", kindId: "", vekuKind: "", work: "", what: "", qty: "", rate: "", total: "",
   billKind: "rent", area: "", areaUnit: LAND_UNITS[0], driver: "", rateTouched: false, paid: "", paidTouched: false, date: today, note: "",
 });
 
@@ -175,7 +154,7 @@ export function ExpenseEntryDialog({
     const base = blank(today);
     pendingParty.current = null;
     if (!edit) {
-      if (headProp && partyId && ["sardar", "daily", "staff", "veku"].includes(headProp)) base.personId = partyId;
+      if (headProp && partyId && PICK_HEADS.has(headProp)) base.personId = partyId;
       else if (partyId) pendingParty.current = partyId;
       startHead(headProp ?? null, base);
       return;
@@ -308,9 +287,6 @@ export function ExpenseEntryDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sellers, head]);
 
-  const people = head === "sardar"
-    ? sardarsQ.data ?? []
-    : (workersQ.data ?? []).filter((w) => (head === "daily" ? w.role === "daily" : w.role !== "daily"));
 
   const seller = head === "veku"
     ? sellers.find((s) => s.id === f.personId)
@@ -420,17 +396,6 @@ export function ExpenseEntryDialog({
       return { earned, paid, due: earned - paid };
     },
   });
-  const sardarOpenQ = useQuery({
-    queryKey: ["sardar-opening-one", f.personId],
-    enabled: open && head === "sardar" && !!f.personId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("opening_balance_summary").select("id, remaining_amount, as_of_date")
-        .eq("sardar_id", f.personId).eq("kind", "sardar_payable").order("as_of_date");
-      if (error) throw error;
-      const rows = (data ?? []).map((r: any) => ({ id: r.id as string, remaining: Number(r.remaining_amount || 0) }));
-      return { rows, remaining: rows.reduce((a, r) => a + r.remaining, 0) };
-    },
-  });
   const workerPaidQ = useQuery({
     queryKey: ["expense-form-worker-paid", f.personId],
     enabled: open && (head === "daily" || head === "staff") && !!f.personId,
@@ -439,6 +404,85 @@ export function ExpenseEntryDialog({
       return rows.reduce((a, r) => a + Number(r.amount || 0), 0);
     },
   });
+
+  // owners: salary owed this season (same rule as the owners page) and net capital
+  const ownersQ = useQuery({
+    queryKey: ["expense-form-owners"],
+    enabled: open && (head === "ownerSalary" || head === "ownerWithdraw"),
+    queryFn: async () => {
+      const { data, error } = await supabase.from("owners").select("id, name").order("name");
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; name: string }>;
+    },
+  });
+  const ownerQ = useQuery({
+    queryKey: ["expense-form-owner", f.personId],
+    enabled: open && (head === "ownerSalary" || head === "ownerWithdraw") && !!f.personId,
+    queryFn: async () => {
+      const [tx, rates] = await Promise.all([
+        supabase.from("owner_transactions").select("txn_type, amount, txn_date").eq("owner_id", f.personId),
+        (supabase as any).from("pay_rates").select("owner_id, amount, effective_from").eq("owner_id", f.personId).order("effective_from"),
+      ]);
+      if (tx.error) throw tx.error;
+      const rows = (tx.data ?? []) as Array<{ txn_type: string; amount: number; txn_date: string }>;
+      const sum = (t: string, ok: (d: string) => boolean = () => true) => rows.filter((r) => r.txn_type === t && ok(r.txn_date)).reduce((a, r) => a + Number(r.amount || 0), 0);
+      const inSeason = (d: string) => !season || (d >= season.from && d <= season.to);
+      const rateRows = (rates?.data ?? []) as Array<{ amount: number; effective_from: string }>;
+      const since = rateRows[0]?.effective_from ?? null;
+      const earned = since ? salaryEarned({ monthly: 0, join: since, rates: rateRows as any, today }).earned : 0;
+      return { net: sum("invest") - sum("withdraw"), salaryDue: since ? earned - sum("salary", inSeason) : null };
+    },
+  });
+  // old dues from last year (sardars and others), one line per person
+  const openingsQ = useQuery({
+    queryKey: ["expense-form-openings"],
+    enabled: open && (head === "openingOut" || head === "sardar"),
+    queryFn: async () => {
+      const { data, error } = await supabase.from("opening_balance_summary")
+        .select("id, display_name, party_name, kind, sardar_id, remaining_amount")
+        .in("kind", ["sardar_payable", "other_payable"]).order("display_name");
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({ id: r.id as string, name: (r.display_name || r.party_name || "—") as string, sardar_id: r.sardar_id as string | null, remaining: Number(r.remaining_amount || 0) }))
+        .filter((r) => r.remaining > 0.5);
+    },
+  });
+  const opening = head === "openingOut" ? (openingsQ.data ?? []).find((o) => o.id === f.personId) : undefined;
+  const sardarOld = head === "sardar" ? (openingsQ.data ?? []).find((o) => o.sardar_id === f.personId) : undefined;
+  // loans the kiln took and still owes
+  const loansQ = useQuery({
+    queryKey: ["expense-form-loans"],
+    enabled: open && (head === "loanRepay" || head === "loanGive"),
+    queryFn: async () => {
+      const [l, p] = await Promise.all([
+        supabase.from("loans").select("id, party_name, direction, amount, loan_date").order("loan_date"),
+        supabase.from("loan_payments").select("loan_id, amount"),
+      ]);
+      if (l.error) throw l.error;
+      if (p.error) throw p.error;
+      const paidOf = (id: string) => (p.data ?? []).filter((x: any) => x.loan_id === id).reduce((a, x: any) => a + Number(x.amount || 0), 0);
+      return (l.data ?? []).map((x: any) => ({ id: x.id as string, name: x.party_name as string, direction: x.direction as string, date: x.loan_date as string, remaining: Number(x.amount || 0) - paidOf(x.id) }));
+    },
+  });
+  const takenLoans = (loansQ.data ?? []).filter((l) => l.direction === "taken" && l.remaining > 0.5);
+  const loan = head === "loanRepay" ? takenLoans.find((l) => l.id === f.personId) : undefined;
+
+  // the list a person is picked from, for heads that pick by id
+  const people: Array<{ id: string; name: string }> =
+    head === "sardar" ? sardarsQ.data ?? []
+    : head === "daily" || head === "staff" ? (workersQ.data ?? []).filter((w) => (head === "daily" ? w.role === "daily" : w.role !== "daily"))
+    : head === "ownerSalary" || head === "ownerWithdraw" ? ownersQ.data ?? []
+    : head === "openingOut" ? (openingsQ.data ?? []).map((o) => ({ id: o.id, name: `${o.name} · বাকি ${tk(o.remaining)}` }))
+    : head === "loanRepay" ? takenLoans.map((l) => ({ id: l.id, name: `${l.name} · বাকি ${tk(l.remaining)}` }))
+    : [];
+  const peopleLoading = sardarsQ.isLoading || workersQ.isLoading || ownersQ.isLoading || openingsQ.isLoading || loansQ.isLoading;
+
+  // an owner's salary: start from what is still owed this season
+  useEffect(() => {
+    if (edit || head !== "ownerSalary" || f.paidTouched || f.paid) return;
+    const due = ownerQ.data?.salaryDue ?? 0;
+    if (due > 0) set({ paid: String(Math.round(due)) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerQ.data, head]);
 
   /* ---------- the numbers ---------- */
   const rawAuto = num(f.qty) * num(f.rate);
@@ -450,13 +494,20 @@ export function ExpenseEntryDialog({
   const paid = isEditBill ? 0 : num(f.paid);
   const prevDue: number | null =
     edit ? null
-    : head === "sardar" ? (f.personId ? (f.mode === "opening" ? sardarOpenQ.data?.remaining ?? null : sardarBalQ.data?.due ?? null) : null)
+    : head === "sardar" ? (f.personId ? sardarBalQ.data?.due ?? null : null)
+    : head === "ownerSalary" ? (f.personId ? ownerQ.data?.salaryDue ?? null : null)
+    : head === "openingOut" ? (opening ? opening.remaining : null)
+    : head === "loanRepay" ? (loan ? loan.remaining : null)
     : isSupplierHead && partyIds.length ? party?.due ?? null
     : null;
 
   /* ---------- labels ---------- */
   const partyLabel =
     head === "sardar" ? "সরদার" : head === "daily" ? "ডেলি শ্রমিক" : head === "staff" ? "মেস্তুরি / ম্যানেজার"
+    : head === "ownerSalary" || head === "ownerWithdraw" ? "কোন মালিক"
+    : head === "openingOut" ? "কার পূর্বের দেনা"
+    : head === "loanRepay" ? "কার ঋণ"
+    : head === "loanGive" ? "কাকে ঋণ দিলেন"
     : head === "veku" ? "কোন ভেকু"
     : head === "raw" ? (kindItem?.name === "মাটি" ? "মাটির সাইট" : kindItem?.name === "ডিজেল" ? "পাম্প / সাপ্লায়ার" : "কার কাছ থেকে আনা")
     : head === "parts" ? "দোকান"
@@ -517,31 +568,39 @@ export function ExpenseEntryDialog({
       if (head === "sardar") {
         if (!f.personId) throw new Error("সরদারের নাম বেছে নিন");
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
-        if (f.mode === "opening") {
-          const rows = sardarOpenQ.data?.rows ?? [];
-          const remaining = sardarOpenQ.data?.remaining ?? 0;
-          if (!rows.length || remaining <= 0) throw new Error("এই সরদারের পূর্বের কোনো বাকি নেই");
-          if (paid > remaining + 0.001) throw new Error(`পূর্বের বাকি আছে মাত্র ৳ ${bn(remaining)}`);
-          let left = paid;
-          for (const r of rows) {
-            if (left <= 0) break;
-            const p = Math.min(left, r.remaining);
-            if (p <= 0) continue;
-            const { error } = await supabase.from("opening_payments").insert({
-              opening_balance_id: r.id, amount: p, payment_date: f.date, method: "নগদ", note: note || null, created_by: uid(),
-            });
-            if (error) throw error;
-            left -= p;
-          }
-        } else {
-          await createSardarPay({ data: { sardar_id: f.personId, amount: paid, payment_date: f.date, payment_type: "payment", method: "cash", note: note || null } });
-        }
+        await createSardarPay({ data: { sardar_id: f.personId, amount: paid, payment_date: f.date, payment_type: "payment", method: "cash", note: note || null } });
       } else if (head === "daily" || head === "staff") {
         if (!f.personId) throw new Error("নাম বেছে নিন");
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
         const { error } = await supabase.from("worker_payments").insert({
           worker_id: f.personId, amount: paid, payment_date: f.date, payment_type: "payment", note: note || null, created_by: uid(),
         });
+        if (error) throw error;
+      } else if (head === "ownerSalary" || head === "ownerWithdraw") {
+        if (!f.personId) throw new Error("কোন মালিক, বেছে নিন");
+        if (!(paid > 0)) throw new Error("কত টাকা নিলেন, লিখুন");
+        const { error } = await supabase.from("owner_transactions").insert({
+          owner_id: f.personId, txn_type: head === "ownerSalary" ? "salary" : "withdraw", amount: paid, txn_date: f.date, note: note || null, created_by: uid(),
+        });
+        if (error) throw error;
+      } else if (head === "openingOut") {
+        if (!opening) throw new Error("কার পূর্বের দেনা, বেছে নিন");
+        if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
+        if (paid > opening.remaining + 0.001) throw new Error(`পূর্বের বাকি আছে মাত্র ৳ ${bn(opening.remaining)}`);
+        const { error } = await supabase.from("opening_payments").insert({
+          opening_balance_id: opening.id, amount: paid, payment_date: f.date, method: "নগদ", note: note || null, created_by: uid(),
+        });
+        if (error) throw error;
+      } else if (head === "loanRepay") {
+        if (!loan) throw new Error("কার ঋণ, বেছে নিন");
+        if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
+        if (paid > loan.remaining + 0.5) throw new Error(`এই ঋণের বাকি আছে মাত্র ৳ ${bn(loan.remaining)}`);
+        const { error } = await supabase.from("loan_payments").insert({ loan_id: loan.id, amount: paid, payment_date: f.date, note: note || null, created_by: uid() });
+        if (error) throw error;
+      } else if (head === "loanGive") {
+        if (!f.party.trim()) throw new Error("কাকে ঋণ দিলেন, নাম লিখুন");
+        if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
+        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "given", amount: paid, loan_date: f.date, note: note || null, created_by: uid() });
         if (error) throw error;
       } else if (isCash) {
         if (!(paid > 0)) throw new Error("টাকার পরিমাণ দিন");
@@ -653,6 +712,13 @@ export function ExpenseEntryDialog({
 
   /* ---------- view ---------- */
   const shownHeads = EXPENSE_HEADS.filter((h) => !heads || heads.includes(h.key));
+  const MOVE_HELP: Partial<Record<HeadKey, string>> = {
+    ownerWithdraw: "মালিক নিজের বিনিয়োগ থেকে টাকা নিলেন। হাতে নগদ কমবে, কিন্তু এটা খরচ নয়, লাভ-ক্ষতিতে ধরা হবে না।",
+    ownerSalary: "মালিকের মাসিক বেতন। এটা ভাটার খরচ, লাভ থেকে কমবে। বিনিয়োগ বদলাবে না।",
+    openingOut: "গত মৌসুমের দেনা শোধ। হাতে নগদ কমবে, এই মৌসুমের লাভ-ক্ষতিতে ধরা হবে না।",
+    loanGive: "কাউকে ধার দিলেন। ফেরত পেলে \"টাকা এসেছে → দেওয়া ঋণ ফেরত\" থেকে লিখবেন। খরচ নয়।",
+    loanRepay: "নেওয়া ঋণ শোধ করলেন। খরচ নয়, লাভ-ক্ষতিতে ধরা হবে না।",
+  };
   const def = head ? headDef(head) : null;
   const title = edit ? "এন্ট্রি সংশোধন" : "খরচ লিখুন";
 
@@ -665,15 +731,7 @@ export function ExpenseEntryDialog({
         </DialogHeader>
 
         {!head || !def ? (
-          <div className="grid grid-cols-3 gap-2">
-            {shownHeads.map((h) => (
-              <button key={h.key} type="button" onClick={() => startHead(h.key, blank(today))}
-                className="flex min-h-[86px] flex-col items-center justify-center gap-1.5 rounded-2xl border bg-card px-1 py-2.5 text-center transition active:scale-95">
-                <span className={`grid h-10 w-10 place-items-center rounded-xl ${TONES[h.tone]}`}><h.icon className="h-5 w-5" /></span>
-                <span className="text-[13px] font-bold leading-tight">{h.label}</span>
-              </button>
-            ))}
-          </div>
+          <HeadTiles keys={shownHeads.map((h) => h.key)} onPick={(k) => startHead(k as HeadKey, blank(today))} />
         ) : (
           <div className="space-y-3.5">
             {/* head */}
@@ -690,15 +748,22 @@ export function ExpenseEntryDialog({
             {/* 1. who */}
             {!isCash && edit?.table !== "expenses" && (
               <Section label={`${partyLabel}${head === "parts" ? (partsNeedShop ? " *" : " (ঐচ্ছিক)") : " *"}`}>
-                {head === "sardar" || head === "daily" || head === "staff" ? (
+                {head !== "veku" && PICK_HEADS.has(head) ? (
                   <>
                     <Select value={f.personId} onValueChange={(v) => set({ personId: v })}>
                       <SelectTrigger className="h-11"><SelectValue placeholder="নাম বেছে নিন" /></SelectTrigger>
                       <SelectContent>{people.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
                     </Select>
-                    {people.length === 0 && !(sardarsQ.isLoading || workersQ.isLoading) && (
-                      <p className="text-xs text-muted-foreground">কোনো নাম নেই, আগে সংশ্লিষ্ট পাতায় নাম যোগ করুন।</p>
+                    {people.length === 0 && !peopleLoading && (
+                      <p className="text-xs text-muted-foreground">
+                        {head === "openingOut" ? "কারো পূর্বের দেনা বাকি নেই।" : head === "loanRepay" ? "শোধ করার মতো কোনো নেওয়া ঋণ নেই।" : "কোনো নাম নেই, আগে সংশ্লিষ্ট পাতায় নাম যোগ করুন।"}
+                      </p>
                     )}
+                  </>
+                ) : head === "loanGive" ? (
+                  <>
+                    <Input className="h-11" list="expense-form-loan-names" value={f.party} placeholder="নাম লিখুন" onChange={(e) => set({ party: e.target.value })} />
+                    <datalist id="expense-form-loan-names">{[...new Set((loansQ.data ?? []).map((l) => l.name))].map((n) => <option key={n} value={n} />)}</datalist>
                   </>
                 ) : head === "veku" ? (
                   <Chips value={f.personId} onChange={(v) => set({ personId: v, ...(f.rateTouched ? {} : { rate: "" }) })} options={sellers.map((s) => [s.id, s.name])} icon={Tractor} />
@@ -717,8 +782,18 @@ export function ExpenseEntryDialog({
                 )}
                 {prevDue !== null && (
                   <p className={`num text-xs font-semibold ${prevDue > 0 ? "text-warning" : prevDue < 0 ? "text-info" : "text-success"}`}>
-                    {head === "sardar" && f.mode === "opening" ? "পূর্বের বাকি" : "এখন পর্যন্ত"}: {prevDue > 0 ? `বাকি ${tk(prevDue)}` : prevDue < 0 ? `${head === "sardar" ? "দাদন" : "অগ্রিম দেওয়া"} ${tk(-prevDue)}` : "কোনো বাকি নেই"}
+                    {head === "ownerSalary" ? "এই মৌসুমের বেতন" : "এখন পর্যন্ত"}: {prevDue > 0 ? `বাকি ${tk(prevDue)}` : prevDue < 0 ? `${head === "sardar" ? "দাদন" : "অগ্রিম দেওয়া"} ${tk(-prevDue)}` : "কোনো বাকি নেই"}
                   </p>
+                )}
+                {head === "ownerWithdraw" && f.personId && ownerQ.data && (
+                  <p className="num text-xs font-semibold text-muted-foreground">এখন নিট বিনিয়োগ {tk(ownerQ.data.net)}</p>
+                )}
+                {head === "sardar" && sardarOld && (
+                  <button type="button" onClick={() => startHead("openingOut", { ...blank(today), personId: sardarOld.id })}
+                    className="flex w-full items-center justify-between rounded-xl bg-amber-50 px-3 py-2 text-left text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                    <span>গত মৌসুমের বাকি আছে {tk(sardarOld.remaining)}। সেখান থেকে দিচ্ছেন?</span>
+                    <span className="flex items-center gap-0.5 font-bold">পূর্বের দেনা <ChevronRight className="h-3.5 w-3.5" /></span>
+                  </button>
                 )}
                 {(head === "daily" || head === "staff") && f.personId && workerPaidQ.data !== undefined && (
                   <p className="num text-xs text-muted-foreground">এই মৌসুমে আগে দেওয়া হয়েছে {tk(workerPaidQ.data)}</p>
@@ -727,11 +802,7 @@ export function ExpenseEntryDialog({
             )}
 
             {/* 2. what */}
-            {head === "sardar" && (
-              <Section label="কিসের টাকা">
-                <Chips value={f.mode} onChange={(v) => set({ mode: v as Form["mode"] })} options={[["payment", "চলতি কাজের মজুরি / অগ্রিম"], ["opening", "পূর্বের বাকি থেকে"]]} />
-              </Section>
-            )}
+            {MOVE_HELP[head] && <p className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{MOVE_HELP[head]}</p>}
             {(head === "raw" || head === "parts") && (
               <Section label={head === "raw" ? "কোন কাঁচামাল" : "কোন ধরনের মালামাল"}>
                 <Chips value={f.kindId} onChange={(v) => set({ kindId: v, rate: "", rateTouched: false })} options={kindItems.map((i) => [i.id, i.name])} />
@@ -822,7 +893,7 @@ export function ExpenseEntryDialog({
 
             {/* 4. paid now */}
             {!isEditBill && !(edit?.table === "expenses" && head === "parts") && (
-              <Section label={isCash ? "টাকা *" : head === "veku" && isEditPay ? "টাকা *" : "এখন কত দিলেন"}
+              <Section label={isCash ? "টাকা *" : head === "ownerSalary" || head === "ownerWithdraw" ? "কত টাকা নিলেন *" : head === "veku" && isEditPay ? "টাকা *" : "এখন কত দিলেন"}
                 action={bill > 0 ? <button type="button" className="text-xs font-bold text-primary" onClick={() => set({ paid: String(Math.round(bill * 100) / 100), paidTouched: false })}>পুরোটা</button> : undefined}>
                 <Input className="h-11" type="number" min="0" step="0.01" inputMode="decimal" value={f.paid} placeholder={bill > 0 ? "না দিলে খালি রাখুন" : "০"}
                   onChange={(e) => set({ paid: e.target.value, paidTouched: true })} />
@@ -872,63 +943,5 @@ export function ExpenseEntryDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/* ---------- small parts, the same for every head ---------- */
-
-function Section({ label, action, children }: { label: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2 rounded-2xl border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <Label className="text-sm font-bold">{label}</Label>
-        {action}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, placeholder, step = "0.01" }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; step?: string }) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      <Input className="h-11" type="number" min="0" step={step} inputMode="decimal" value={value} placeholder={placeholder ?? "০"} onChange={(e) => onChange(e.target.value)} />
-    </div>
-  );
-}
-
-function Chips({ value, onChange, options, small, icon: Icon }: {
-  value: string; onChange: (v: string) => void; options: Array<[string, string]>; small?: boolean; icon?: LucideIcon;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map(([k, l]) => (
-        <button key={k} type="button" aria-pressed={value === k} onClick={() => onChange(k)}
-          className={`flex items-center gap-1.5 rounded-xl px-3 font-semibold transition ${small ? "h-9 text-xs" : "h-10 text-sm"} ${value === k ? "bg-primary text-primary-foreground" : "border bg-background"}`}>
-          {Icon && <Icon className="h-4 w-4" />}{l}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** আগে বাকি + বিল − দিলেন = পরে বাকি */
-function BalanceStrip({ prev, bill, paid, advanceWord }: { prev: number | null; bill: number; paid: number; advanceWord: string }) {
-  const after = (prev ?? 0) + bill - paid;
-  const cells: Array<[string, string, string]> = [];
-  if (prev !== null) cells.push(["আগে বাকি", prev < 0 ? `${advanceWord} ${tk(-prev)}` : tk(prev), ""]);
-  if (bill > 0) cells.push(["+ বিল", tk(bill), ""]);
-  cells.push(["− দিলেন", tk(paid), "text-success"]);
-  cells.push([after < -0.001 ? `= ${advanceWord}` : "= বাকি থাকবে", tk(Math.abs(after)), after > 0.001 ? "text-warning" : after < -0.001 ? "text-info" : "text-success"]);
-  return (
-    <div className={`grid gap-1.5 rounded-2xl bg-muted p-2 text-center ${cells.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
-      {cells.map(([l, v, c]) => (
-        <div key={l}>
-          <div className="text-[11px] font-semibold text-muted-foreground">{l}</div>
-          <div className={`num text-[13px] font-bold sm:text-sm ${c}`}>{v}</div>
-        </div>
-      ))}
-    </div>
   );
 }

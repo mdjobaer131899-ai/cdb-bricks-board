@@ -53,14 +53,14 @@ const COST_LABELS: Record<string, string> = {
   vehicleRent: "গাড়ি ভাড়া (বাকিসহ)",
   veku: "ভেকুর কাজ (ঘণ্টার বিল)",
   expenses: "দৈনিক খরচ ও বিল",
-  sardar: "সরদার পেমেন্ট",
-  worker: "শ্রমিক ও বেতন",
+  sardar: "সরদার",
+  worker: "ডেলি শ্রমিক ও মেস্তুরি-ম্যানেজার",
   ownerSalary: "মালিকের বেতন",
   vehicle: "গাড়ি খরচ",
 };
 
 const IN_LABELS: Record<string, string> = {
-  sales: "ইট বিক্রয় / কালেকশন",
+  sales: "ইট বিক্রির টাকা",
   ownerInvest: "মালিকের বিনিয়োগ",
   loanTaken: "ঋণ নেওয়া",
   loanReturned: "দেওয়া ঋণ ফেরত",
@@ -69,15 +69,15 @@ const IN_LABELS: Record<string, string> = {
 const OUT_LABELS: Record<string, string> = {
   expenses: "দৈনিক খরচ ও বিল",
   assets: "সম্পদ কেনা (ভেকু, বিদ্যুৎ লাইন…)",
-  sardar: "সরদার পেমেন্ট",
-  worker: "শ্রমিক ও বেতন",
+  sardar: "সরদার",
+  worker: "ডেলি শ্রমিক ও মেস্তুরি-ম্যানেজার",
   supplier: "সাপ্লায়ার, ভেকু, গাড়ি ভাড়া, জমি ভাড়া ও পরিচ্ছন্ন কর্মী পরিশোধ",
   vehicle: "গাড়ি খরচ",
   ownerSalary: "মালিকের বেতন",
   ownerWithdraw: "মালিকের উত্তোলন",
   loanGiven: "ঋণ দেওয়া",
   loanRepaid: "নেওয়া ঋণ পরিশোধ",
-  openingPaid: "পূর্বের দায় পরিশোধ",
+  openingPaid: "পূর্বের দেনা পরিশোধ",
 };
 
 function IncomeExpensePage() {

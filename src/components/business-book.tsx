@@ -6,7 +6,8 @@ import { ArrowDownLeft, ArrowUpRight, ChevronRight, FileDown, Loader2, TrendingD
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { bn, bnDate, todayBD } from "@/lib/format";
-import { fetchCashHistory, fetchCashSummary, isAssetCategory, type CashHistoryRow } from "@/lib/cash-queries";
+import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/cash-queries";
+import { isCost } from "@/lib/money-heads";
 import { exportReportPdf } from "@/lib/pdf-export";
 import { useSeason } from "@/lib/season-context";
 import { useCurrentUser } from "@/lib/use-current-user";
@@ -29,8 +30,6 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: "custom", label: "তারিখ দিন" },
 ];
 
-/** এগুলো ব্যবসার খরচ নয়, শুধু টাকার চলাচল — তাই লাভ-ক্ষতিতে ধরা হয় না */
-const NON_OPERATING = new Set(["মালিকের উত্তোলন", "ঋণ দেওয়া", "নেওয়া ঋণ পরিশোধ", "পূর্বের দায় পরিশোধ"]);
 
 const EXPENSE_COLORS = ["#A63A1C", "#D97706", "#0F766E", "#1D4ED8", "#7C3AED", "#78716C"];
 const BN_MONTHS_SHORT = ["জানু", "ফেব্রু", "মার্চ", "এপ্রি", "মে", "জুন", "জুলা", "আগ", "সেপ্টে", "অক্টো", "নভে", "ডিসে"];
@@ -485,7 +484,8 @@ export function BusinessBook() {
     const groupMap = new Map<string, number>();
     const opRows: CashHistoryRow[] = [];
     for (const r of cash.history) {
-      if (r.dir !== "out" || NON_OPERATING.has(r.head) || isAssetCategory(r.head)) continue;
+      // only costs; money moves (assets, withdrawals, loans, old dues) are not (money-heads.ts)
+      if (r.dir !== "out" || !isCost(r.key)) continue;
       opRows.push(r);
       const head = r.head || "অন্যান্য";
       groupMap.set(head, (groupMap.get(head) ?? 0) + r.amount);

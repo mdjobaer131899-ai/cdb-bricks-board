@@ -16,6 +16,7 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
 import { toast } from "sonner";
 import { dailyEarned, fetchPayRates, rateAt, salaryEarned, type PayRate } from "@/lib/salary-accrual";
+import { ExpenseEntryDialog } from "@/components/expense-entry";
 import { fetchAllRows } from "@/lib/fetch-all";
 
 type Mode = "daily" | "salary";
@@ -144,6 +145,8 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
 
   // ---- payment form
   const [pDlg, setPDlg] = useState<null | { id?: string; worker_id: string; amount: string; date: string; note: string }>(null);
+  // a new payment goes through the one expense form; pDlg is for editing a saved one
+  const [payFor, setPayFor] = useState<string | null>(null);
   const saveP = useMutation({
     mutationFn: async () => {
       const f = pDlg!;
@@ -312,7 +315,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                     <TableCell className="text-right tabular-nums text-success">৳ {bn(s.paid)}</TableCell>
                     <TableCell className="text-right font-semibold tabular-nums text-warning">৳ {bn(s.due)}</TableCell>
                     <TableCell className="text-right whitespace-nowrap">
-                      <Button size="sm" variant="outline" onClick={() => setPDlg({ worker_id: w.id, amount: "", date: today, note: "" })}>টাকা দিন</Button>
+                      <Button size="sm" variant="outline" onClick={() => setPayFor(w.id)}>টাকা দিন</Button>
                       {mode === "salary" && <Button size="sm" variant="ghost" className="ml-1" onClick={() => setAbsDlg({ worker_id: w.id, date: today, half: false, note: "" })}>ছুটি/অনুপস্থিত</Button>}
                       {isAdmin && <>
                         <Button size="sm" variant="ghost" onClick={() => setWDlg({ id: w.id, name: w.name, phone: w.phone ?? "", role: w.role, wage: String(wageOf(w)), origWage: String(wageOf(w)), wageFrom: today, join_date: w.join_date ?? today, leave_date: (w as any).leave_date ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>
@@ -402,6 +405,9 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       </Dialog>
 
       {/* payment dialog */}
+      <ExpenseEntryDialog open={!!payFor} onOpenChange={(o) => { if (!o) setPayFor(null); }}
+        head={mode === "daily" ? "daily" : "staff"} lockHead partyId={payFor} onDone={invalidate} />
+
       <Dialog open={!!pDlg} onOpenChange={(o) => !o && setPDlg(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>টাকা প্রদান — {pDlg ? nameOf(pDlg.worker_id) : ""}</DialogTitle></DialogHeader>

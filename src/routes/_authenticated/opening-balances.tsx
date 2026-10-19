@@ -16,6 +16,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { IncomeEntryDialog } from "@/components/income-entry";
+import { ExpenseEntryDialog } from "@/components/expense-entry";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/opening-balances")({
@@ -101,6 +103,7 @@ function OpeningBalancesPage() {
     mode: "new",
     form: emptyForm("customer_brick_due"),
   });
+  const [cashEntry, setCashEntry] = useState<{ dir: "in" | "out"; id: string } | null>(null);
   const [payDialog, setPayDialog] = useState<{ open: boolean; row: Row | null; amount: string; date: string; method: string; note: string }>({
     open: false,
     row: null,
@@ -425,14 +428,18 @@ function OpeningBalancesPage() {
                                   variant="outline"
                                   disabled={r.remaining_amount <= 0}
                                   onClick={() =>
-                                    setPayDialog({
+                                    // cash in or out goes through the two shared forms; bricks against
+                                    // last year's advance are not cash and keep their own dialog
+                                    r.kind === "customer_receivable" ? setCashEntry({ dir: "in", id: r.id })
+                                    : r.kind === "customer_brick_due" ? setPayDialog({
                                       open: true,
                                       row: r,
                                       amount: "",
                                       date: todayBD(),
-                                      method: r.kind === "customer_brick_due" ? "ইট সরবরাহ" : "নগদ",
+                                      method: "ইট সরবরাহ",
                                       note: "",
                                     })
+                                    : setCashEntry({ dir: "out", id: r.id })
                                   }
                                 >
                                   {r.kind === "customer_brick_due" ? "ইট সমন্বয়" : r.kind === "customer_receivable" ? "টাকা আদায়" : "পরিশোধ"}
@@ -752,6 +759,10 @@ function OpeningBalancesPage() {
           )}
         </DialogContent>
       </Dialog>
+      <IncomeEntryDialog open={cashEntry?.dir === "in"} onOpenChange={(o) => { if (!o) setCashEntry(null); }}
+        head="openingIn" lockHead partyId={cashEntry?.id ?? null} />
+      <ExpenseEntryDialog open={cashEntry?.dir === "out"} onOpenChange={(o) => { if (!o) setCashEntry(null); }}
+        head="openingOut" lockHead partyId={cashEntry?.id ?? null} />
     </div>
   );
 }

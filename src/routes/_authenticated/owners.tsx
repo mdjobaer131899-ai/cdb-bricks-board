@@ -13,6 +13,8 @@ import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
 import { rateAt, salaryEarned, type PayRate } from "@/lib/salary-accrual";
+import { IncomeEntryDialog } from "@/components/income-entry";
+import { ExpenseEntryDialog } from "@/components/expense-entry";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/owners")({
@@ -160,10 +162,9 @@ function OwnersPage() {
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); inv(); }, onError: (e: Error) => toast.error(e.message),
   });
 
-  const newTx = (owner_id: string, txn_type: TxType) => {
-    const due = stats.get(owner_id)?.due ?? 0;
-    setTDlg({ owner_id, txn_type, amount: txn_type === "salary" && due > 0 ? String(Math.round(due)) : "", date: today, note: "" });
-  };
+  // new money goes through the two shared forms; tDlg is only for editing a saved row
+  const [entry, setEntry] = useState<{ owner_id: string; txn_type: TxType } | null>(null);
+  const newTx = (owner_id: string, txn_type: TxType) => setEntry({ owner_id, txn_type });
 
   const print = () => printTable({
     title: "মালিকের বিনিয়োগ ও বেতনের হিসাব",
@@ -348,6 +349,10 @@ function OwnersPage() {
           <DialogFooter><Button onClick={() => saveR.mutate()} disabled={saveR.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      <IncomeEntryDialog open={entry?.txn_type === "invest"} onOpenChange={(o) => { if (!o) setEntry(null); }}
+        head="ownerInvest" lockHead partyId={entry?.owner_id ?? null} onDone={inv} />
+      <ExpenseEntryDialog open={!!entry && entry.txn_type !== "invest"} onOpenChange={(o) => { if (!o) setEntry(null); }}
+        head={entry?.txn_type === "salary" ? "ownerSalary" : "ownerWithdraw"} lockHead partyId={entry?.owner_id ?? null} onDone={inv} />
     </div>
   );
 }
