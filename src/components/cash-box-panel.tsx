@@ -28,6 +28,7 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { sardarEarned } from "@/lib/salary-accrual";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { toast } from "sonner";
+import { CONTRACT_TYPES } from "@/components/contract-folder";
 
 export const EXPENSE_HEADS = [
   "সরদার", "ডেলি", "মেস্তুরি ও ম্যানেজার", "ভেকু",
@@ -387,16 +388,21 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
   const isStaff = head === "মেস্তুরি ও ম্যানেজার";
   const isVeku = head === "ভেকু";
   const isMat = head === "কাঁচামাল" || head === "যন্ত্রাংশ / মালামাল";
+  const isParts = head === "যন্ত্রাংশ / মালামাল";
   const [matSupplier, setMatSupplier] = useState("");
   const [matQty, setMatQty] = useState("");
   const [matUnit, setMatUnit] = useState("");
   const [matBill, setMatBill] = useState("");
+  // real sellers only: land/vehicle owners and sweepers keep their own folders, and a
+  // material bill must never land on their account
   const suppliersQ = useQuery({
     queryKey: ["suppliers-min"],
     enabled: open && isMat,
     queryFn: async () => {
-      const { data } = await supabase.from("suppliers").select("id, name").order("name");
-      return (data ?? []) as Array<{ id: string; name: string }>;
+      const { data, error } = await supabase.from("suppliers").select("id, name, material_type").order("name");
+      if (error) throw error;
+      return ((data ?? []) as Array<{ id: string; name: string; material_type: string | null }>)
+        .filter((x) => !CONTRACT_TYPES.has(x.material_type ?? ""));
     },
   });
   const vekuTotal = vekuMode === "work" ? (Number(hours) || 0) * (Number(rate) || 0) : 0;
@@ -480,8 +486,10 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
 
   const [rawKind, setRawKind] = useState("");
   const [matRate, setMatRate] = useState("");
-  const [matDueOn, setMatDueOn] = useState(false);
-  const [matDue, setMatDue] = useState("");
+  // parts: "paid now" follows the total until the user edits it
+  const [paidEdited, setPaidEdited] = useState(false);
+  const partsTotal = Number(matBill) || 0;
+  const partsDue = partsTotal - (Number(amount) || 0);
   const rawUnit = RAW_KINDS.find((k) => k.name === rawKind)?.unit ?? "";
   const rawBill = (Number(matQty) || 0) * (Number(matRate) || 0);
   const matSel = (suppliersQ.data ?? []).find((s) => s.name === matSupplier.trim());
@@ -504,7 +512,7 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
     setHead(""); setItem(""); setAmount(""); setNote(""); setPersonId("");
     setSardarType("payment"); setHours(""); setRate(""); setVekuOwner(""); setVekuMode("pay");
     setMatSupplier(""); setMatQty(""); setMatUnit(""); setMatBill("");
-    setRawKind(""); setMatRate(""); setMatDueOn(false); setMatDue("");
+    setRawKind(""); setMatRate(""); setPaidEdited(false);
   }
 
   const createFn = useServerFn(createExpense);
@@ -550,8 +558,8 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
         if (vekuMode === "work" && vekuTotal <= 0) throw new Error("ঘণ্টা ও রেট দিন");
         if (vekuMode === "pay" && !(amt > 0)) throw new Error("কত টাকা দিলেন লিখুন");
         const name = vekuOwner.trim();
-        const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
-        let supId = ex?.id as string | undefined;
+        // only an existing ভেকু owner of that name; never a vehicle/land owner who shares the name
+        let supId = vekuSel?.id;
         if (!supId) {
           const { data, error } = await supabase.from("suppliers").insert({ name, material_type: "ভেকু" }).select("id").single();
           if (error) throw error;
@@ -581,16 +589,22 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
         const itemName = isRaw ? (rawKind === "অন্য" ? item.trim() : rawKind) : item.trim();
         if (!itemName) throw new Error(isRaw ? "কাঁচামাল বাছাই করুন" : "কী কেনা হলো লিখুন");
         const qty = isRaw ? Number(matQty) || 0 : 1;
-        const bill = isRaw ? rawBill : amt + (matDueOn ? Number(matDue) || 0 : 0);
-        if (!(bill > 0) && !(amt > 0)) throw new Error("পরিমাণ/রেট বা টাকা লিখুন");
-        if (!isRaw && !name && !matDueOn) {
-          await createFn({ data: { category: `${head} — ${itemName}`, amount: amt, expense_date: date, note: n } });
+        const bill = isRaw ? rawBill : partsTotal;
+        if (!(bill > 0) && !(amt > 0)) throw new Error(isRaw ? "পরিমাণ/রেট বা টাকা লিখুন" : "মোট দাম লিখুন");
+        if (!isRaw && !name) {
+          // no shop name: a plain cash expense, so nothing may stay due
+          if (!(bill > 0)) throw new Error("মোট দাম লিখুন");
+          if (amt < bill - 0.001) throw new Error("বাকি থাকলে দোকানের নাম লিখুন");
+          if (amt > bill + 0.001) throw new Error("দেওয়া টাকা মোট দামের চেয়ে বেশি। আগের বাকি দিলে দোকানের নাম লিখুন।");
+          await createFn({ data: { category: `${head} — ${itemName}`, amount: bill, expense_date: date, note: n } });
         } else {
-          if (!name) throw new Error(isRaw && rawKind === "মাটি" ? "সাইটের নাম লিখুন" : "সাপ্লায়ার / দোকানের নাম লিখুন");
-          const { data: ex } = await supabase.from("suppliers").select("id").eq("name", name).maybeSingle();
-          let supId = ex?.id as string | undefined;
+          if (!name) throw new Error(rawKind === "মাটি" ? "সাইটের নাম লিখুন" : "সাপ্লায়ার / দোকানের নাম লিখুন");
+          if (!suppliersQ.isSuccess) throw new Error("দোকানের তালিকা এখনো আসেনি, একটু পরে আবার চাপুন");
+          const sellers = suppliersQ.data ?? [];
+          let supId = sellers.find((x) => x.name.trim() === name)?.id;
           if (!supId) {
-            const { data, error } = await supabase.from("suppliers").insert({ name, material_type: itemName }).select("id").single();
+            const { data, error } = await supabase.from("suppliers")
+              .insert({ name, material_type: isRaw ? itemName : "ইঞ্জিন মালামাল" }).select("id").single();
             if (error) throw error;
             supId = data.id;
           }
@@ -647,7 +661,7 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
         <form onSubmit={submit} className="space-y-3">
           <div className="space-y-1">
             <Label>ব্যয়ের খাত *</Label>
-            <Select value={head} onValueChange={(v) => { setHead(v); setPersonId(""); setItem(""); }}>
+            <Select value={head} onValueChange={(v) => { setHead(v); setPersonId(""); setItem(""); setPaidEdited(false); }}>
               <SelectTrigger><SelectValue placeholder="খাত নির্বাচন করুন" /></SelectTrigger>
               <SelectContent>
                 {EXPENSE_HEADS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -766,22 +780,48 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
             </div>
           )}
 
-          {head === "যন্ত্রাংশ / মালামাল" && (
-            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
-              <div className="space-y-1"><Label>কী কী কিনলেন *</Label><Input value={item} onChange={(e) => setItem(e.target.value)} /></div>
-              <label className="flex items-center gap-2 text-sm font-medium">
-                <input type="checkbox" className="h-4 w-4" checked={matDueOn} onChange={(e) => setMatDueOn(e.target.checked)} />
-                বাকি আছে
-              </label>
-              {matDueOn && (
-                <div className="space-y-1"><Label>কত টাকা বাকি *</Label><Input type="number" min="0" value={matDue} onChange={(e) => setMatDue(e.target.value)} /></div>
-              )}
+          {isParts && (
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
               <div className="space-y-1">
-                <Label>দোকান / সাপ্লায়ারের নাম {matDueOn ? "*" : ""}</Label>
-                <Input list="mat-sups2" value={matSupplier} onChange={(e) => setMatSupplier(e.target.value)} />
-                <datalist id="mat-sups2">{(suppliersQ.data ?? []).map((s) => <option key={s.id} value={s.name} />)}</datalist>
+                <Label>কী কী কিনলেন *</Label>
+                <Input value={item} onChange={(e) => setItem(e.target.value)} placeholder="যেমন: বিয়ারিং, বেল্ট" />
               </div>
-              <p className="text-[11px] text-muted-foreground">দোকানের নাম দিলে সরবরাহকারী পাতায় নিজে থেকে যোগ হবে।</p>
+              <div className="space-y-1">
+                <Label>দোকানের নাম {partsDue > 0.001 ? "*" : "(ঐচ্ছিক)"}</Label>
+                <Input list="mat-sups2" value={matSupplier} onChange={(e) => setMatSupplier(e.target.value)} placeholder="নাম লিখুন বা বেছে নিন" />
+                <datalist id="mat-sups2">{(suppliersQ.data ?? []).map((s) => <option key={s.id} value={s.name} />)}</datalist>
+                {matStatus && (
+                  <p className={`text-xs font-semibold ${matStatus.due > 0 ? "text-destructive" : "text-success"}`}>
+                    আগের হিসাব: বিল ৳ {bn(matStatus.bill)}, দেওয়া ৳ {bn(matStatus.paid)} — {matStatus.due > 0 ? `বাকি ৳ ${bn(matStatus.due)}` : matStatus.due < 0 ? `অগ্রিম দেওয়া আছে ৳ ${bn(-matStatus.due)}` : "কোনো বাকি নেই"}
+                  </p>
+                )}
+                {matSupplier.trim() && !matSel && suppliersQ.isSuccess && (
+                  <p className="text-[11px] text-muted-foreground">নতুন দোকান, সাপ্লায়ার পাতায় নিজে থেকে যোগ হবে।</p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label>মোট দাম *</Label>
+                  <Input type="number" min="0" step="0.01" inputMode="decimal" value={matBill} placeholder="০"
+                    onChange={(e) => { setMatBill(e.target.value); if (!paidEdited) setAmount(e.target.value); }} />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <Label>এখন কত দিলেন</Label>
+                    <button type="button" className="text-xs font-bold text-primary" onClick={() => { setAmount(matBill); setPaidEdited(false); }}>পুরোটা</button>
+                  </div>
+                  <Input type="number" min="0" step="0.01" inputMode="decimal" value={amount} placeholder="০"
+                    onChange={(e) => { setAmount(e.target.value); setPaidEdited(true); }} />
+                </div>
+              </div>
+              {partsTotal > 0 && (
+                <div className="flex items-center justify-between rounded-md bg-background p-2 text-sm">
+                  <span>এই কেনার বাকি থাকবে</span>
+                  <b className={partsDue > 0.001 ? "text-destructive" : "text-success"}>
+                    {partsDue < -0.001 ? `৳ ${bn(-partsDue)} বেশি দিলেন (আগের বাকি থেকে কাটবে)` : `৳ ${bn(Math.max(partsDue, 0))}`}
+                  </b>
+                </div>
+              )}
             </div>
           )}
 
@@ -793,10 +833,12 @@ export function AddExpenseDialog({ onDone, open: openProp, onOpenChange, initial
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : isMat ? "কত টাকা দিলাম" : "টাকা *"}</Label>
-              <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
-            </div>
+            {!isParts && (
+              <div className="space-y-1">
+                <Label>{isVeku ? (vekuMode === "pay" ? "কত টাকা দিলেন *" : "আজ পরিশোধ (ঐচ্ছিক)") : isMat ? "কত টাকা দিলাম" : "টাকা *"}</Label>
+                <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="০" />
+              </div>
+            )}
             <div className="space-y-1">
               <Label>তারিখ</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
