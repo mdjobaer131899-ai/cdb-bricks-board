@@ -1,15 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Clock, Loader2, Mountain, Pencil, Plus, Printer, ShoppingCart, Tractor, Trash2, Wrench } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock, Mountain, Pencil, Plus, Printer, ShoppingCart, Tractor, Trash2, Wrench } from "lucide-react";
 import { CLEANER_CONTRACT, CONTRACT_ITEMS, CONTRACT_TYPES, ContractFolder, LAND_CONTRACT, VEHICLE_CONTRACT } from "@/components/contract-folder";
 import { VekuFolder } from "@/components/veku-folder";
+import { ExpenseEntryDialog, PURCHASE_HEADS, type ExpenseEdit, type HeadKey } from "@/components/expense-entry";
+import { PARTS_PREFIX, POWER_BILL } from "@/components/contract-config";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
@@ -24,8 +22,11 @@ import { printTable } from "@/lib/print-table";
      pricing     unit | total | flex     (how the amount is entered)
      pay_mode    credit | cash           (credit -> purchases + supplier_payments,
                                           part may stay due; cash -> expenses,
-                                          paid in full, no seller, e.g. electricity)
-   The main page shows totals and two history folders; supplier dues are paid
+                                          paid in full, no seller, e.g. বিদ্যুৎ বিল)
+   Parts bought with no shop name are expenses "যন্ত্রাংশ / মালামাল — <item>" and
+   are read back into the other folder too.
+   Every entry and edit goes through the one expense form (expense-entry.tsx).
+   The main page shows totals and the history folders; supplier dues are paid
    on the suppliers page (cash or bricks).
    ========================================================= */
 
@@ -35,7 +36,7 @@ export const Route = createFileRoute("/_authenticated/purchases")({
   head: () => ({
     meta: [
       { title: "মালামাল ক্রয় ও খরচ — CDB Bricks" },
-      { name: "description", content: "কাঁচামাল, ইঞ্জিন মালামাল, কারেন্ট বিল, গাড়ি ভাড়া সহ সব কেনাকাটা ও খরচের হিসাব।" },
+      { name: "description", content: "কাঁচামাল, ইঞ্জিন মালামাল, বিদ্যুৎ বিল, গাড়ি ভাড়া সহ সব কেনাকাটা ও খরচের হিসাব।" },
     ],
   }),
   // Which history folder is open lives in the URL (?f=raw|other) so the phone back button returns here
@@ -70,10 +71,9 @@ type Entry = {
   rate: number;
   total: number;
   note: string | null;
+  /** expenses rows: the stored category */
+  category?: string;
 };
-
-const NEW_SUP = "__new__";
-const UNIT_OPTIONS = ["পিস", "কেজি", "লিটার", "টন", "বস্তা", "মণ", "ফুট", "মিটার", "সেট", "প্যাকেট", "জোড়া"];
 
 const RAW_LOOK: Record<string, { chip: string; initial: string }> = {
   মাটি: { chip: "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200", initial: "মা" },
@@ -89,23 +89,6 @@ const look = (name: string) =>
 const tk = (n: number) => `৳${bn(Math.round(n))}`;
 const daysBetween = (a: string, b: string) =>
   Math.round((new Date(b + "T12:00:00+06:00").getTime() - new Date(a + "T12:00:00+06:00").getTime()) / 86400000);
-const isVehicle = (name: string) => name.normalize("NFC").includes("গাড়ি".normalize("NFC"));
-
-type EntryForm = {
-  edit?: { source: "purchase" | "expense"; id: string };
-  item_id: string;
-  date: string;
-  supplier_id: string;
-  new_supplier: string;
-  quantity: string;
-  unit: string;
-  rate: string;
-  total: string;
-  paid: string;
-  note: string;
-};
-
-type ItemForm = { name: string; group: Folder; pricing: "unit" | "total" | "flex"; pay_mode: "credit" | "cash"; unit: string };
 
 function PurchasesPage() {
   const { data: me } = useCurrentUser();
@@ -119,8 +102,8 @@ function PurchasesPage() {
     else navigate({ to: "/purchases", search: {}, replace: true });
   };
 
-  const [form, setForm] = useState<EntryForm | null>(null);
-  const [itemDlg, setItemDlg] = useState<ItemForm | null>(null);
+  // new entries and edits: the one expense form
+  const [entry, setEntry] = useState<{ head?: HeadKey; edit?: ExpenseEdit } | null>(null);
   const [itemFilter, setItemFilter] = useState<string>("all");
 
   /* ---------- data ---------- */
@@ -178,6 +161,19 @@ function PurchasesPage() {
       return data ?? [];
     },
   });
+  // parts bought with no shop name (cash, nothing due)
+  const partsExpQ = useQuery({
+    queryKey: ["purchase-parts-expenses"],
+    queryFn: async () => {
+      const { data, error } = await sdb
+        .from("expenses")
+        .select("id, expense_date, category, amount, note")
+        .like("category", `${PARTS_PREFIX}%`)
+        .order("expense_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const rawItems = items.filter((i) => i.item_group === "raw");
   const otherItems = items.filter((i) => i.item_group !== "raw");
@@ -203,13 +199,14 @@ function PurchasesPage() {
         note: p.note,
       };
     });
-    const fromExpenses: Entry[] = (expQ.data ?? []).map((e) => ({
+    const fromExpenses: Entry[] = [...(expQ.data ?? []), ...(partsExpQ.data ?? [])].map((e) => ({
       key: `e${e.id}`,
       source: "expense",
       id: e.id,
       date: e.expense_date,
       item: itemByName(e.category),
-      name: e.category,
+      name: e.category.startsWith(PARTS_PREFIX) ? e.category.slice(PARTS_PREFIX.length) : e.category,
+      category: e.category,
       supplier_id: null,
       quantity: 0,
       unit: null,
@@ -219,7 +216,7 @@ function PurchasesPage() {
     }));
     return [...fromPurchases, ...fromExpenses].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [purQ.data, expQ.data, items]);
+  }, [purQ.data, expQ.data, partsExpQ.data, items]);
 
   const inFolder = (e: Entry, f: Folder) => (f === "raw" ? e.item?.item_group === "raw" : e.item?.item_group !== "raw");
   const sumOf = (rows: Entry[]) => rows.reduce((a, e) => a + e.total, 0);
@@ -257,151 +254,19 @@ function PurchasesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawItems, entries, today]);
 
-  /* ---------- entry form ---------- */
-  const fItem = form ? items.find((i) => i.id === form.item_id) : undefined;
-  const fCash = fItem?.pay_mode === "cash";
-  const formTotal = (f: EntryForm) => {
-    const it = items.find((i) => i.id === f.item_id);
-    if (!it) return 0;
-    if (it.pay_mode === "cash" || it.pricing === "total") return Number(f.total || 0);
-    if (f.total.trim() !== "") return Number(f.total || 0);
-    return Number(f.quantity || 0) * Number(f.rate || 0);
-  };
-  const fTotal = form ? formTotal(form) : 0;
-  const fPaid = form ? Number(form.paid || 0) : 0;
-
-  const blankForm = (itemId = ""): EntryForm => ({
-    item_id: itemId,
-    date: today,
-    supplier_id: NEW_SUP,
-    new_supplier: "",
-    quantity: "",
-    unit: "",
-    rate: "",
-    total: "",
-    paid: "",
-    note: "",
-  });
-
-  function pickItem(id: string) {
-    if (!form) return;
-    const it = items.find((i) => i.id === id);
-    const last = entries.find((e) => e.item?.id === id && e.source === "purchase");
-    setForm({
-      ...form,
-      item_id: id,
-      unit: it?.pricing === "flex" ? (last?.unit ?? "পিস") : "",
-      rate: !form.edit && it?.pricing === "unit" && last && last.rate > 0 ? String(last.rate) : form.edit ? form.rate : "",
-      supplier_id: form.edit ? form.supplier_id : (last?.supplier_id ?? form.supplier_id),
-      total: form.edit ? form.total : "",
-    });
-  }
-
+  /* ---------- edit through the one form ---------- */
   function openEdit(e: Entry) {
-    const it = e.item;
-    const fixedTotal = !it || it.pricing === "total" || it.pay_mode === "cash";
-    const hasQty = e.quantity > 0 && e.rate > 0;
-    setForm({
-      edit: { source: e.source, id: e.id },
-      item_id: it?.id ?? "",
-      date: e.date,
-      supplier_id: e.supplier_id ?? NEW_SUP,
-      new_supplier: "",
-      quantity: !fixedTotal && hasQty ? String(e.quantity) : "",
-      unit: e.unit ?? (it?.pricing === "flex" ? "পিস" : ""),
-      rate: !fixedTotal && hasQty ? String(e.rate) : "",
-      total: fixedTotal || !hasQty || Math.abs(e.quantity * e.rate - e.total) > 0.5 ? String(e.total || "") : "",
-      paid: "",
-      note: e.note ?? "",
+    if (e.source === "expense") {
+      const head: HeadKey | null = e.category === POWER_BILL ? "power" : e.category?.startsWith(PARTS_PREFIX) ? "parts" : null;
+      if (!head) return toast.error("এই এন্ট্রি ক্যাশ বই থেকে সংশোধন করুন");
+      setEntry({ head, edit: { table: "expenses", id: e.id, date: e.date, category: e.category ?? e.name, amount: e.total, note: e.note } });
+      return;
+    }
+    setEntry({
+      head: e.item?.item_group === "raw" ? "raw" : "parts",
+      edit: { table: "purchases", id: e.id, supplier_id: e.supplier_id, date: e.date, item_name: e.name, material_id: e.item?.id ?? null, quantity: e.quantity, unit: e.unit, unit_price: e.rate, total: e.total, note: e.note },
     });
   }
-
-  const saveEntry = useMutation({
-    mutationFn: async () => {
-      const f = form!;
-      if (!me?.user.id) throw new Error("লগইন প্রয়োজন");
-      const it = items.find((i) => i.id === f.item_id);
-      if (!it) throw new Error("কী কিনলেন বা কিসের খরচ, তা বেছে নিন");
-      const total = Math.round(formTotal(f) * 100) / 100;
-      if (!(total > 0)) throw new Error(it.pay_mode === "cash" ? "মোট বিল লিখুন" : "মোট দাম লিখুন");
-
-      /* cash items (e.g. electricity bill): one expense row, nothing due */
-      if (it.pay_mode === "cash") {
-        const payload = { category: it.name, amount: total, expense_date: f.date, note: f.note.trim() || null };
-        if (f.edit?.source === "expense") {
-          const { error } = await supabase.from("expenses").update(payload).eq("id", f.edit.id);
-          if (error) throw error;
-        } else {
-          if (f.edit?.source === "purchase") {
-            const { error } = await supabase.from("purchases").delete().eq("id", f.edit.id);
-            if (error) throw error;
-          }
-          const { error } = await supabase.from("expenses").insert({ ...payload, created_by: me.user.id });
-          if (error) throw error;
-        }
-        return;
-      }
-
-      /* credit items: purchase row (+ payment now) */
-      const qty = it.pricing === "total" ? 0 : Number(f.quantity || 0);
-      const rate = it.pricing === "total" ? 0 : Number(f.rate || 0);
-      if (it.pricing === "unit" && !(qty > 0)) throw new Error("পরিমাণ লিখুন");
-      const unit = it.pricing === "unit" ? it.unit : it.pricing === "flex" && qty > 0 ? f.unit || "পিস" : null;
-      const paid = f.edit ? 0 : Number(f.paid || 0);
-      if (paid > total + 0.5) throw new Error("দেওয়া টাকা মোট দামের চেয়ে বেশি");
-
-      let supplierId: string | null = f.supplier_id === NEW_SUP ? null : f.supplier_id;
-      if (f.supplier_id === NEW_SUP) {
-        const sname = f.new_supplier.trim();
-        if (!sname) throw new Error(isVehicle(it.name) ? "কার গাড়ি, সেই নাম লিখুন" : "বিক্রেতার নাম লিখুন");
-        const found = (supQ.data ?? []).find((s) => s.name.trim() === sname && !CONTRACT_TYPES.has(s.material_type ?? ""));
-        if (found) supplierId = found.id;
-        else {
-          const { data, error } = await supabase.from("suppliers").insert({ name: sname }).select("id").single();
-          if (error) throw error;
-          supplierId = data.id;
-        }
-      }
-
-      const payload = {
-        purchase_date: f.date,
-        supplier_id: supplierId,
-        material_id: it.id,
-        item_name: it.name,
-        quantity: qty,
-        unit,
-        unit_price: rate,
-        total_amount: total,
-        note: f.note.trim() || null,
-      };
-      if (f.edit?.source === "purchase") {
-        const { error } = await supabase.from("purchases").update(payload).eq("id", f.edit.id);
-        if (error) throw error;
-        return;
-      }
-      if (f.edit?.source === "expense") {
-        const { error } = await supabase.from("expenses").delete().eq("id", f.edit.id);
-        if (error) throw error;
-      }
-      const { error } = await supabase.from("purchases").insert({ ...payload, created_by: me.user.id });
-      if (error) throw error;
-      if (paid > 0 && supplierId) {
-        const { error: e2 } = await supabase.from("supplier_payments").insert({
-          supplier_id: supplierId,
-          amount: paid,
-          payment_date: f.date,
-          note: `${it.name} — কেনার সময় পরিশোধ`,
-          created_by: me.user.id,
-        });
-        if (e2) throw e2;
-      }
-    },
-    onSuccess: () => {
-      toast.success("সংরক্ষিত");
-      setForm(null);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
   const delEntry = useMutation({
     mutationFn: async (e: Entry) => {
@@ -409,41 +274,6 @@ function PurchasesPage() {
       if (error) throw error;
     },
     onSuccess: () => toast.success("মুছে ফেলা হয়েছে"),
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  /* ---------- new item ---------- */
-  const saveItem = useMutation({
-    mutationFn: async () => {
-      const f = itemDlg!;
-      const name = f.name.trim();
-      if (!name) throw new Error("নাম লিখুন");
-      if (items.some((i) => i.name.normalize("NFC") === name.normalize("NFC"))) throw new Error("এই নামে আগে থেকেই আছে");
-      if (f.pay_mode === "credit" && f.pricing === "unit" && !f.unit.trim()) throw new Error("একক লিখুন (যেমন: টন, লিটার, বস্তা)");
-      const pricing = f.pay_mode === "cash" ? "total" : f.pricing;
-      const { data, error } = await supabase
-        .from("raw_materials")
-        .insert({
-          name,
-          unit: pricing === "unit" ? f.unit.trim() : pricing === "flex" ? "পিস" : "মোট",
-          item_group: f.group,
-          pricing,
-          pay_mode: f.pay_mode,
-          buy_pattern: "as_needed",
-          stage: "other",
-          in_brick_cost: true,
-          sort_order: f.group === "raw" ? 20 : 60,
-        })
-        .select("id")
-        .single();
-      if (error) throw error;
-      return data.id as string;
-    },
-    onSuccess: (newId) => {
-      toast.success("নতুন নাম যোগ হয়েছে");
-      setItemDlg(null);
-      setForm((b) => (b ? { ...b, item_id: newId, quantity: "", rate: "", total: "", unit: "পিস" } : b));
-    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -468,257 +298,14 @@ function PurchasesPage() {
 
   const loading = itemsQ.isLoading || purQ.isLoading;
 
-  /* ---------- dialogs (shared by both views) ---------- */
-  const itemButton = (it: Item) => (
-    <button
-      key={it.id}
-      type="button"
-      aria-pressed={form?.item_id === it.id}
-      onClick={() => pickItem(it.id)}
-      className={`min-h-11 rounded-xl border px-1.5 text-[14px] font-semibold leading-tight transition ${
-        form?.item_id === it.id ? "border-primary bg-primary text-primary-foreground" : "bg-card"
-      }`}
-    >
-      {it.name}
-    </button>
-  );
-
   const dialogs = (
-    <>
-      <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>
-        <DialogContent className="max-h-[92dvh] max-w-md overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{form?.edit ? "এন্ট্রি সম্পাদনা" : "খরচ এন্ট্রি"}</DialogTitle>
-          </DialogHeader>
-          {form && (
-            <div className="space-y-3.5">
-              <div className="space-y-2">
-                <Label>কী কিনলেন / কিসের খরচ</Label>
-                <div className="text-xs font-bold text-muted-foreground">কাঁচামাল</div>
-                <div className="grid grid-cols-3 gap-1.5">{rawItems.map(itemButton)}</div>
-                <div className="pt-1 text-xs font-bold text-muted-foreground">অন্যান্য মালামাল ও খরচ</div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {otherItems.map(itemButton)}
-                  <button
-                    type="button"
-                    onClick={() => setItemDlg({ name: "", group: "other", pricing: "total", pay_mode: "credit", unit: "" })}
-                    className="flex min-h-11 items-center justify-center gap-1 rounded-xl border border-dashed text-[14px] font-bold text-primary"
-                  >
-                    <Plus className="h-4 w-4" aria-hidden="true" /> নতুন নাম
-                  </button>
-                </div>
-              </div>
-
-              {fItem && (
-                <>
-                  <div className={fCash ? "" : "grid grid-cols-2 gap-2"}>
-                    <div>
-                      <Label htmlFor="pe-date">তারিখ</Label>
-                      <Input id="pe-date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-                    </div>
-                    {!fCash && (
-                      <div>
-                        <Label>{isVehicle(fItem.name) ? "কার গাড়ি" : "বিক্রেতা"}</Label>
-                        <Select value={form.supplier_id} onValueChange={(v) => setForm({ ...form, supplier_id: v })}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NEW_SUP}>+ নতুন নাম</SelectItem>
-                            {(supQ.data ?? []).filter((s) => !CONTRACT_TYPES.has(s.material_type ?? "")).map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                  {!fCash && form.supplier_id === NEW_SUP && (
-                    <Input
-                      placeholder={isVehicle(fItem.name) ? "গাড়ির মালিক বা চালকের নাম" : "বিক্রেতার নাম"}
-                      value={form.new_supplier}
-                      onChange={(e) => setForm({ ...form, new_supplier: e.target.value })}
-                    />
-                  )}
-
-                  {/* amount */}
-                  {fCash || fItem.pricing === "total" ? (
-                    <div>
-                      <Label htmlFor="pe-total">{fCash ? "মোট বিল (৳)" : isVehicle(fItem.name) ? "মোট ভাড়া (৳)" : "মোট দাম (৳)"}</Label>
-                      <Input id="pe-total" type="number" inputMode="decimal" value={form.total} onChange={(e) => setForm({ ...form, total: e.target.value })} />
-                    </div>
-                  ) : fItem.pricing === "unit" ? (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label htmlFor="pe-qty">পরিমাণ ({fItem.unit})</Label>
-                        <Input id="pe-qty" type="number" inputMode="decimal" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
-                      </div>
-                      <div>
-                        <Label htmlFor="pe-rate">দর (প্রতি {fItem.unit}, ৳)</Label>
-                        <Input id="pe-rate" type="number" inputMode="decimal" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <Label htmlFor="pe-fqty">পরিমাণ</Label>
-                          <Input id="pe-fqty" type="number" inputMode="decimal" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value, total: "" })} />
-                        </div>
-                        <div>
-                          <Label>কিসে</Label>
-                          <Select value={form.unit || "পিস"} onValueChange={(v) => setForm({ ...form, unit: v })}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {UNIT_OPTIONS.map((u) => (
-                                <SelectItem key={u} value={u}>
-                                  {u}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="pe-frate">দর (৳)</Label>
-                          <Input id="pe-frate" type="number" inputMode="decimal" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value, total: "" })} />
-                        </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="pe-ftotal">মোট দাম (৳)</Label>
-                        <Input
-                          id="pe-ftotal"
-                          type="number"
-                          inputMode="decimal"
-                          placeholder={Number(form.quantity || 0) * Number(form.rate || 0) > 0 ? `পরিমাণ × দর = ${bn(Number(form.quantity || 0) * Number(form.rate || 0))}` : "পরিমাণ × দর, বা সরাসরি মোট"}
-                          value={form.total}
-                          onChange={(e) => setForm({ ...form, total: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* paid / due */}
-                  {fCash ? (
-                    <p className="rounded-xl bg-muted px-3.5 py-2.5 text-sm">
-                      মোট <b className="num">{tk(fTotal)}</b> ক্যাশ বই থেকে খরচ হবে। বিলে বাকি থাকে না।
-                    </p>
-                  ) : form.edit ? (
-                    <p className="rounded-xl bg-muted px-3.5 py-2.5 text-sm">
-                      মোট দাম: <b className="num">{tk(fTotal)}</b>। আগে দেওয়া টাকা বা বাকি শোধ "সাপ্লায়ার ও বাকি" পাতা থেকে দেখুন।
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      <div>
-                        <Label htmlFor="pe-paid">এখন কত দিলেন (৳)</Label>
-                        <div className="flex gap-2">
-                          <Input id="pe-paid" type="number" inputMode="decimal" value={form.paid} onChange={(e) => setForm({ ...form, paid: e.target.value })} />
-                          <Button type="button" variant="outline" onClick={() => setForm({ ...form, paid: String(Math.round(fTotal)) })}>
-                            পুরোটা
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-muted p-2 text-center">
-                        <div>
-                          <div className="text-[11px] font-semibold text-muted-foreground">মোট</div>
-                          <div className="num text-[15px] font-bold">{tk(fTotal)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-semibold text-muted-foreground">দিলেন</div>
-                          <div className="num text-[15px] font-bold text-success">{tk(fPaid)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[11px] font-semibold text-muted-foreground">বাকি</div>
-                          <div className="num text-[15px] font-bold text-warning">{tk(Math.max(0, fTotal - fPaid))}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <Label htmlFor="pe-note">নোট (ইচ্ছা হলে)</Label>
-                    <Input
-                      id="pe-note"
-                      placeholder={isVehicle(fItem.name) ? "যেমন: কোথা থেকে কী আনা হলো" : fCash ? "যেমন: কোন মাসের বিল" : "যেমন: কোন কোন জিনিস"}
-                      value={form.note}
-                      onChange={(e) => setForm({ ...form, note: e.target.value })}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button className="h-11 w-full text-base" onClick={() => saveEntry.mutate()} disabled={saveEntry.isPending || !fItem}>
-              {saveEntry.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              সংরক্ষণ
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!itemDlg} onOpenChange={(o) => !o && setItemDlg(null)}>
-        <DialogContent className="max-h-[92dvh] max-w-sm overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>নতুন নাম যোগ</DialogTitle>
-          </DialogHeader>
-          {itemDlg && (
-            <div className="space-y-3.5">
-              <div>
-                <Label htmlFor="ni-name">নাম</Label>
-                <Input id="ni-name" placeholder="যেমন: গ্রিজ, টায়ার, মোবাইল বিল" value={itemDlg.name} onChange={(e) => setItemDlg({ ...itemDlg, name: e.target.value })} />
-              </div>
-              <ChoiceRow
-                label="কোন ঘরে থাকবে"
-                value={itemDlg.group}
-                options={[
-                  ["raw", "কাঁচামাল"],
-                  ["other", "অন্যান্য মালামাল ও খরচ"],
-                ]}
-                onChange={(v) => setItemDlg({ ...itemDlg, group: v as Folder })}
-              />
-              <ChoiceRow
-                label="টাকা কীভাবে দেওয়া হয়"
-                value={itemDlg.pay_mode}
-                options={[
-                  ["credit", "বাকি রাখা যায়"],
-                  ["cash", "পুরোটা নগদ (বিল)"],
-                ]}
-                onChange={(v) => setItemDlg({ ...itemDlg, pay_mode: v as "credit" | "cash" })}
-              />
-              {itemDlg.pay_mode === "credit" && (
-                <ChoiceRow
-                  label="দাম কীভাবে লিখবেন"
-                  value={itemDlg.pricing}
-                  cols={3}
-                  options={[
-                    ["unit", "নির্দিষ্ট একক × দর"],
-                    ["flex", "পরিমাণ, একক বেছে"],
-                    ["total", "শুধু মোট"],
-                  ]}
-                  onChange={(v) => setItemDlg({ ...itemDlg, pricing: v as "unit" | "total" | "flex" })}
-                />
-              )}
-              {itemDlg.pay_mode === "credit" && itemDlg.pricing === "unit" && (
-                <div>
-                  <Label htmlFor="ni-unit">একক</Label>
-                  <Input id="ni-unit" placeholder="যেমন: টন, লিটার, বস্তা" value={itemDlg.unit} onChange={(e) => setItemDlg({ ...itemDlg, unit: e.target.value })} />
-                </div>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button className="h-11 w-full text-base" onClick={() => saveItem.mutate()} disabled={saveItem.isPending}>
-              {saveItem.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              সেভ করুন
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <ExpenseEntryDialog
+      open={!!entry}
+      onOpenChange={(o) => { if (!o) setEntry(null); }}
+      head={entry?.head ?? null}
+      heads={PURCHASE_HEADS}
+      edit={entry?.edit ?? null}
+    />
   );
 
   const EntryRows = ({ rows }: { rows: Entry[] }) => (
@@ -769,8 +356,7 @@ function PurchasesPage() {
           </div>
           <button
             type="button"
-            onClick={() => setForm(blankForm())}
-            disabled={!items.length}
+            onClick={() => setEntry({})}
             className="flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-primary-foreground shadow-sm transition active:scale-[0.99] disabled:opacity-60 md:w-auto md:px-6"
           >
             <Plus className="h-5 w-5" aria-hidden="true" />
@@ -814,7 +400,7 @@ function PurchasesPage() {
             {(
               [
                 { key: "raw" as const, title: "কাঁচামাল", sub: "মাটি, বালু, কয়লা, তুষ, ডিজেল…", rows: rawEntries, chip: "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200", icon: Mountain },
-                { key: "other" as const, title: "অন্যান্য মালামাল ও খরচ", sub: "ইঞ্জিন মালামাল, কারেন্ট বিল…", rows: otherEntries, chip: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200", icon: Wrench },
+                { key: "other" as const, title: "অন্যান্য মালামাল ও খরচ", sub: "ইঞ্জিন মালামাল, বিদ্যুৎ বিল…", rows: otherEntries, chip: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200", icon: Wrench },
               ]
             ).map((t) => (
               <button
@@ -931,39 +517,6 @@ function PurchasesPage() {
       {loading ? <Skeleton className="h-48 rounded-2xl" /> : <EntryRows rows={shown} />}
 
       {dialogs}
-    </div>
-  );
-}
-
-function ChoiceRow({
-  label,
-  value,
-  options,
-  onChange,
-  cols = 2,
-}: {
-  label: string;
-  value: string;
-  options: [string, string][];
-  onChange: (v: string) => void;
-  cols?: 2 | 3;
-}) {
-  return (
-    <div>
-      <Label>{label}</Label>
-      <div className={`mt-1.5 grid gap-1.5 ${cols === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-        {options.map(([k, text]) => (
-          <button
-            key={k}
-            type="button"
-            aria-pressed={value === k}
-            onClick={() => onChange(k)}
-            className={`min-h-11 rounded-xl border px-1.5 text-[13px] font-semibold leading-tight ${value === k ? "border-primary bg-primary text-primary-foreground" : "bg-card"}`}
-          >
-            {text}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

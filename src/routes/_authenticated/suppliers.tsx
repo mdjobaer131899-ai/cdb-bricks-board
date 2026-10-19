@@ -19,6 +19,10 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
 import { SettleWithBricksDialog } from "@/components/settle-with-bricks-dialog";
 import { CONTRACT_TYPES } from "@/components/contract-folder";
+import { ExpenseEntryDialog } from "@/components/expense-entry";
+
+// sellers of these are paid through the raw-material head of the expense form
+const RAW_TYPES = new Set(["মাটি", "বালু", "কয়লা", "তুষ", "ডিজেল", "লাকড়ি"]);
 
 export const Route = createFileRoute("/_authenticated/suppliers")({
   head: () => ({ meta: [{ title: "সরবরাহকারী — CDB Bricks" }] }),
@@ -51,9 +55,8 @@ function SuppliersPage() {
   const [dialog, setDialog] = useState<{ open: boolean; mode: "new" | "edit"; form: SupplierForm }>({
     open: false, mode: "new", form: emptyForm,
   });
-  const [payDialog, setPayDialog] = useState<{ open: boolean; supplierId: string | null; amount: string; date: string; note: string }>({
-    open: false, supplierId: null, amount: "", date: isoDate(new Date()), note: "",
-  });
+  // paying a seller: the one expense form, bill folded
+  const [paySupplier, setPaySupplier] = useState<{ id: string; raw: boolean } | null>(null);
 
   const suppliersQ = useQuery({
     queryKey: ["suppliers"],
@@ -145,28 +148,6 @@ function SuppliersPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const addPayment = useMutation({
-    mutationFn: async () => {
-      const amt = Number(payDialog.amount);
-      if (!payDialog.supplierId) throw new Error("সরবরাহকারী নির্বাচন করুন");
-      if (!(amt > 0)) throw new Error("পরিমাণ লিখুন");
-      const { error } = await sdb.from("supplier_payments").insert({
-        supplier_id: payDialog.supplierId,
-        amount: amt,
-        payment_date: payDialog.date,
-        note: payDialog.note || null,
-        created_by: me?.user.id ?? null,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("পেমেন্ট সংরক্ষিত");
-      setPayDialog({ open: false, supplierId: null, amount: "", date: isoDate(new Date()), note: "" });
-      qc.invalidateQueries({ queryKey: ["supplier-payments"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const delSupplier = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await sdb.from("suppliers").delete().eq("id", id);
@@ -198,9 +179,10 @@ function SuppliersPage() {
       note: s.note ?? "",
     },
   });
-  const openPay = (supplierId: string) => setPayDialog({
-    open: true, supplierId, amount: "", date: isoDate(new Date()), note: "",
-  });
+  const openPay = (supplierId: string) => {
+    const s = (suppliersQ.data ?? []).find((x: any) => x.id === supplierId) as any;
+    setPaySupplier({ id: supplierId, raw: RAW_TYPES.has((s?.material_type ?? "").normalize("NFC")) });
+  };
 
   return (
     <div className="space-y-5">
@@ -349,23 +331,14 @@ function SuppliersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Payment dialog */}
-      <Dialog open={payDialog.open} onOpenChange={(o) => setPayDialog((s) => ({ ...s, open: o }))}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>পেমেন্ট — {(suppliersQ.data ?? []).find((s: any) => s.id === payDialog.supplierId)?.name ?? ""}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div><Label>পরিমাণ (৳)</Label><Input type="number" value={payDialog.amount} onChange={(e) => setPayDialog((s) => ({ ...s, amount: e.target.value }))} /></div>
-            <div><Label>তারিখ</Label><Input type="date" value={payDialog.date} onChange={(e) => setPayDialog((s) => ({ ...s, date: e.target.value }))} /></div>
-            <div><Label>নোট</Label><Input value={payDialog.note} onChange={(e) => setPayDialog((s) => ({ ...s, note: e.target.value }))} /></div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPayDialog((s) => ({ ...s, open: false }))}>বাতিল</Button>
-            <Button onClick={() => addPayment.mutate()} disabled={addPayment.isPending}>সংরক্ষণ</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExpenseEntryDialog
+        open={!!paySupplier}
+        onOpenChange={(o) => { if (!o) setPaySupplier(null); }}
+        head={paySupplier?.raw ? "raw" : "parts"}
+        lockHead
+        partyId={paySupplier?.id ?? null}
+        focus="pay"
+      />
     </div>
   );
 }

@@ -18,7 +18,7 @@ import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { toast } from "sonner";
 import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/cash-queries";
-import { AddExpenseDialog, EXPENSE_HEADS } from "@/components/cash-box-panel";
+import { EXPENSE_HEADS, ExpenseEntryDialog, type HeadKey } from "@/components/expense-entry";
 import { usePageAccess } from "@/lib/page-permissions";
 import { printTable } from "@/lib/print-table";
 
@@ -174,12 +174,14 @@ function CashBookPage() {
   const [headSheet, setHeadSheet] = useState(false);
   const [entrySheet, setEntrySheet] = useState(false);
   const [incomeOpen, setIncomeOpen] = useState(false);
-  const [expenseHead, setExpenseHead] = useState<string | null>(null);
+  const [expenseHead, setExpenseHead] = useState<HeadKey | null>(null);
   const [selected, setSelected] = useState<CashHistoryRow | null>(null);
   const [editRow, setEditRow] = useState<CashHistoryRow | null>(null);
   const [deleteRow, setDeleteRow] = useState<CashHistoryRow | null>(null);
 
   const customers = useQuery({ queryKey: ["customers-min"], queryFn: fetchCustomers });
+  // veku, vehicle, land and sweeper entries need the purchases page's permission, as before
+  const expenseHeads = EXPENSE_HEADS.filter((h) => !["veku", "vehicle", "land", "clean"].includes(h.key) || can("/purchases"));
 
   const invalidate = () => {
     for (const key of [
@@ -561,22 +563,11 @@ function CashBookPage() {
 
           <div className="mt-5 text-xs font-bold tracking-wide text-red-700 dark:text-red-300">টাকা গেছে</div>
           <div className="mt-2 grid grid-cols-3 gap-2">
-            {EXPENSE_HEADS.map((h) => {
-              const { Icon } = headLook(expenseHeadToHistoryHead(h), "out");
-              return (
-                <EntryTile
-                  key={h}
-                  icon={Icon}
-                  tone={h === "সম্পদ" ? "blue" : h === "কাঁচামাল" || h === "যন্ত্রাংশ / মালামাল" || h === "বিদ্যুৎ বিল" ? "stone" : "red"}
-                  label={h}
-                  onClick={() => { setEntrySheet(false); setExpenseHead(h); }}
-                />
-              );
-            })}
-            {can("/purchases") && <EntryTile icon={Tractor} tone="stone" label="ভেকু" to="/purchases" search={{ f: "veku" }} />}
-            {can("/purchases") && <EntryTile icon={Truck} tone="stone" label="গাড়ি ভাড়া" to="/purchases" search={{ f: "vehicle" }} />}
-            {can("/purchases") && <EntryTile icon={LandPlot} tone="stone" label="জমি ভাড়া" to="/purchases" search={{ f: "land" }} />}
-            {can("/purchases") && <EntryTile icon={Sparkles} tone="stone" label="পরিচ্ছন্ন কর্মী" to="/purchases" search={{ f: "clean" }} />}
+            {/* every head opens the same expense form; the folders are for reading the ledgers */}
+            {expenseHeads.map((h) => (
+              <EntryTile key={h.key} icon={h.icon} tone={h.tone} label={h.label}
+                onClick={() => { setEntrySheet(false); setExpenseHead(h.key); }} />
+            ))}
             {can("/opening-balances") && <EntryTile icon={History} tone="amber" label="পূর্বের দেনা" to="/opening-balances" />}
             {can("/owners") && <EntryTile icon={Crown} tone="amber" label="মালিকের উত্তোলন" to="/owners" />}
           </div>
@@ -584,10 +575,11 @@ function CashBookPage() {
       </Sheet>
 
       <IncomeDialog open={incomeOpen} onOpenChange={setIncomeOpen} customers={customers.data ?? []} onDone={invalidate} />
-      <AddExpenseDialog
+      <ExpenseEntryDialog
         open={expenseHead !== null}
         onOpenChange={(o) => { if (!o) setExpenseHead(null); }}
-        initialHead={expenseHead ?? undefined}
+        head={expenseHead}
+        heads={expenseHeads.map((h) => h.key)}
         onDone={invalidate}
       />
 
@@ -611,15 +603,6 @@ function CashBookPage() {
       {deleteRow && <RowDeleteDialog key={deleteRow.id} row={deleteRow} onClose={() => setDeleteRow(null)} onDone={invalidate} />}
     </div>
   );
-}
-
-/** Expense dialog head → the head fetchCashHistory gives such rows (only used for the icon) */
-function expenseHeadToHistoryHead(h: string) {
-  if (h === "সরদার") return "সরদার পেমেন্ট";
-  if (h === "ডেলি") return "ডেলি শ্রমিক";
-  if (h === "মেস্তুরি ও ম্যানেজার") return "বেতন (মেস্তুরি/ম্যানেজার)";
-  if (h === "ভেকু" || h === "কাঁচামাল" || h === "যন্ত্রাংশ / মালামাল") return "মালামাল ক্রয় পরিশোধ";
-  return h;
 }
 
 const TILE_TONES: Record<string, string> = {

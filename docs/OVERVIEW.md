@@ -104,7 +104,7 @@ supabase/
 | URL | পাতা | কী করে | মূল টেবিল |
 |---|---|---|---|
 | `/cash-book` | ক্যাশ বই | উপরে হাতে নগদ (পুরো মৌসুম) আর বাছাই করা সময়ের আয়-ব্যয় (`fetchCashSummary`); নিচে তারিখভিত্তিক সব লেনদেন। সারিতে চাপলে বিস্তারিত, খাতার পৃষ্ঠা চিহ্ন, এডিট আর এডমিন-পাসওয়ার্ড দিয়ে মোছা। ইট দিয়ে সাপ্লায়ার-বাকি শোধের সারি এখান থেকে বদলানো যায় না | `fetchCashHistory`, `fetchCashSummary`, `book_marks` |
-| `/cash-book`-এর "নতুন এন্ট্রি" বোতাম | এন্ট্রির খাত বাছাই | গ্রাহকের টাকা (`IncomeDialog`), খরচের প্রতিটি খাত (`AddExpenseDialog`, খাত আগে থেকে বসানো), আর মালিক/ঋণ/জের পাতার লিংক। খরচের ফর্ম: এক ফর্ম থেকে খরচ, সরদার, ডেলি, বেতন, ভেকু, কাঁচামাল ও যন্ত্রাংশের এন্ট্রি (`AddExpenseDialog`) | [cash-box-panel.tsx](../src/components/cash-box-panel.tsx#L353) |
+| `/cash-book`-এর "নতুন এন্ট্রি" বোতাম | এন্ট্রির খাত বাছাই | গ্রাহকের টাকা (`IncomeDialog`), খরচের প্রতিটি খাত, আর মালিক/ঋণ/জের পাতার লিংক। খরচের সব খাত (সরদার, ডেলি, বেতন, কাঁচামাল, যন্ত্রাংশ, বিদ্যুৎ বিল, ভেকু, গাড়ি/জমি ভাড়া, পরিচ্ছন্ন কর্মী, আনুষাঙ্গিক, সম্পদ) একটাই ফর্মে (`ExpenseEntryDialog`); কেনাকাটা পাতা, তার ফোল্ডার আর সাপ্লায়ার পাতাও এই ফর্ম খোলে | [expense-entry.tsx](../src/components/expense-entry.tsx) |
 | `/purchases` | মালামাল ও সাপ্লায়ার | কেনা জিনিস (বাকিসহ) ও সাপ্লায়ারকে পরিশোধ | `purchases`, `supplier_payments`, `suppliers` |
 | `/purchases?f=land` | জমি ভাড়া | জমির মালিক (সাপ্লায়ার, ধরন "জমি ভাড়া"), এই মৌসুমের ভাড়া ও পূর্বের বকেয়া (বিল), পরিশোধ, বাকি আর মালিকভিত্তিক খাতা | `suppliers`, `purchases` (`item_name='জমি ভাড়া'`), `supplier_payments` |
 | `/purchases?f=clean` | পরিচ্ছন্ন কর্মী | সুইপারের মৌসুমের চুক্তি (বিল, মৌসুম শুরুর তারিখে), প্রতি সপ্তাহের টাকা (পরিশোধ), কত শতাংশ দেওয়া হলো আর কত বাকি | `suppliers` (`material_type='পরিচ্ছন্ন কর্মী'`), `purchases`, `supplier_payments` |
@@ -310,7 +310,7 @@ supabase/
 9. **অডিট লগ:** কোড `log_audit` ডাকে, কিন্তু ২০২৬-০৮-২৮-এর migration এর অনুমতি বন্ধ করে দিয়েছে (ঝুঁকি অংশ দেখুন)।
 10. **অব্যবহৃত কোড:**
     - সার্ভার ফাংশন: [cash-book.functions.ts](../src/lib/cash-book.functions.ts)-এর সব ফাংশন, [cash-sale.functions.ts](../src/lib/cash-sale.functions.ts), [contracts.functions.ts](../src/lib/contracts.functions.ts), [api/example.functions.ts](../src/lib/api/example.functions.ts)।
-    - কম্পোনেন্ট, যেগুলো কোথাও দেখানো হয় না: `CashBoxPanel` (একই ফাইলের শুধু `AddExpenseDialog` ব্যবহার হয়), `cash-balance-chip`, `daily-folders`, `quick-actions`, `season-progress-card`, `stock-summary-card`, `top-customers-panel`।
+    - কম্পোনেন্ট, যেগুলো কোথাও দেখানো হয় না: `CashBoxPanel`, `cash-balance-chip`, `daily-folders`, `quick-actions`, `season-progress-card`, `stock-summary-card`, `top-customers-panel`।
 11. **স্বয়ংক্রিয় টেস্ট নেই।** কোনো test ফাইল বা test স্ক্রিপ্ট নেই। শুধু `build` আর `lint` আছে।
 
 ---
@@ -403,7 +403,7 @@ supabase/
 
 **একসাথে কয়েকটি এন্ট্রি, কিন্তু একসাথে নিশ্চিত নয় (atomic নয়):**
 
-- ক্যাশ বইয়ের খরচ-ফর্মে ভেকু বা কাঁচামাল কেনায় সাপ্লায়ার তৈরি → ক্রয় → পরিশোধ আলাদা আলাদা অনুরোধে হয় ([cash-box-panel.tsx:527](../src/components/cash-box-panel.tsx#L527))। মাঝপথে নেট গেলে অর্ধেক সেভ হয়।
+- খরচের ফর্মে নতুন সাপ্লায়ার তৈরি → বিল → পরিশোধ আলাদা আলাদা অনুরোধে হয় ([expense-entry.tsx](../src/components/expense-entry.tsx), `save`)। মাঝপথে নেট গেলে অর্ধেক সেভ হয় (বিল সেভ হয়ে পরিশোধ না হলে ফর্ম তা জানায়)।
 - একই রকম অবস্থা `/purchases`-এ ক্রয় + পরিশোধে, হাজিরা সেভে (আগে মোছা তারপর নতুন যোগ, [staff-ledger-page.tsx:145](../src/components/staff-ledger-page.tsx#L145)), আর পাতার অনুমতি সেভে ([users.tsx:236](../src/routes/_authenticated/users.tsx#L236))।
 - **হাজিরা:** অন্য কারো দেওয়া হাজিরা manager আবার সেভ করতে গেলে RLS মুছতে দেয় না, ফলে নতুন যোগ করার সময় "duplicate" ত্রুটি আসে।
 - **সাপ্লায়ার নাম দিয়ে খোঁজা হয়।** একই নামের দুটি সাপ্লায়ার থাকলে বা বানানে সামান্য পার্থক্য হলে নতুন সাপ্লায়ার তৈরি হয়, খাতা দুই ভাগ হয়।

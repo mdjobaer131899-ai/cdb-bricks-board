@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Banknote, Clock, Loader2, Pencil, Plus, Printer, Tractor, Trash2 } from "lucide-react";
+import { ArrowLeft, Banknote, Clock, Loader2, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,7 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { ASSET_PREFIX } from "@/lib/cash-queries";
-import { bn, bnDate, todayBD } from "@/lib/format";
+import { ExpenseEntryDialog, type ExpenseEdit } from "@/components/expense-entry";
+import { HOUR, VEKU_ITEM, VEKU_TYPE, parseVekuNote as parseNote } from "@/components/contract-config";
+import { bn, bnDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
 
@@ -25,12 +27,8 @@ import { printTable } from "@/lib/print-table";
  * The kiln's share of buying them is a fixed asset (expenses "সম্পদ — ভেকু…"), shown on top.
  * Dues are all-time.
  */
-export const VEKU_TYPE = "ভেকু";
-export const VEKU_ITEM = "ভেকু";
-const HOUR = "ঘণ্টা";
-const KINDS = ["ডিজেল", "মবিল-গ্রীজ", "যন্ত্রাংশ", "চালকের বেতন", "চালকের খরচ", "অন্যান্য"];
-const DRIVER = "চালক: ";
-const SEP = " · ";
+// settings live in contract-config.ts so the one expense form can use them too
+export { VEKU_ITEM, VEKU_TYPE } from "@/components/contract-config";
 
 const tk = (n: number) => `৳${bn(Math.round(n))}`;
 
@@ -38,30 +36,12 @@ type Veku = { id: string; name: string; note: string | null };
 type Bill = { id: string; supplier_id: string | null; purchase_date: string; quantity: number; unit: string | null; unit_price: number; total_amount: number; note: string | null };
 type Pay = { id: string; supplier_id: string; payment_date: string; amount: number; note: string | null };
 
-/** "ডিজেল · চালক: মাসুম · খাতা থেকে" → parts */
-function parseNote(note: string | null) {
-  const parts = (note ?? "").split(SEP).map((s) => s.trim()).filter(Boolean);
-  let kind = "";
-  let driver = "";
-  const rest: string[] = [];
-  for (const p of parts) {
-    if (!kind && KINDS.includes(p)) kind = p;
-    else if (!driver && p.startsWith(DRIVER)) driver = p.slice(DRIVER.length).trim();
-    else rest.push(p);
-  }
-  return { kind, driver, rest: rest.join(SEP) };
-}
-const makeNote = (kind: string, driver: string, rest: string) =>
-  [kind, driver.trim() ? `${DRIVER}${driver.trim()}` : "", rest.trim()].filter(Boolean).join(SEP) || null;
-
-type HourForm = { id?: string; veku_id: string; date: string; hours: string; rate: string; driver: string; note: string };
-type PayForm = { id?: string; veku_id: string; date: string; kind: string; amount: string; driver: string; note: string };
+type Entry = { partyId?: string; focus?: "bill" | "pay"; edit?: ExpenseEdit };
 
 export function VekuFolder({ onBack }: { onBack: () => void }) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
-  const today = todayBD();
 
   const vekusQ = useQuery({
     queryKey: ["veku-list"],
@@ -124,70 +104,15 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [bills, pays, filter]);
 
-  // names typed before, newest first
-  const drivers = useMemo(() => {
-    const seen: string[] = [];
-    for (const r of [...rows].reverse()) {
-      const d = parseNote(r.bill?.note ?? r.pay?.note ?? null).driver;
-      if (d && !seen.includes(d)) seen.unshift(d);
-    }
-    return seen;
-  }, [rows]);
-  const lastRate = (vid: string) => {
-    const list = (billsQ.data ?? []).filter((b) => b.unit === HOUR && Number(b.unit_price) > 0).sort((a, b) => (a.purchase_date < b.purchase_date ? 1 : -1));
-    return String(list.find((b) => b.supplier_id === vid)?.unit_price ?? list[0]?.unit_price ?? "");
-  };
-  const defaultVeku = () => (filter !== "all" ? filter : vekus[0]?.id ?? "");
-
   const invalidate = () => {
     for (const key of [["veku-list"], ["veku-bills"], ["veku-payments"], ["suppliers"], ["purchases"], ["supplier-payments"], ["cash"], ["cash-book"], ["profit-loss"]]) {
       qc.invalidateQueries({ queryKey: key });
     }
   };
-  const uid = () => { if (!me?.user.id) throw new Error("আবার লগইন করুন"); return me.user.id; };
 
-  const [hourForm, setHourForm] = useState<HourForm | null>(null);
-  const [payForm, setPayForm] = useState<PayForm | null>(null);
+  // hours and money: the one expense form
+  const [entry, setEntry] = useState<Entry | null>(null);
   const [vekuForm, setVekuForm] = useState<{ id?: string; name: string; note: string } | null>(null);
-
-  const saveHours = useMutation({
-    mutationFn: async () => {
-      const f = hourForm!;
-      const hours = Number(f.hours), rate = Number(f.rate);
-      if (!f.veku_id) throw new Error("কোন ভেকু, বেছে নিন");
-      if (!(hours > 0)) throw new Error("কত ঘণ্টা, লিখুন");
-      if (!(rate > 0)) throw new Error("ঘণ্টায় কত টাকা, লিখুন");
-      if (!f.date) throw new Error("তারিখ দিন");
-      const payload = {
-        supplier_id: f.veku_id, item_name: VEKU_ITEM, material_id: null, purchase_date: f.date,
-        quantity: hours, unit: HOUR, unit_price: rate, total_amount: Math.round(hours * rate * 100) / 100,
-        note: makeNote("", f.driver, f.note),
-      };
-      const { error } = f.id
-        ? await supabase.from("purchases").update(payload).eq("id", f.id)
-        : await supabase.from("purchases").insert({ ...payload, created_by: uid() });
-      if (error) throw error;
-    },
-    onSuccess: () => { toast.success("সংরক্ষিত"); setHourForm(null); invalidate(); },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const savePay = useMutation({
-    mutationFn: async () => {
-      const f = payForm!;
-      const amount = Number(f.amount);
-      if (!f.veku_id) throw new Error("কোন ভেকু, বেছে নিন");
-      if (!(amount > 0)) throw new Error("টাকার পরিমাণ দিন");
-      if (!f.date) throw new Error("তারিখ দিন");
-      const payload = { supplier_id: f.veku_id, amount, payment_date: f.date, method: "cash", note: makeNote(f.kind, f.driver, f.note) };
-      const { error } = f.id
-        ? await supabase.from("supplier_payments").update(payload).eq("id", f.id)
-        : await supabase.from("supplier_payments").insert({ ...payload, created_by: uid() });
-      if (error) throw error;
-    },
-    onSuccess: () => { toast.success("সংরক্ষিত — ক্যাশ বইয়ে \"ভেকু খরচ\" হিসেবে উঠেছে"); setPayForm(null); invalidate(); },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
   const saveVeku = useMutation({
     mutationFn: async () => {
@@ -213,12 +138,6 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
     onSuccess: () => { toast.success("মুছে ফেলা হয়েছে"); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
   });
-
-  const newHours = (): HourForm => {
-    const v = defaultVeku();
-    return { veku_id: v, date: today, hours: "", rate: lastRate(v), driver: drivers[0] ?? "", note: "" };
-  };
-  const newPay = (kind = "ডিজেল"): PayForm => ({ veku_id: defaultVeku(), date: today, kind, amount: "", driver: drivers[0] ?? "", note: "" });
 
   const loading = vekusQ.isLoading || billsQ.isLoading || (ids.length > 0 && paysQ.isLoading);
   const asset = assetQ.data ?? 0;
@@ -302,10 +221,10 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Button className="h-12 gap-2 rounded-2xl text-base font-bold" disabled={vekus.length === 0} onClick={() => setPayForm(newPay())}>
+        <Button className="h-12 gap-2 rounded-2xl text-base font-bold" disabled={vekus.length === 0} onClick={() => setEntry({ partyId: filter !== "all" ? filter : undefined, focus: "pay" })}>
           <Banknote className="h-5 w-5" /> খরচ / টাকা
         </Button>
-        <Button variant="outline" className="h-12 gap-2 rounded-2xl text-base font-bold" disabled={vekus.length === 0} onClick={() => setHourForm(newHours())}>
+        <Button variant="outline" className="h-12 gap-2 rounded-2xl text-base font-bold" disabled={vekus.length === 0} onClick={() => setEntry({ partyId: filter !== "all" ? filter : undefined, focus: "bill" })}>
           <Clock className="h-5 w-5" /> ঘণ্টা লিখুন
         </Button>
       </div>
@@ -356,8 +275,8 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
                   {isAdmin && (
                     <div className="flex shrink-0">
                       <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="সম্পাদনা" onClick={() => {
-                        if (r.bill) setHourForm({ id: r.bill.id, veku_id: r.bill.supplier_id ?? "", date: r.bill.purchase_date, hours: r.bill.unit === HOUR ? String(r.bill.quantity) : "", rate: r.bill.unit === HOUR ? String(r.bill.unit_price) : "", driver: n.driver, note: n.rest });
-                        else setPayForm({ id: r.pay!.id, veku_id: r.pay!.supplier_id, date: r.pay!.payment_date, kind: n.kind || "অন্যান্য", amount: String(r.pay!.amount), driver: n.driver, note: n.rest });
+                        if (r.bill) setEntry({ edit: { table: "purchases", id: r.bill.id, supplier_id: r.bill.supplier_id, date: r.bill.purchase_date, item_name: VEKU_ITEM, quantity: Number(r.bill.quantity), unit: r.bill.unit, unit_price: Number(r.bill.unit_price), total: Number(r.bill.total_amount), note: r.bill.note } });
+                        else setEntry({ edit: { table: "supplier_payments", id: r.pay!.id, supplier_id: r.pay!.supplier_id, date: r.pay!.payment_date, amount: Number(r.pay!.amount), note: r.pay!.note } });
                       }}><Pencil className="h-3.5 w-3.5" /></Button>
                       <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" aria-label="মুছুন" onClick={() => {
                         if (confirm("এই এন্ট্রি মুছবেন?")) del.mutate(r.bill ? { table: "purchases", id: r.bill.id } : { table: "supplier_payments", id: r.pay!.id });
@@ -371,70 +290,16 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
         )}
       </section>
 
-      <datalist id="veku-drivers">{drivers.map((d) => <option key={d} value={d} />)}</datalist>
-
-      {/* hours worked */}
-      <Dialog open={!!hourForm} onOpenChange={(o) => !o && setHourForm(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{hourForm?.id ? "ঘণ্টা সম্পাদনা" : "ভেকু কত ঘণ্টা কাজ করল"}</DialogTitle>
-            <DialogDescription>ঘণ্টা × ঘণ্টার রেট = ভাটার কাছে ভেকুর পাওনা। দেওয়া টাকা এখান থেকে কাটবে।</DialogDescription>
-          </DialogHeader>
-          {hourForm && (
-            <div className="space-y-3">
-              <VekuPicker vekus={vekus} value={hourForm.veku_id} onChange={(v) => setHourForm({ ...hourForm, veku_id: v, rate: hourForm.id ? hourForm.rate : lastRate(v) })} />
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label>কত ঘণ্টা *</Label><Input className="h-11" type="number" inputMode="decimal" step="0.25" value={hourForm.hours} onChange={(e) => setHourForm({ ...hourForm, hours: e.target.value })} /></div>
-                <div className="space-y-1.5"><Label>ঘণ্টায় (৳) *</Label><Input className="h-11" type="number" inputMode="decimal" value={hourForm.rate} onChange={(e) => setHourForm({ ...hourForm, rate: e.target.value })} /></div>
-              </div>
-              <p className="rounded-xl bg-muted/60 p-2.5 text-sm">কাজের বিল <b className="num">{tk(Number(hourForm.hours || 0) * Number(hourForm.rate || 0))}</b></p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label>তারিখ</Label><Input className="h-11" type="date" value={hourForm.date} onChange={(e) => setHourForm({ ...hourForm, date: e.target.value })} /></div>
-                <div className="space-y-1.5"><Label>চালক</Label><Input className="h-11" list="veku-drivers" value={hourForm.driver} onChange={(e) => setHourForm({ ...hourForm, driver: e.target.value })} /></div>
-              </div>
-              <div className="space-y-1.5"><Label>কী কাজ / নোট</Label><Input className="h-11" placeholder="যেমন: মাটি কাটা" value={hourForm.note} onChange={(e) => setHourForm({ ...hourForm, note: e.target.value })} /></div>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setHourForm(null)}>বাতিল</Button>
-            <Button onClick={() => saveHours.mutate()} disabled={saveHours.isPending}>{saveHours.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}সংরক্ষণ</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* money given / spent on the veku */}
-      <Dialog open={!!payForm} onOpenChange={(o) => !o && setPayForm(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{payForm?.id ? "সম্পাদনা" : "ভেকুর খরচ / টাকা দেওয়া"}</DialogTitle>
-            <DialogDescription>ডিজেল, মবিল, যন্ত্রাংশ বা চালককে দেওয়া টাকা। হাতে নগদ থেকে কমবে আর ভেকুর পাওনা থেকে কাটবে।</DialogDescription>
-          </DialogHeader>
-          {payForm && (
-            <div className="space-y-3">
-              <VekuPicker vekus={vekus} value={payForm.veku_id} onChange={(v) => setPayForm({ ...payForm, veku_id: v })} />
-              <div className="space-y-1.5">
-                <Label>কী খরচ</Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {KINDS.map((k) => (
-                    <button key={k} type="button" onClick={() => setPayForm({ ...payForm, kind: k })}
-                      className={`h-9 rounded-full px-3 text-xs font-semibold ${payForm.kind === k ? "bg-primary text-primary-foreground" : "border bg-background"}`}>{k}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label>টাকা *</Label><Input className="h-11" type="number" inputMode="decimal" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} /></div>
-                <div className="space-y-1.5"><Label>তারিখ</Label><Input className="h-11" type="date" value={payForm.date} onChange={(e) => setPayForm({ ...payForm, date: e.target.value })} /></div>
-              </div>
-              <div className="space-y-1.5"><Label>চালক (কার হাতে দেওয়া)</Label><Input className="h-11" list="veku-drivers" value={payForm.driver} onChange={(e) => setPayForm({ ...payForm, driver: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>নোট</Label><Input className="h-11" value={payForm.note} onChange={(e) => setPayForm({ ...payForm, note: e.target.value })} /></div>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setPayForm(null)}>বাতিল</Button>
-            <Button onClick={() => savePay.mutate()} disabled={savePay.isPending}>{savePay.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}সংরক্ষণ</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ExpenseEntryDialog
+        open={!!entry}
+        onOpenChange={(o) => { if (!o) setEntry(null); }}
+        head="veku"
+        lockHead
+        partyId={entry?.partyId ?? null}
+        focus={entry?.focus}
+        edit={entry?.edit ?? null}
+        onDone={invalidate}
+      />
 
       {/* add / rename a veku */}
       <Dialog open={!!vekuForm} onOpenChange={(o) => !o && setVekuForm(null)}>
@@ -455,22 +320,6 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function VekuPicker({ vekus, value, onChange }: { vekus: Veku[]; value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="space-y-1.5">
-      <Label>কোন ভেকু *</Label>
-      <div className="flex flex-wrap gap-1.5">
-        {vekus.map((v) => (
-          <button key={v.id} type="button" onClick={() => onChange(v.id)}
-            className={`flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold ${value === v.id ? "bg-primary text-primary-foreground" : "border bg-background"}`}>
-            <Tractor className="h-4 w-4" />{v.name}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
