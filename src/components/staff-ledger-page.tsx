@@ -57,6 +57,21 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   });
 
   const ratesQ = useQuery({ queryKey: ["staff-pay-rates"], queryFn: fetchPayRates });
+  // last season's unpaid wage (opening balances linked to the worker); a payment settles it first
+  const oldQ = useQuery({
+    queryKey: ["staff-old-due", mode, ids.join(",")],
+    enabled: ids.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("opening_balance_summary").select("worker_id, remaining_amount")
+        .in("worker_id", ids).in("kind", ["sardar_payable", "other_payable"]);
+      if (error) throw error;
+      const m = new Map<string, number>();
+      for (const r of (data ?? []) as any[]) if (Number(r.remaining_amount) > 0.5) m.set(r.worker_id, (m.get(r.worker_id) ?? 0) + Number(r.remaining_amount));
+      return m;
+    },
+  });
+  const oldDueOf = (id: string) => oldQ.data?.get(id) ?? 0;
+  const oldTotal = [...(oldQ.data?.values() ?? [])].reduce((a, b) => a + b, 0);
   const ratesOf = (id: string): PayRate[] => (ratesQ.data ?? []).filter((r) => r.worker_id === id);
   const wageOf = (w: any, date = today) => rateAt(ratesOf(w.id), mode === "daily" ? w.daily_wage : w.monthly_salary, date);
 
@@ -311,6 +326,12 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
         <StatCard label="মোট বাকি" value={`৳ ${bn(tot.due)}`} icon={Wallet} tone="warning" />
       </div>
 
+      {oldTotal > 0.5 && (
+        <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          গত বছরের বকেয়া মোট ৳ {bn(oldTotal)}। কাউকে টাকা দিলে আগে তার গত বছরের বকেয়া থেকে কাটে, সেটা শেষ হলে তারপর এই মৌসুমের পাওনা থেকে।
+        </p>
+      )}
+
       <Card>
         <CardHeader><CardTitle className="text-base">তালিকা</CardTitle></CardHeader>
         <CardContent className="p-0">
@@ -348,7 +369,9 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                     <TableCell className="text-right tabular-nums">{mode === "daily" ? fmtDays(s) : <>{bn(s.days)} দিন{s.absent > 0 && <div className="text-xs text-destructive">অনুপস্থিত {bn(s.absent)} দিন</div>}</>}</TableCell>
                     <TableCell className="text-right tabular-nums">৳ {bn(s.earned)}</TableCell>
                     <TableCell className="text-right tabular-nums text-success">৳ {bn(s.paid)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums text-warning">৳ {bn(s.due)}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums text-warning">৳ {bn(s.due)}
+                      {oldDueOf(w.id) > 0.5 && <div className="text-xs font-normal text-amber-700 dark:text-amber-300">+ গত বছরের ৳ {bn(oldDueOf(w.id))}</div>}
+                    </TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <Button size="sm" variant="outline" onClick={() => setPayFor(w.id)}>টাকা দিন</Button>
                       {mode === "salary" && <Button size="sm" variant="ghost" className="ml-1" onClick={() => setAbsDlg({ worker_id: w.id, date: today, half: false, note: "" })}>ছুটি/অনুপস্থিত</Button>}

@@ -3,6 +3,7 @@ import { sdb } from "@/lib/season-db";
 import { fetchCashSummary } from "@/lib/cash-queries";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
+import { payWorker } from "@/lib/worker-pay";
 
 /* ============================================================================
  * CDB Bricks AI ব্রেন
@@ -1977,16 +1978,17 @@ export const saveAiActionToDatabase = async (
       const amount = num(d.amount || d.paidAmount || d.totalAmount);
       requirePositive(amount, "পেমেন্টের টাকা");
       const worker = await requireParty("workers", d.workerName || d.worker_name, d.workerId);
-      const { error } = await supabase.from("worker_payments").insert({
-        worker_id: worker.id,
-        amount,
-        payment_date: entryDate,
-        payment_type: "payment",
-        note: d.description || "AI সহকারী থেকে",
-        created_by: userId,
-      } as any);
-      if (error) throw new Error(error.message);
-      return { success: true, message: `${worker.name}-কে ${tk(amount)} পেমেন্ট খাতায় সেভ হয়েছে।` };
+      // last season's unpaid wage first, the rest this season's (same as the expense form)
+      let split;
+      try {
+        split = await payWorker({ workerId: worker.id, amount, date: entryDate, note: d.description || "AI সহকারী থেকে", createdBy: userId });
+      } catch (e: any) {
+        throw new Error(e?.message ?? String(e));
+      }
+      const how = split.toOldTotal > 0.5
+        ? ` (গত বছরের বকেয়ায় ${tk(split.toOldTotal)}${split.toNow > 0.5 ? `, এই মৌসুমে ${tk(split.toNow)}` : ""})`
+        : "";
+      return { success: true, message: `${worker.name}-কে ${tk(amount)} পেমেন্ট খাতায় সেভ হয়েছে${how}।` };
     }
 
     // ---------- কাঁচা ইট ----------

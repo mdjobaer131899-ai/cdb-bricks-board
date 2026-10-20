@@ -17,6 +17,7 @@ import { bn, todayBD } from "@/lib/format";
 import { createExpense } from "@/lib/expenses.functions";
 import { createSardarPayment } from "@/lib/sardars.functions";
 import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
+import { fetchWorkerOldDues, payWorker, splitWorkerPay } from "@/lib/worker-pay";
 import { ASSET_PREFIX } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import {
@@ -35,7 +36,8 @@ import {
  * A section is left out when a head has no such thing (a sardar has no bill, the power
  * bill has no person). Rows go to the same tables as before, so hand cash, the cash book,
  * profit/loss and every ledger page count them with no change:
- *   sardar → sardar_payments / opening_payments; daily, staff → worker_payments;
+ *   sardar → sardar_payments / opening_payments; daily, staff → last season's due
+ *   first (opening_payments), the rest worker_payments (lib/worker-pay.ts);
  *   raw, parts, veku, vehicle, land, clean → purchases (bill) + supplier_payments (paid);
  *   parts with no shop, power bill, misc, asset → expenses.
  * Opened from the cash book, the purchases page and its folders, and the suppliers page.
@@ -401,20 +403,23 @@ export function ExpenseEntryDialog({
     queryKey: ["expense-form-worker-paid", f.personId],
     enabled: open && (head === "daily" || head === "staff") && !!f.personId,
     queryFn: async () => {
-      const [w, pays, att, rates] = await Promise.all([
+      const [w, pays, att, rates, old] = await Promise.all([
         supabase.from("workers").select("id, role, daily_wage, monthly_salary, join_date, leave_date").eq("id", f.personId).maybeSingle(),
         fetchAllRows<{ amount: number }>(() => sdb.from("worker_payments").select("id, amount").eq("worker_id", f.personId).order("id")),
         fetchAllRows<{ date: string; present: boolean; is_half_day: boolean }>(() => sdb.from("worker_attendance").select("id, date, present, is_half_day").eq("worker_id", f.personId).order("id")),
         (supabase as any).from("pay_rates").select("worker_id, amount, effective_from").eq("worker_id", f.personId),
+        fetchWorkerOldDues(f.personId),
       ]);
       const paid = pays.reduce((a, r) => a + Number(r.amount || 0), 0);
+      const oldDue = old.reduce((a, o) => a + o.remaining, 0);
       const wr: any = w.data;
-      if (!wr) return { paid, due: null as number | null };
+      if (!wr) return { paid, old, oldDue, nowDue: null as number | null, due: null as number | null };
       const r = (rates?.data ?? []) as any[];
       const earned = wr.role === "daily"
         ? dailyEarned({ wage: wr.daily_wage, join: wr.join_date, leave: wr.leave_date, rates: r, marks: att.map((a) => ({ date: a.date, present: a.present !== false, half: !!a.is_half_day })) }).earned
         : salaryEarned({ monthly: wr.monthly_salary, join: wr.join_date, leave: wr.leave_date, rates: r, absences: att.filter((a) => a.present === false || a.is_half_day).map((a) => ({ date: a.date, half: a.is_half_day })) }).earned;
-      return { paid, due: earned - paid };
+      // what the person is owed in all: last season's due + this season's
+      return { paid, old, oldDue, nowDue: earned - paid, due: oldDue + earned - paid };
     },
   });
 
@@ -586,10 +591,8 @@ export function ExpenseEntryDialog({
       } else if (head === "daily" || head === "staff") {
         if (!f.personId) throw new Error("নাম বেছে নিন");
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
-        const { error } = await supabase.from("worker_payments").insert({
-          worker_id: f.personId, amount: paid, payment_date: f.date, payment_type: "payment", note: note || null, created_by: uid(),
-        });
-        if (error) throw error;
+        // last season's unpaid wage is settled first, the rest is this season's
+        await payWorker({ workerId: f.personId, amount: paid, date: f.date, note: note || null, createdBy: uid() });
       } else if (head === "ownerSalary" || head === "ownerWithdraw") {
         if (!f.personId) throw new Error("কোন মালিক, বেছে নিন");
         if (!(paid > 0)) throw new Error("কত টাকা নিলেন, লিখুন");
@@ -809,9 +812,22 @@ export function ExpenseEntryDialog({
                     <span className="flex items-center gap-0.5 font-bold">পূর্বের দেনা <ChevronRight className="h-3.5 w-3.5" /></span>
                   </button>
                 )}
-                {(head === "daily" || head === "staff") && f.personId && workerPaidQ.data !== undefined && (
-                  <p className="num text-xs text-muted-foreground">এই মৌসুমে আগে দেওয়া হয়েছে {tk(workerPaidQ.data.paid)}</p>
-                )}
+                {(head === "daily" || head === "staff") && f.personId && workerPaidQ.data !== undefined && (() => {
+                  const wd = workerPaidQ.data;
+                  const split = splitWorkerPay(paid, wd.old);
+                  return (
+                    <>
+                      {wd.oldDue > 0.5 && (
+                        <div className="num space-y-0.5 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                          <div>গত বছরের বকেয়া {tk(wd.oldDue)} · এই মৌসুমে {wd.nowDue === null ? "—" : wd.nowDue >= 0 ? `বাকি ${tk(wd.nowDue)}` : `অগ্রিম ${tk(-wd.nowDue)}`}</div>
+                          <div className="font-normal">টাকা আগে গত বছরের বকেয়া থেকে কাটবে; সেটা শেষ হলে তারপর এই মৌসুমের পাওনা থেকে।</div>
+                          {paid > 0 && <div>এবার: গত বছরের বকেয়ায় {tk(split.toOldTotal)}{split.toNow > 0.5 ? ` · এই মৌসুমে ${tk(split.toNow)}` : ""}</div>}
+                        </div>
+                      )}
+                      <p className="num text-xs text-muted-foreground">এই মৌসুমে আগে দেওয়া হয়েছে {tk(wd.paid)}</p>
+                    </>
+                  );
+                })()}
               </Section>
             )}
 
