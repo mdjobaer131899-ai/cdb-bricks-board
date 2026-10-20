@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BalanceStrip, Chips, HeadTiles, Section, tk } from "@/components/money-form-parts";
 import { supabase } from "@/integrations/supabase/client";
-import { sdb } from "@/lib/season-db";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { bn, todayBD } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
@@ -80,14 +79,15 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
   }, [customers.length, head]);
   const customer = head === "sale" ? customers.find((c) => nfc(c.name) === nfc(f.party)) : undefined;
 
-  // this season's account of the customer, the same rule as the dashboard and customer pages
+  // the customer's account, the same rule as the collections page, dashboard and AI
+  // (all approved non-contract challans − all non-contract collections)
   const custBalQ = useQuery({
     queryKey: ["income-form-customer", customer?.id],
     enabled: open && !!customer,
     queryFn: async () => {
       const [sales, cols] = await Promise.all([
-        fetchAllRows<{ total_amount: number }>(() => sdb.from("sales_entries").select("id, total_amount").eq("customer_id", customer!.id).eq("status", "approved").order("id")),
-        fetchAllRows<{ amount: number }>(() => sdb.from("collections").select("id, amount").eq("customer_id", customer!.id).order("id")),
+        fetchAllRows<{ total_amount: number }>(() => supabase.from("sales_entries").select("id, total_amount").eq("customer_id", customer!.id).eq("status", "approved").is("contract_id", null).order("id")),
+        fetchAllRows<{ amount: number }>(() => supabase.from("collections").select("id, amount").eq("customer_id", customer!.id).is("contract_id", null).order("id")),
       ]);
       return sales.reduce((a, r) => a + Number(r.total_amount || 0), 0) - cols.reduce((a, r) => a + Number(r.amount || 0), 0);
     },
@@ -262,7 +262,7 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
               )}
               {prev !== null && (
                 <p className={`num text-xs font-semibold ${prev > 0 ? "text-warning" : prev < 0 ? "text-info" : "text-success"}`}>
-                  {head === "sale" ? "এই মৌসুমে" : "এখন পর্যন্ত"}: {prev > 0 ? `বাকি ${tk(prev)}` : prev < 0 ? `অগ্রিম জমা ${tk(-prev)}` : "কোনো বাকি নেই"}
+                  এখন পর্যন্ত: {prev > 0 ? `বাকি ${tk(prev)}` : prev < 0 ? `অগ্রিম জমা ${tk(-prev)}` : "কোনো বাকি নেই"}
                 </p>
               )}
               {head === "ownerInvest" && owner && <p className="num text-xs font-semibold text-muted-foreground">এখন নিট বিনিয়োগ {tk(owner.net)}</p>}

@@ -21,13 +21,17 @@ import { exportReportPdf, type PdfColumn } from "@/lib/pdf-export";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { toast } from "sonner";
-import { BusinessBook } from "@/components/business-book";
+import { BrickFlow } from "@/components/brick-flow";
+import { Link } from "@tanstack/react-router";
+import { fetchProfitLoss } from "@/lib/pl-queries";
+import { COST_GROUPS, GROUP_LABEL } from "@/lib/money-heads";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({
     meta: [
-      { title: "ব্যবসার খাতা ও রিপোর্ট — CDB Bricks" },
+      { title: "রিপোর্ট — CDB Bricks" },
       { name: "description", content: "তারিখভিত্তিক বিক্রয় রিপোর্ট তৈরি করুন, গ্রাহক ও ইটের ধরন অনুযায়ী বিশ্লেষণ দেখুন এবং PDF এক্সপোর্ট করুন।" },
       { property: "og:title", content: "রিপোর্ট — CDB Bricks" },
       { property: "og:description", content: "তারিখভিত্তিক বিক্রয় রিপোর্ট তৈরি করুন, গ্রাহক ও ইটের ধরন অনুযায়ী বিশ্লেষণ দেখুন এবং PDF এক্সপোর্ট করুন।" },
@@ -90,7 +94,7 @@ function ReportsPage() {
           <button
             type="button"
             onClick={() => go(null)}
-            aria-label="ব্যবসার খাতায় ফিরে যান"
+            aria-label="রিপোর্টে ফিরে যান"
             className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border bg-card transition active:scale-95"
           >
             <ArrowLeft className="h-5 w-5" aria-hidden="true" />
@@ -107,7 +111,18 @@ function ReportsPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5 pb-4">
-      <BusinessBook />
+      <div className="px-0.5 pt-1">
+        <h1 className="font-display text-[26px] font-extrabold leading-tight">রিপোর্ট</h1>
+        <p className="text-sm font-semibold text-muted-foreground">বিক্রি, উৎপাদন আর মৌসুমের তুলনা</p>
+      </div>
+
+      {/* money has one page each; reports only link to them */}
+      <div className="grid grid-cols-2 gap-2">
+        <Link to="/income-expense" className="flex items-center justify-between gap-2 rounded-2xl border bg-card p-3.5 text-sm font-bold">লাভ-ক্ষতি <ChevronRight className="h-4 w-4 text-muted-foreground" /></Link>
+        <Link to="/dues" className="flex items-center justify-between gap-2 rounded-2xl border bg-card p-3.5 text-sm font-bold">পাওনা-দেনা <ChevronRight className="h-4 w-4 text-muted-foreground" /></Link>
+      </div>
+
+      <BrickFlow />
 
       <section className="space-y-2">
         <h2 className="section-label px-1">বিস্তারিত রিপোর্ট</h2>
@@ -739,24 +754,24 @@ type SeasonRow = { id: string; name: string; start_date: string; end_date: strin
 async function fetchSeasonTotals(s: SeasonRow) {
   const from = s.start_date;
   const to = s.end_date ?? isoDate(new Date());
-  const [prodRes, salesRes, colRes, expRes, wpRes, rmRes] = await Promise.all([
-    sdb.from("production_entries").select("quantity").gte("production_date", from).lte("production_date", to),
-    sdb.from("sales_entries").select("quantity, total_amount").eq("status", "approved").gte("sale_date", from).lte("sale_date", to),
-    sdb.from("collections").select("amount").gte("payment_date", from).lte("payment_date", to),
-    sdb.from("expenses").select("amount").gte("expense_date", from).lte("expense_date", to),
-    sdb.from("worker_payments").select("amount").gte("payment_date", from).lte("payment_date", to),
-    sdb.from("purchases").select("total_amount").gte("purchase_date", from).lte("purchase_date", to),
+  // production and bricks sold for that season (not the selected one), all rows
+  const [prod, sold, cols, pl] = await Promise.all([
+    fetchAllRows<{ quantity: number }>(() => supabase.from("production_entries").select("id, quantity").gte("production_date", from).lte("production_date", to).order("id")),
+    fetchAllRows<{ quantity: number }>(() => supabase.from("sales_entries").select("id, quantity").eq("status", "approved").gte("sale_date", from).lte("sale_date", to).order("id")),
+    fetchAllRows<{ amount: number }>(() => supabase.from("collections").select("id, amount").gte("payment_date", from).lte("payment_date", to).order("id")),
+    // costs and profit: the same function as the profit page (pl-queries.ts)
+    fetchProfitLoss({ from, to }, { allSeasons: true }),
   ]);
-  const sum = (rows: any[] | null, k: string) => (rows ?? []).reduce((a, r) => a + Number(r[k] || 0), 0);
-  const production = sum(prodRes.data, "quantity");
-  const soldBricks = sum(salesRes.data, "quantity");
-  const income = sum(salesRes.data, "total_amount");
-  const collection = sum(colRes.data, "amount");
-  const expGeneral = sum(expRes.data, "amount");
-  const expWorker = sum(wpRes.data, "amount");
-  const expRaw = sum(rmRes.data, "total_amount");
-  const expense = expGeneral + expWorker + expRaw;
-  return { production, soldBricks, income, collection, expense, expGeneral, expWorker, expRaw, net: income - expense };
+  const sum = (rows: any[], k: string) => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
+  return {
+    production: sum(prod, "quantity"),
+    soldBricks: sum(sold, "quantity"),
+    income: pl.sales,
+    collection: sum(cols, "amount"),
+    expense: pl.totalCost,
+    groups: COST_GROUPS.map((g) => ({ label: GROUP_LABEL[g], value: pl.byGroup[g] ?? 0 })),
+    net: pl.profit,
+  };
 }
 
 function SeasonReport() {
@@ -798,11 +813,9 @@ function SeasonReport() {
         { k: "মোট বিক্রি (ইট)", v: bn(t.soldBricks) },
         { k: "মোট আয়", v: "৳ " + bn(t.income) },
         { k: "মোট কালেকশন", v: "৳ " + bn(t.collection) },
-        { k: "সাধারণ ব্যয়", v: "৳ " + bn(t.expGeneral) },
-        { k: "শ্রমিক খরচ", v: "৳ " + bn(t.expWorker) },
-        { k: "কাঁচামাল খরচ", v: "৳ " + bn(t.expRaw) },
+        ...t.groups.map((g) => ({ k: g.label, v: "৳ " + bn(g.value) })),
         { k: "মোট ব্যয়", v: "৳ " + bn(t.expense) },
-        { k: "নিট লাভ", v: "৳ " + bn(t.net) },
+        { k: t.net >= 0 ? "লাভ" : "ক্ষতি", v: "৳ " + bn(Math.abs(t.net)) },
       ],
     });
   }
@@ -841,7 +854,7 @@ function SeasonReport() {
                 <SummaryBox label="মোট আয়" value={"৳ " + bn(t.income)} />
                 <SummaryBox label="মোট কালেকশন" value={"৳ " + bn(t.collection)} />
                 <SummaryBox label="মোট ব্যয়" value={"৳ " + bn(t.expense)} />
-                <SummaryBox label="নিট লাভ" value={"৳ " + bn(t.net)} tone={t.net >= 0 ? "success" : "destructive"} />
+                <SummaryBox label={t.net >= 0 ? "লাভ" : "ক্ষতি"} value={"৳ " + bn(Math.abs(t.net))} tone={t.net >= 0 ? "success" : "destructive"} />
               </div>
 
               <div className="mt-5">
@@ -851,9 +864,9 @@ function SeasonReport() {
                     <TableRow><TableHead>খরচের বিভাগ</TableHead><TableHead className="text-right">পরিমাণ</TableHead></TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow><TableCell>সাধারণ ব্যয় (expenses)</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expGeneral)}</TableCell></TableRow>
-                    <TableRow><TableCell>শ্রমিক খরচ (worker_payments)</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expWorker)}</TableCell></TableRow>
-                    <TableRow><TableCell>কাঁচামাল ও মালামাল ক্রয়</TableCell><TableCell className="text-right tabular-nums">৳ {bn(t.expRaw)}</TableCell></TableRow>
+                    {t.groups.map((g) => (
+                      <TableRow key={g.label}><TableCell>{g.label}</TableCell><TableCell className="text-right tabular-nums">৳ {bn(g.value)}</TableCell></TableRow>
+                    ))}
                   </TableBody>
                   <TableFooter>
                     <TableRow><TableCell className="font-semibold">মোট ব্যয়</TableCell><TableCell className="text-right tabular-nums font-bold">৳ {bn(t.expense)}</TableCell></TableRow>
@@ -883,20 +896,16 @@ const BN_MONTHS = ["জানুয়ারি", "ফেব্রুয়া�
 async function fetchAnnual(year: number) {
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
-  const [salesRes, colRes, expRes, wpRes, rmRes] = await Promise.all([
-    sdb.from("sales_entries").select("sale_date, total_amount").eq("status", "approved").gte("sale_date", from).lte("sale_date", to),
-    sdb.from("collections").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
-    sdb.from("expenses").select("expense_date, amount").gte("expense_date", from).lte("expense_date", to),
-    sdb.from("worker_payments").select("payment_date, amount").gte("payment_date", from).lte("payment_date", to),
-    sdb.from("purchases").select("purchase_date, total_amount").gte("purchase_date", from).lte("purchase_date", to),
+  const [cols, pl] = await Promise.all([
+    fetchAllRows<{ payment_date: string; amount: number }>(() => supabase.from("collections").select("id, payment_date, amount").gte("payment_date", from).lte("payment_date", to).order("id")),
+    // sales, costs and profit by month from the one profit function (pl-queries.ts)
+    fetchProfitLoss({ from, to }, { allSeasons: true }),
   ]);
   const months = Array.from({ length: 12 }, () => ({ sales: 0, collection: 0, expense: 0 }));
-  const bucket = (date: string) => new Date(date).getMonth();
-  (salesRes.data ?? []).forEach((r: any) => { months[bucket(r.sale_date)].sales += Number(r.total_amount || 0); });
-  (colRes.data ?? []).forEach((r: any) => { months[bucket(r.payment_date)].collection += Number(r.amount || 0); });
-  (expRes.data ?? []).forEach((r: any) => { months[bucket(r.expense_date)].expense += Number(r.amount || 0); });
-  (wpRes.data ?? []).forEach((r: any) => { months[bucket(r.payment_date)].expense += Number(r.amount || 0); });
-  (rmRes.data ?? []).forEach((r: any) => { months[bucket(r.purchase_date)].expense += Number(r.total_amount || 0); });
+  const bucket = (date: string) => Number(date.slice(5, 7)) - 1;
+  for (const r of pl.saleLines) months[bucket(r.date)].sales += r.amount;
+  for (const r of cols) months[bucket(r.payment_date)].collection += Number(r.amount || 0);
+  for (const l of pl.lines) months[bucket(l.date)].expense += l.amount;
   return months;
 }
 

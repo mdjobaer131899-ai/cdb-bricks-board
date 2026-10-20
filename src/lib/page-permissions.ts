@@ -22,7 +22,8 @@ export const PAGES: { key: string; label: string }[] = [
   { key: "/owners", label: "মালিকের বিনিয়োগ" },
   { key: "/loans", label: "ঋণ দেওয়া-নেওয়া" },
   { key: "/opening-balances", label: "পূর্বের বকেয়া ও জের" },
-  { key: "/income-expense", label: "লাভ-ক্ষতি ও দেনা-পাওনা" },
+  { key: "/income-expense", label: "লাভ-ক্ষতি" },
+  { key: "/dues", label: "পাওনা-দেনা" },
   { key: "/reports", label: "রিপোর্ট" },
   { key: "/seasons", label: "মৌসুম" },
 ];

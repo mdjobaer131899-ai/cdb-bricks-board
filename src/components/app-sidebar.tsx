@@ -39,6 +39,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "ভাটার হিসাব",
     items: [
       { title: "ক্যাশ বই", url: "/cash-book", icon: Receipt },
+      { title: "লাভ-ক্ষতি", url: "/income-expense", icon: Scale },
+      { title: "পাওনা-দেনা", url: "/dues", icon: HandCoins },
       { title: "মালামাল ক্রয় ও খরচ", url: "/purchases", icon: ShoppingCart },
       { title: "মালিক ও ঋণ", url: "/owners", icon: Crown },
       { title: "পূর্বের বকেয়া ও জের", url: "/opening-balances", icon: History },
@@ -47,7 +49,6 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "রিপোর্ট ও সেটিংস",
     items: [
-      { title: "লাভ-ক্ষতি ও দেনা-পাওনা", url: "/income-expense", icon: Scale },
       { title: "রিপোর্ট", url: "/reports", icon: BarChart3 },
       { title: "মৌসুম", url: "/seasons", icon: CalendarRange },
       { title: "ইউজার ও অনুমতি", url: "/users", icon: UserCog, adminOnly: true },

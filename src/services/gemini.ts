@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchCashSummary } from "@/lib/cash-queries";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
 
 /* ============================================================================
@@ -230,6 +231,15 @@ function stripMarkdown(s: string): string {
     .trim();
 }
 
+/** every row of a query, past the 1000-row API limit, in the shape safeRows reads */
+async function allRows(make: () => any): Promise<{ data: any; error: any }> {
+  try {
+    return { data: await fetchAllRows(make), error: null };
+  } catch (e) {
+    return { data: null, error: e };
+  }
+}
+
 async function safeRows(label: string, failed: string[], q: PromiseLike<{ data: any; error: any }>): Promise<Row[]> {
   try {
     const { data, error } = await q;
@@ -324,14 +334,16 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     safeRows("হাজিরা", failed, sdbx.from("worker_attendance").select("worker_id,date,present,is_half_day").limit(20000)),
     safeRows("শ্রমিক পেমেন্ট", failed, sdbx.from("worker_payments").select("worker_id,amount,payment_date").limit(20000)),
     safeRows("সাপ্লায়ার", failed, db.from("suppliers").select("id,name,phone,material_type").order("name")),
-    safeRows("কেনাকাটা", failed, sdbx.from("purchases").select("supplier_id,total_amount").limit(20000)),
+    // what a supplier is owed is all-time (pl-queries fetchSupplierDues, the suppliers and dues pages)
+    safeRows("কেনাকাটা", failed, allRows(() => db.from("purchases").select("id,supplier_id,total_amount").order("id"))),
     Promise.resolve([] as Row[]), // আগে raw_material_purchases পড়া হতো; এখন সব purchases-এ
-    safeRows("সাপ্লায়ার পেমেন্ট", failed, sdbx.from("supplier_payments").select("supplier_id,amount,payment_date").limit(20000)),
+    safeRows("সাপ্লায়ার পেমেন্ট", failed, allRows(() => db.from("supplier_payments").select("id,supplier_id,amount,payment_date").order("id"))),
     safeRows("গাড়ি", failed, db.from("vehicles").select("vehicle_no,type,driver_name,active")),
     safeRows("পূর্বের জের", failed,
       db.from("opening_balance_summary").select("id,display_name,party_name,kind,amount,paid_amount,remaining_amount,customer_id,sardar_id,worker_id")),
-    safeRows("ঋণ", failed, sdbx.from("loans").select("party_name,amount,direction,loan_date").limit(5000)),
-    safeRows("ঋণ পরিশোধ", failed, sdbx.from("loan_payments").select("amount,loan:loans(direction,party_name)").limit(5000)),
+    // a loan runs across seasons, as on the loans page
+    safeRows("ঋণ", failed, db.from("loans").select("party_name,amount,direction,loan_date").limit(5000)),
+    safeRows("ঋণ পরিশোধ", failed, db.from("loan_payments").select("amount,loan:loans(direction,party_name)").limit(5000)),
     safeRows("বেতনের হার", failed, db.from("pay_rates").select("worker_id,sardar_id,amount,effective_from")),
     safeRows("পূর্বের জের পরিশোধ", failed, db.from("opening_payments").select("opening_balance_id,amount,payment_date").limit(20000)),
   ]);
@@ -1045,7 +1057,7 @@ function openingBlock(s: KilnSnapshot): string {
 }
 
 function loanBlock(s: KilnSnapshot): string {
-  if (!s.loans.length) return "🏦 এই মৌসুমে কোনো ঋণের এন্ট্রি নেই।";
+  if (!s.loans.length) return "🏦 কোনো ঋণের এন্ট্রি নেই।";
   const parties = new Map<string, { taken: number; given: number; paidBack: number; gotBack: number }>();
   for (const l of s.loans) {
     const cur = parties.get(l.party) ?? { taken: 0, given: 0, paidBack: 0, gotBack: 0 };

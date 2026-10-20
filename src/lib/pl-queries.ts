@@ -1,19 +1,21 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchAllRows } from "@/lib/fetch-all";
-import { isAssetCategory } from "@/lib/cash-queries";
+import { RAW_TYPES, expenseHead, moneyHead, type MoneyGroup, type MoneyKey } from "@/lib/money-heads";
 
 export { fetchAllRows };
 
 /**
- * Profit/loss on an accrual basis, and what the kiln owes suppliers.
+ * Profit/loss on an accrual basis — the one profit figure of the app. The profit page,
+ * the season and annual reports all read this; nothing else computes a profit.
  *
  * Unlike fetchCashSummary (cash basis, used for hand cash everywhere), material is
  * counted at its bill value on the purchase date, whether paid or not. Supplier
  * payments are cash movements only and are NOT counted again as cost here.
  *
- * Labour (sardar / worker / salary) is still counted by payments made, because
- * the earned-wage figures are not yet season-correct (OVERVIEW 8.1 items 4 and 5).
+ * Every cost is a line tagged with its head from money-heads.ts, so the page groups
+ * them the same way as the cash book and the forms, and a head opens its own lines.
+ * Labour (sardar / worker / salary) is still counted by payments made.
  */
 
 type DateFilter = { from?: string; to?: string };
@@ -28,50 +30,99 @@ function ranged(q: any, column: string, f: DateFilter) {
 const total = (rows: Array<{ amount?: number | string | null; total_amount?: number | string | null }>, key: "amount" | "total_amount" = "amount") =>
   rows.reduce((a, r) => a + Number((r as any)[key] || 0), 0);
 
+/** one cost behind the profit figure */
+export type PLLine = { key: MoneyKey; date: string; name: string; detail: string; amount: number };
+
 export type ProfitLoss = {
   sales: number;
+  /** approved challans by date, for month-by-month views */
+  saleLines: Array<{ date: string; amount: number }>;
   /** Part of sales delivered against last year's advance (opening customer_brick_due) */
   salesFromOldAdvance: number;
-  costs: { expenses: number; purchases: number; landRent: number; cleaning: number; vehicleRent: number; veku: number; sardar: number; worker: number; ownerSalary: number; vehicle: number };
+  /** cost per head and per group (money-heads.ts) */
+  byHead: Partial<Record<MoneyKey, number>>;
+  byGroup: Partial<Record<MoneyGroup, number>>;
+  lines: PLLine[];
   totalCost: number;
   profit: number;
   /** fixed assets bought (expenses with the "সম্পদ — " category): cash out, not counted as cost */
   assets: number;
+  assetLines: PLLine[];
 };
 
-export async function fetchProfitLoss(filter: DateFilter = {}): Promise<ProfitLoss> {
-  const [sales, exp, pur, sar, wrk, veh, own] = await Promise.all([
-    fetchAllRows<{ total_amount: number; opening_balance_id: string | null }>(() =>
-      ranged(sdb.from("sales_entries").select("id, total_amount, opening_balance_id").eq("status", "approved").order("id"), "sale_date", filter)),
-    fetchAllRows<{ amount: number; category: string }>(() => ranged(sdb.from("expenses").select("id, amount, category").order("id"), "expense_date", filter)),
-    fetchAllRows<{ total_amount: number; item_name: string }>(() => ranged(sdb.from("purchases").select("id, total_amount, item_name").order("id"), "purchase_date", filter)),
-    fetchAllRows<{ amount: number }>(() => ranged(sdb.from("sardar_payments").select("id, amount").order("id"), "payment_date", filter)),
-    fetchAllRows<{ amount: number }>(() => ranged(sdb.from("worker_payments").select("id, amount").order("id"), "payment_date", filter)),
-    fetchAllRows<{ amount: number }>(() => ranged(sdb.from("vehicle_expenses").select("id, amount").order("id"), "expense_date", filter)),
+const CONTRACT_ITEM_HEAD: Record<string, MoneyKey> = { "জমি ভাড়া": "land", "পরিচ্ছন্ন কর্মী": "clean", "গাড়ি ভাড়া": "vehicle", "ভেকু": "veku" };
+
+/**
+ * `allSeasons`: read the date range as given, not inside the selected season
+ * (the season comparison and the yearly report look at other seasons).
+ */
+export async function fetchProfitLoss(filter: DateFilter = {}, opts: { allSeasons?: boolean } = {}): Promise<ProfitLoss> {
+  const db: any = opts.allSeasons ? supabase : sdb;
+  const [sales, exp, pur, sar, wrk, veh, own, items] = await Promise.all([
+    fetchAllRows<{ total_amount: number; sale_date: string; opening_balance_id: string | null }>(() =>
+      ranged(db.from("sales_entries").select("id, total_amount, sale_date, opening_balance_id").eq("status", "approved").order("id"), "sale_date", filter)),
+    fetchAllRows<{ amount: number; category: string; expense_date: string; note: string | null }>(() =>
+      ranged(db.from("expenses").select("id, amount, category, expense_date, note").order("id"), "expense_date", filter)),
+    fetchAllRows<{ total_amount: number; item_name: string; purchase_date: string; material_id: string | null; quantity: number; unit: string | null; supplier: { name: string } | null }>(() =>
+      ranged(db.from("purchases").select("id, total_amount, item_name, purchase_date, material_id, quantity, unit, supplier:suppliers(name)").order("id"), "purchase_date", filter)),
+    fetchAllRows<{ amount: number; payment_date: string; sardar: { name: string } | null }>(() =>
+      ranged(db.from("sardar_payments").select("id, amount, payment_date, sardar:sardars(name)").order("id"), "payment_date", filter)),
+    fetchAllRows<{ amount: number; payment_date: string; worker: { name: string; role: string } | null }>(() =>
+      ranged(db.from("worker_payments").select("id, amount, payment_date, worker:workers(name, role)").order("id"), "payment_date", filter)),
+    fetchAllRows<{ amount: number; expense_date: string; category: string | null }>(() =>
+      ranged(db.from("vehicle_expenses").select("id, amount, expense_date, category").order("id"), "expense_date", filter)),
     // owner salary taken (counted when paid, like staff salaries)
-    fetchAllRows<{ amount: number }>(() => ranged(sdb.from("owner_transactions").select("id, amount").eq("txn_type", "salary").order("id"), "txn_date", filter)),
+    fetchAllRows<{ amount: number; txn_date: string; owner: { name: string } | null }>(() =>
+      ranged(db.from("owner_transactions").select("id, amount, txn_date, owner:owners(name)").eq("txn_type", "salary").order("id"), "txn_date", filter)),
+    supabase.from("raw_materials").select("id, name, item_group"),
   ]);
+
+  // which purchases are raw material: catalog group, else the known raw names
+  const rawIds = new Set(((items as any).data ?? []).filter((i: any) => i.item_group === "raw").map((i: any) => i.id as string));
+  const rawNames = new Set([...RAW_TYPES, ...((items as any).data ?? []).filter((i: any) => i.item_group === "raw").map((i: any) => String(i.name).normalize("NFC"))]);
+  const purchaseHead = (p: { item_name: string; material_id: string | null }): MoneyKey =>
+    CONTRACT_ITEM_HEAD[p.item_name] ?? (p.material_id && rawIds.has(p.material_id) ? "raw" : rawNames.has((p.item_name ?? "").normalize("NFC")) ? "raw" : "parts");
+
+  const lines: PLLine[] = [];
+  const assetLines: PLLine[] = [];
+  for (const p of pur) {
+    const qty = Number(p.quantity) > 0 && p.unit ? ` · ${Number(p.quantity)} ${p.unit}` : "";
+    lines.push({ key: purchaseHead(p), date: p.purchase_date, name: p.supplier?.name ?? "—", detail: `${p.item_name}${qty}`, amount: Number(p.total_amount || 0) });
+  }
+  for (const e of exp) {
+    const h = expenseHead(e.category);
+    const line = { key: h.key, date: e.expense_date, name: h.item || e.note || moneyHead(h.key).label, detail: h.item ? e.note ?? "" : "", amount: Number(e.amount || 0) };
+    (h.key === "asset" ? assetLines : lines).push(line);
+  }
+  for (const r of sar) lines.push({ key: "sardar", date: r.payment_date, name: r.sardar?.name ?? "—", detail: "দেওয়া টাকা", amount: Number(r.amount || 0) });
+  for (const r of wrk) lines.push({ key: r.worker?.role === "daily" ? "daily" : "staff", date: r.payment_date, name: r.worker?.name ?? "—", detail: "দেওয়া টাকা", amount: Number(r.amount || 0) });
+  for (const r of own) lines.push({ key: "ownerSalary", date: r.txn_date, name: r.owner?.name ?? "—", detail: "বেতন", amount: Number(r.amount || 0) });
+  for (const r of veh) lines.push({ key: "misc", date: r.expense_date, name: "গাড়ি খরচ", detail: r.category ?? "", amount: Number(r.amount || 0) });
+
+  const byHead: Partial<Record<MoneyKey, number>> = {};
+  const byGroup: Partial<Record<MoneyGroup, number>> = {};
+  for (const l of lines) {
+    byHead[l.key] = (byHead[l.key] ?? 0) + l.amount;
+    const g = moneyHead(l.key).group;
+    byGroup[g] = (byGroup[g] ?? 0) + l.amount;
+  }
+  lines.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
   const salesTotal = total(sales, "total_amount");
   const salesFromOldAdvance = total(sales.filter((s) => !!s.opening_balance_id), "total_amount");
-  const costs = {
-    expenses: total(exp.filter((e) => !isAssetCategory(e.category))),
-    // land rent (জমি ভাড়া) is its own line; previous-season dues are dated before the season so not counted
-    purchases: total(pur.filter((p) => !["জমি ভাড়া", "পরিচ্ছন্ন কর্মী", "গাড়ি ভাড়া", "ভেকু"].includes(p.item_name)), "total_amount"),
-    landRent: total(pur.filter((p) => p.item_name === "জমি ভাড়া"), "total_amount"),
-    cleaning: total(pur.filter((p) => p.item_name === "পরিচ্ছন্ন কর্মী"), "total_amount"),
-    // hired vehicles, per trip (গাড়ি ভাড়া folder); "vehicle" below is the old vehicle_expenses table
-    vehicleRent: total(pur.filter((p) => p.item_name === "গাড়ি ভাড়া"), "total_amount"),
-    // excavator work billed by the hour (veku-folder.tsx); money handed over is a payment, not counted again
-    veku: total(pur.filter((p) => p.item_name === "ভেকু"), "total_amount"),
-    sardar: total(sar),
-    worker: total(wrk),
-    ownerSalary: total(own),
-    vehicle: total(veh),
+  const totalCost = lines.reduce((a, l) => a + l.amount, 0);
+  return {
+    sales: salesTotal,
+    saleLines: sales.map((s) => ({ date: s.sale_date, amount: Number(s.total_amount || 0) })),
+    salesFromOldAdvance,
+    byHead,
+    byGroup,
+    lines,
+    totalCost,
+    profit: salesTotal - totalCost,
+    assets: assetLines.reduce((a, l) => a + l.amount, 0),
+    assetLines,
   };
-  const totalCost = Object.values(costs).reduce((a, b) => a + b, 0);
-  const assets = total(exp.filter((e) => isAssetCategory(e.category)));
-  return { sales: salesTotal, salesFromOldAdvance, costs, totalCost, profit: salesTotal - totalCost, assets };
 }
 
 /** type: suppliers.material_type, e.g. "গাড়ি ভাড়া" for a vehicle owner */

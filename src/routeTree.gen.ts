@@ -27,7 +27,7 @@ import { Route as AuthenticatedPreferencesRouteImport } from './routes/_authenti
 import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authenticated/purchases'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedSalariesRouteImport } from './routes/_authenticated/salaries'
-import { Route as AuthenticatedSardarLedgerRouteImport } from './routes/_authenticated/sardar-ledger'
+import { Route as AuthenticatedDuesRouteImport } from './routes/_authenticated/dues'
 import { Route as AuthenticatedSardarsRouteImport } from './routes/_authenticated/sardars'
 import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticated/seasons'
 import { Route as AuthenticatedWeatherRouteImport } from './routes/_authenticated/weather'
@@ -140,10 +140,10 @@ const AuthenticatedSalariesRoute = AuthenticatedSalariesRouteImport.update({
   path: '/salaries',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedSardarLedgerRoute =
-  AuthenticatedSardarLedgerRouteImport.update({
-    id: '/sardar-ledger',
-    path: '/sardar-ledger',
+const AuthenticatedDuesRoute =
+  AuthenticatedDuesRouteImport.update({
+    id: '/dues',
+    path: '/dues',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSardarsRoute = AuthenticatedSardarsRouteImport.update({
@@ -258,7 +258,7 @@ export interface FileRoutesByFullPath {
   '/purchases': typeof AuthenticatedPurchasesRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/salaries': typeof AuthenticatedSalariesRoute
-  '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
+  '/dues': typeof AuthenticatedDuesRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/weather': typeof AuthenticatedWeatherRoute
@@ -292,7 +292,7 @@ export interface FileRoutesByTo {
   '/purchases': typeof AuthenticatedPurchasesRoute
   '/reports': typeof AuthenticatedReportsRoute
   '/salaries': typeof AuthenticatedSalariesRoute
-  '/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
+  '/dues': typeof AuthenticatedDuesRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/weather': typeof AuthenticatedWeatherRoute
@@ -331,7 +331,7 @@ export interface FileRoutesById {
   '/_authenticated/purchases': typeof AuthenticatedPurchasesRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/salaries': typeof AuthenticatedSalariesRoute
-  '/_authenticated/sardar-ledger': typeof AuthenticatedSardarLedgerRoute
+  '/_authenticated/dues': typeof AuthenticatedDuesRoute
   '/_authenticated/sardars': typeof AuthenticatedSardarsRoute
   '/_authenticated/seasons': typeof AuthenticatedSeasonsRoute
   '/_authenticated/weather': typeof AuthenticatedWeatherRoute
@@ -371,7 +371,7 @@ export interface FileRouteTypes {
     | '/purchases'
     | '/reports'
     | '/salaries'
-    | '/sardar-ledger'
+    | '/dues'
     | '/sardars'
     | '/seasons'
     | '/weather'
@@ -405,7 +405,7 @@ export interface FileRouteTypes {
     | '/purchases'
     | '/reports'
     | '/salaries'
-    | '/sardar-ledger'
+    | '/dues'
     | '/sardars'
     | '/seasons'
     | '/weather'
@@ -443,7 +443,7 @@ export interface FileRouteTypes {
     | '/_authenticated/purchases'
     | '/_authenticated/reports'
     | '/_authenticated/salaries'
-    | '/_authenticated/sardar-ledger'
+    | '/_authenticated/dues'
     | '/_authenticated/sardars'
     | '/_authenticated/seasons'
     | '/_authenticated/weather'
@@ -599,11 +599,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSalariesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/sardar-ledger': {
-      id: '/_authenticated/sardar-ledger'
-      path: '/sardar-ledger'
-      fullPath: '/sardar-ledger'
-      preLoaderRoute: typeof AuthenticatedSardarLedgerRouteImport
+    '/_authenticated/dues': {
+      id: '/_authenticated/dues'
+      path: '/dues'
+      fullPath: '/dues'
+      preLoaderRoute: typeof AuthenticatedDuesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/sardars': {
@@ -774,7 +774,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPurchasesRoute: typeof AuthenticatedPurchasesRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSalariesRoute: typeof AuthenticatedSalariesRoute
-  AuthenticatedSardarLedgerRoute: typeof AuthenticatedSardarLedgerRoute
+  AuthenticatedDuesRoute: typeof AuthenticatedDuesRoute
   AuthenticatedSardarsRoute: typeof AuthenticatedSardarsRoute
   AuthenticatedSeasonsRoute: typeof AuthenticatedSeasonsRoute
   AuthenticatedWeatherRoute: typeof AuthenticatedWeatherRoute
@@ -805,7 +805,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPurchasesRoute: AuthenticatedPurchasesRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSalariesRoute: AuthenticatedSalariesRoute,
-  AuthenticatedSardarLedgerRoute: AuthenticatedSardarLedgerRoute,
+  AuthenticatedDuesRoute: AuthenticatedDuesRoute,
   AuthenticatedSardarsRoute: AuthenticatedSardarsRoute,
   AuthenticatedSeasonsRoute: AuthenticatedSeasonsRoute,
   AuthenticatedWeatherRoute: AuthenticatedWeatherRoute,

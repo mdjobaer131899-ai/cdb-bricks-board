@@ -229,17 +229,17 @@ function ProductionLine({ s }: { s: KilnSnapshot }) {
   );
 }
 
-/* ---------- পাওনা-দেনা ---------- */
+/* ---------- পাওনা-দেনা (lib/dues.ts rules; every tile opens /dues) ---------- */
 function MoneyTiles({ s }: { s: KilnSnapshot }) {
   const dues = s.customers.filter((c) => c.balance > 0.5);
   const adv = s.customers.filter((c) => c.balance < -0.5);
   const sardarOwed = s.sardars.filter((x) => x.due > 0.5);
   const supplierOwed = s.suppliers.filter((x) => x.due > 0.5);
   const tiles = [
-    { label: "গ্রাহকের বাকি", dot: "bg-amber-600", color: "text-amber-700 dark:text-amber-400", value: sum(dues, (c) => c.balance), sub: `${bn(dues.length)} জন · আমরা পাবো`, to: "/collections" },
-    { label: "গ্রাহকের অগ্রিম", dot: "bg-blue-600", color: "text-blue-700 dark:text-blue-300", value: sum(adv, (c) => -c.balance), sub: `${bn(adv.length)} জন · ইট দেওয়া বাকি`, to: "/advance-sales" },
-    { label: "সরদার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(sardarOwed, (x) => x.due), sub: `${bn(sardarOwed.length)} জন সরদার`, to: "/sardars" },
-    { label: "সাপ্লায়ার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(supplierOwed, (x) => x.due), sub: `${bn(supplierOwed.length)} জন সাপ্লায়ার`, to: "/purchases" },
+    { label: "গ্রাহকের বাকি", dot: "bg-amber-600", color: "text-amber-700 dark:text-amber-400", value: sum(dues, (c) => c.balance), sub: `${bn(dues.length)} জন · আমরা পাবো`, to: "/dues" },
+    { label: "গ্রাহকের অগ্রিম", dot: "bg-blue-600", color: "text-blue-700 dark:text-blue-300", value: sum(adv, (c) => -c.balance), sub: `${bn(adv.length)} জন · ইট দেওয়া বাকি`, to: "/dues" },
+    { label: "সরদার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(sardarOwed, (x) => x.due), sub: `${bn(sardarOwed.length)} জন সরদার`, to: "/dues" },
+    { label: "সাপ্লায়ার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(supplierOwed, (x) => x.due), sub: `${bn(supplierOwed.length)} জন · ভেকু, গাড়ি, জমিসহ`, to: "/dues" },
   ];
   return (
     <section className="grid grid-cols-2 gap-2.5">

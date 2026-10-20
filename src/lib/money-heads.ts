@@ -127,3 +127,23 @@ export function supplierHead(materialType: string | null | undefined): MoneyKey 
   if (RAW_TYPES.has(t)) return "raw";
   return "parts";
 }
+
+/** the ledger page that shows a head's entries in full (one tap from the profit page) */
+export function headLink(k: MoneyKey): { to: string; search?: Record<string, string>; label: string } {
+  switch (k) {
+    case "sardar": return { to: "/sardars", label: "সরদার খাতা" };
+    case "daily": return { to: "/daily-workers", label: "ডেলি শ্রমিক" };
+    case "staff": return { to: "/salaries", label: "মেস্তুরি ও ম্যানেজার" };
+    case "ownerSalary": case "ownerWithdraw": case "ownerInvest": return { to: "/owners", label: "মালিক" };
+    case "raw": return { to: "/purchases", search: { f: "raw" }, label: "কাঁচামালের খাতা" };
+    case "parts": case "power": return { to: "/purchases", search: { f: "other" }, label: "মালামালের খাতা" };
+    case "veku": return { to: "/purchases", search: { f: "veku" }, label: "ভেকুর খাতা" };
+    case "vehicle": return { to: "/purchases", search: { f: "vehicle" }, label: "গাড়ি ভাড়ার খাতা" };
+    case "land": return { to: "/purchases", search: { f: "land" }, label: "জমি ভাড়ার খাতা" };
+    case "clean": return { to: "/purchases", search: { f: "clean" }, label: "পরিচ্ছন্ন কর্মীর খাতা" };
+    case "sale": return { to: "/collections", label: "কালেকশন" };
+    case "loanIn": case "loanBack": case "loanGive": case "loanRepay": return { to: "/loans", label: "ঋণের খাতা" };
+    case "openingIn": case "openingOut": return { to: "/opening-balances", label: "পূর্বের বকেয়া" };
+    default: return { to: "/cash-book", label: "ক্যাশ বই" };
+  }
+}
