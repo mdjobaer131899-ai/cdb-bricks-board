@@ -34,6 +34,8 @@ function DuesPage() {
   const rTotal = (dues?.receive ?? []).reduce((a, l) => a + l.total, 0);
   const pTotal = (dues?.pay ?? []).reduce((a, l) => a + l.total, 0);
   const net = rTotal - pTotal;
+  // part of what we owe is bricks (advance taken), not cash
+  const brickOwed = (dues?.pay ?? []).filter((l) => l.key === "customer-advance" || l.key === "old-brick-due").reduce((a, l) => a + l.total, 0);
 
   const print = () => printTable({
     title: "পাওনা-দেনা",
@@ -107,6 +109,9 @@ function DuesPage() {
                 <div className="num text-lg font-bold text-red-300">{tk(pTotal)}</div>
               </div>
             </div>
+            {brickOwed > 0.5 && (
+              <div className="num mt-2 text-xs text-stone-300">"আমরা দেব"-র মধ্যে {tk(brickOwed)} টাকা নয়, ইট দিয়ে শোধ হবে (গ্রাহকের অগ্রিম)। টাকায় দেনা {tk(pTotal - brickOwed)}।</div>
+            )}
           </section>
           <Col title="আমরা পাব" lines={dues.receive} total={rTotal} tone="in" />
           <Col title="আমরা দেব" lines={dues.pay} total={pTotal} tone="out" />
