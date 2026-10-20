@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck, Pencil, Plus, Printer, Trash2, Wallet } from "lucide-react";
+import { CalendarCheck, CalendarX, Pencil, Plus, Printer, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,7 +23,8 @@ type Mode = "daily" | "salary";
 const ROLE_LABEL: Record<string, string> = { daily: "ডেলি", mestri: "মেস্তুরি", manager: "ম্যানেজার" };
 const ROLE_SUGGEST = ["ইঞ্জিন মেস্তুরি", "ম্যানেজার", "সহকারী ম্যানেজার", "হিসাবরক্ষক", "ক্যাশিয়ার", "পাহারাদার", "ড্রাইভার", "মেকানিক", "ইলেকট্রিশিয়ান", "বাবুর্চি"];
 
-const dayVal = (a: { present: boolean; is_half_day?: boolean | null }) => (a.is_half_day ? 0.5 : 1);
+/** attendance row → the mark the earnings rule reads (no row = present) */
+const markOf = (a: any) => ({ date: String(a.date), present: a.present !== false, half: !!a.is_half_day });
 
 export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const qc = useQueryClient();
@@ -65,17 +66,18 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       const rows = (attQ.data ?? []).filter((a) => a.worker_id === w.id);
       let days = 0, halves = 0, absent = 0, earned = 0;
       if (mode === "daily") {
-        const worked: Array<{ date: string; value: number }> = [];
-        for (const a of rows) if (a.present) { days += dayVal(a as any); worked.push({ date: a.date, value: dayVal(a as any) }); if ((a as any).is_half_day) halves++; }
+        // present every day from joining (inside the season) unless a row marks absent or half;
         // each day at the wage in force that day (pay_rates history)
-        earned = dailyEarned({ wage: w.daily_wage, days: worked, rates: ratesOf(w.id) });
+        const d = dailyEarned({ wage: w.daily_wage, join: w.join_date, leave: (w as any).leave_date, rates: ratesOf(w.id), marks: rows.map(markOf) });
+        days = d.days; halves = d.halves; absent = d.absent; earned = d.earned;
       } else {
         // salaried: rows are absence entries (full or half day)
-        for (const a of rows) absent += (a as any).is_half_day ? 0.5 : 1;
+        const abs = rows.filter((a: any) => a.present === false || a.is_half_day);
+        for (const a of abs) absent += (a as any).is_half_day ? 0.5 : 1;
         // Season window: later of join/season start → earliest of today/leave date/season end
         const s = salaryEarned({
           monthly: w.monthly_salary, join: w.join_date, leave: (w as any).leave_date, rates: ratesOf(w.id),
-          absences: rows.map((a: any) => ({ date: a.date, half: a.is_half_day })),
+          absences: abs.map((a: any) => ({ date: a.date, half: a.is_half_day })),
         });
         days = s.days;
         earned = s.earned;
@@ -97,12 +99,14 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
     mutationFn: async () => {
       const f = wDlg!;
       if (!f.name.trim()) throw new Error("নাম দিন");
+      if (mode === "daily" && !f.join_date) throw new Error("যোগদানের তারিখ দিন — সেদিন থেকে প্রতিদিন হাজিরা ধরা হবে");
+      if (f.leave_date && f.join_date && f.leave_date < f.join_date) throw new Error("কাজ ছাড়ার তারিখ যোগদানের আগে হতে পারে না");
       const payload: any = {
         name: f.name.trim(), phone: f.phone || null, role: (f.role || "").trim() || (mode === "daily" ? "daily" : "ম্যানেজার"),
         daily_wage: mode === "daily" ? Number(f.wage || 0) : 0,
         monthly_salary: mode === "salary" ? Number(f.wage || 0) : 0,
         join_date: f.join_date || null,
-        leave_date: mode === "salary" ? f.leave_date || null : null,
+        leave_date: f.leave_date || null,
       };
       const wage = Number(f.wage || 0);
       if (!f.id) {
@@ -167,26 +171,45 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // ---- attendance
+  // ---- attendance (daily workers): everyone is present unless unticked.
+  // Only absent and half days are stored; ticking someone back removes the row.
   const [attDate, setAttDate] = useState(today);
   const [attOpen, setAttOpen] = useState(false);
   const [present, setPresent] = useState<Set<string>>(new Set());
   const [half, setHalf] = useState<Set<string>>(new Set());
+  const markOn = (id: string, d: string) => (attQ.data ?? []).find((a: any) => a.worker_id === id && a.date === d);
   const openAtt = (d: string) => {
     setAttDate(d);
-    const day = (attQ.data ?? []).filter((a) => a.date === d && a.present);
-    setPresent(new Set(day.map((a) => a.worker_id)));
-    setHalf(new Set(day.filter((a: any) => a.is_half_day).map((a) => a.worker_id)));
+    const on = activeOn(d);
+    setPresent(new Set(on.filter((w) => markOn(w.id, d)?.present !== false || markOn(w.id, d)?.is_half_day).map((w) => w.id)));
+    setHalf(new Set(on.filter((w) => markOn(w.id, d)?.is_half_day).map((w) => w.id)));
     setAttOpen(true);
+  };
+  /** writes one day's marks for these workers: only absent / half days get a row */
+  const writeDay = async (d: string, list: Array<{ id: string; present: boolean; half: boolean }>) => {
+    const wIds = list.map((x) => x.id);
+    if (!wIds.length) return;
+    const { error: dErr } = await supabase.from("worker_attendance").delete().eq("date", d).in("worker_id", wIds);
+    if (dErr) throw dErr;
+    const rows = list.filter((x) => !x.present || x.half)
+      .map((x) => ({ worker_id: x.id, date: d, present: x.present, is_half_day: x.present && x.half, created_by: me!.user.id }));
+    if (rows.length) {
+      const { error } = await supabase.from("worker_attendance").insert(rows as any);
+      // RLS lets only an admin or the row's writer remove a row; then the old one is still there
+      if (error) throw (error as any).code === "23505" ? new Error("এই দিনের হাজিরা অ্যাডমিন দিয়েছেন — বদলাতে অ্যাডমিনকে বলুন") : error;
+    }
   };
   const saveAtt = useMutation({
     mutationFn: async () => {
-      const { error: dErr } = await supabase.from("worker_attendance").delete().eq("date", attDate).in("worker_id", ids);
-      if (dErr) throw dErr;
-      const rows = ids.map((id) => ({ worker_id: id, date: attDate, present: present.has(id), is_half_day: present.has(id) && half.has(id), created_by: me!.user.id }));
-      if (rows.length) { const { error } = await supabase.from("worker_attendance").insert(rows as any); if (error) throw error; }
+      await writeDay(attDate, activeOn(attDate).map((w) => ({ id: w.id, present: present.has(w.id), half: present.has(w.id) && half.has(w.id) })));
     },
     onSuccess: () => { toast.success("হাজিরা সংরক্ষিত"); setAttOpen(false); invalidate(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  // one tap in the list: today present ↔ absent
+  const toggleToday = useMutation({
+    mutationFn: async (p: { id: string; present: boolean }) => { await writeDay(today, [{ id: p.id, present: p.present, half: false }]); },
+    onSuccess: (_d, p) => { toast.success(p.present ? "আজ উপস্থিত" : "আজ অনুপস্থিত"); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -210,34 +233,34 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const activeOn = (d: string) => (workersQ.data ?? []).filter((w: any) =>
     w.active !== false && (!w.join_date || w.join_date <= d) && (!w.leave_date || w.leave_date >= d));
 
-  // ---- many days at once: everyone selected marked present on days with no attendance yet
+  // ---- many days at once: everyone selected marked absent (kiln closed, rain, leave)
   const [bulk, setBulk] = useState<null | { from: string; to: string; ids: Set<string> }>(null);
   const saveBulk = useMutation({
     mutationFn: async () => {
       const b = bulk!;
       if (!b.from || !b.to) throw new Error("শুরু ও শেষ তারিখ দিন");
       if (b.to < b.from) throw new Error("শেষ তারিখ শুরুর আগে হতে পারে না");
-      const have = new Set((attQ.data ?? []).map((a: any) => `${a.worker_id}|${a.date}`));
+      if (b.ids.size === 0) throw new Error("কাউকে বাছাই করুন");
       const rows: any[] = [];
       for (let t = new Date(`${b.from}T00:00:00Z`); t <= new Date(`${b.to}T00:00:00Z`); t = new Date(t.getTime() + 86400000)) {
         const d = t.toISOString().slice(0, 10);
-        for (const w of activeOn(d)) {
-          if (!b.ids.has(w.id) || have.has(`${w.id}|${d}`)) continue;
-          rows.push({ worker_id: w.id, date: d, present: true, is_half_day: false, created_by: me!.user.id });
-        }
+        for (const w of activeOn(d)) if (b.ids.has(w.id)) rows.push({ worker_id: w.id, date: d, present: false, is_half_day: false, created_by: me!.user.id });
       }
-      if (rows.length === 0) throw new Error("নতুন কোনো দিন নেই — এই দিনগুলোর হাজিরা আগেই দেওয়া আছে");
+      if (rows.length === 0) throw new Error("এই দিনগুলোতে বাছাই করা কেউ কাজে ছিল না");
+      const { error: dErr } = await supabase.from("worker_attendance").delete().in("worker_id", [...b.ids]).gte("date", b.from).lte("date", b.to);
+      if (dErr) throw dErr;
       for (let i = 0; i < rows.length; i += 500) {
         const { error } = await supabase.from("worker_attendance").insert(rows.slice(i, i + 500) as any);
         if (error) throw error;
       }
       return rows.length;
     },
-    onSuccess: (n) => { toast.success(`${bn(n ?? 0)}টি হাজিরা যোগ হয়েছে`); setBulk(null); invalidate(); },
+    onSuccess: (n) => { toast.success(`${bn(n ?? 0)}টি দিন অনুপস্থিত ধরা হয়েছে`); setBulk(null); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const fmtDays = (s: { days: number; halves: number }) => `${bn(s.days)} দিন${s.halves ? ` (${bn(s.halves)}টি হাফ)` : ""}`;
+  const fmtDays = (s: { days: number; halves: number; absent?: number }) =>
+    `${bn(s.days)} দিন${s.halves ? ` (${bn(s.halves)}টি হাফ)` : ""}${s.absent ? ` · অনুপস্থিত ${bn(s.absent)}` : ""}`;
 
   const [detail, setDetail] = useState<any>(null);
   const nameOf = (id: string) => (workersQ.data ?? []).find((w) => w.id === id)?.name ?? "—";
@@ -272,12 +295,12 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold md:text-2xl">{mode === "daily" ? "ডেলি শ্রমিক" : "মেস্তুরি ও ম্যানেজার বেতন"}</h1>
-          <p className="text-sm text-muted-foreground">{mode === "daily" ? "দৈনিক হাজিরা × মজুরি = পাওনা (হাফ দিন = অর্ধেক মজুরি)" : "প্রতিদিন মাসিক বেতন ÷ ৩০ টাকা যোগ হয়; অনুপস্থিত দিনের টাকা বাদ"}</p>
+          <p className="text-sm text-muted-foreground">{mode === "daily" ? "যোগদানের দিন থেকে প্রতিদিন উপস্থিত ধরা হয়; কেউ না এলে সেদিনের টিক তুলে দিন (হাফ দিন = অর্ধেক মজুরি)" : "প্রতিদিন মাসিক বেতন ÷ ৩০ টাকা যোগ হয়; অনুপস্থিত দিনের টাকা বাদ"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={printAll}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button>
           {mode === "daily" && <Button variant="secondary" onClick={() => openAtt(today)}><CalendarCheck className="mr-1 h-4 w-4" /> হাজিরা</Button>}
-          {mode === "daily" && <Button variant="outline" onClick={() => setBulk({ from: "", to: today, ids: new Set(activeOn(today).map((w) => w.id)) })}><CalendarCheck className="mr-1 h-4 w-4" /> অনেক দিনের হাজিরা</Button>}
+          {mode === "daily" && <Button variant="outline" onClick={() => setBulk({ from: today, to: today, ids: new Set(activeOn(today).map((w) => w.id)) })}><CalendarX className="mr-1 h-4 w-4" /> কয়েক দিন বন্ধ</Button>}
           <Button onClick={() => setWDlg({ ...emptyW })}><Plus className="mr-1 h-4 w-4" /> নতুন</Button>
         </div>
       </div>
@@ -293,6 +316,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
         <CardContent className="p-0">
           <Table>
             <TableHeader><TableRow>
+              {mode === "daily" && <TableHead className="w-12 text-center">আজ</TableHead>}
               <TableHead>নাম</TableHead>
               <TableHead className="text-right">{mode === "daily" ? "হাজিরা" : "মাসিক"}</TableHead>
               <TableHead className="text-right">পাওনা</TableHead>
@@ -301,14 +325,25 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
               <TableHead></TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {(workersQ.data ?? []).length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">কেউ যোগ করা হয়নি</TableCell></TableRow>}
+              {(workersQ.data ?? []).length === 0 && <TableRow><TableCell colSpan={mode === "daily" ? 7 : 6} className="py-8 text-center text-muted-foreground">কেউ যোগ করা হয়নি</TableCell></TableRow>}
               {(workersQ.data ?? []).map((w) => {
                 const s = stats.get(w.id) ?? { days: 0, halves: 0, absent: 0, earned: 0, paid: 0, due: 0 };
+                const onToday = activeOn(today).some((x) => x.id === w.id);
+                const mk = markOn(w.id, today);
+                const inToday = onToday && (mk?.present !== false || !!mk?.is_half_day);
                 return (
                   <TableRow key={w.id}>
+                    {mode === "daily" && (
+                      <TableCell className="text-center">
+                        {onToday ? (
+                          <Checkbox aria-label={`${w.name} আজ উপস্থিত`} className="h-6 w-6" checked={inToday} disabled={toggleToday.isPending}
+                            onCheckedChange={(c) => toggleToday.mutate({ id: w.id, present: !!c })} />
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <button className="font-medium text-primary hover:underline" onClick={() => setDetail(w)}>{w.name}</button>
-                      <div className="text-xs text-muted-foreground">{ROLE_LABEL[w.role] ?? w.role} • {mode === "daily" ? `দৈনিক ৳ ${bn(wageOf(w))}` : `মাসিক ৳ ${bn(wageOf(w))}`}</div>
+                      <div className="text-xs text-muted-foreground">{ROLE_LABEL[w.role] ?? w.role} • {mode === "daily" ? `দৈনিক ৳ ${bn(wageOf(w))}` : `মাসিক ৳ ${bn(wageOf(w))}`}{(w as any).leave_date ? ` • কাজ ছেড়েছে ${bnDate((w as any).leave_date)}` : ""}{mode === "daily" && !w.join_date ? " • যোগদানের তারিখ নেই" : ""}</div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{mode === "daily" ? fmtDays(s) : <>{bn(s.days)} দিন{s.absent > 0 && <div className="text-xs text-destructive">অনুপস্থিত {bn(s.absent)} দিন</div>}</>}</TableCell>
                     <TableCell className="text-right tabular-nums">৳ {bn(s.earned)}</TableCell>
@@ -392,13 +427,13 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                 </div>
               </div>
             )}
-            {mode === "salary" && (
-              <div className="space-y-1">
-                <Label>কাজ ছাড়ার তারিখ (থাকলে)</Label>
-                <Input type="date" value={wDlg.leave_date} onChange={(e) => setWDlg({ ...wDlg, leave_date: e.target.value })} />
-                <p className="text-xs text-muted-foreground">বেতন জমবে মৌসুম শুরু বা যোগদান (যেটা পরে) থেকে আজ বা কাজ ছাড়ার দিন পর্যন্ত। আগের মৌসুমের বাকি "পূর্বের বকেয়া ও জের" পাতায় রাখুন।</p>
-              </div>
-            )}
+            <div className="space-y-1">
+              <Label>কাজ ছাড়ার তারিখ (থাকলে)</Label>
+              <Input type="date" value={wDlg.leave_date} onChange={(e) => setWDlg({ ...wDlg, leave_date: e.target.value })} />
+              <p className="text-xs text-muted-foreground">{mode === "daily"
+                ? "যোগদান (বা মৌসুম শুরু) থেকে প্রতিদিন মজুরি যোগ হয়। কেউ কাজ ছেড়ে দিলে এই তারিখ দিন, নইলে তার হাজিরা চলতেই থাকবে।"
+                : "বেতন জমবে মৌসুম শুরু বা যোগদান (যেটা পরে) থেকে আজ বা কাজ ছাড়ার দিন পর্যন্ত। আগের মৌসুমের বাকি \"পূর্বের বকেয়া ও জের\" পাতায় রাখুন।"}</p>
+            </div>
           </div>}
           <DialogFooter><Button onClick={() => saveW.mutate()} disabled={saveW.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
@@ -420,29 +455,31 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
         </DialogContent>
       </Dialog>
 
-      {/* attendance dialog */}
+      {/* attendance dialog: everyone ticked unless marked absent that day */}
       <Dialog open={attOpen} onOpenChange={setAttOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>দৈনিক হাজিরা</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>তারিখ</Label><Input type="date" value={attDate} onChange={(e) => openAtt(e.target.value)} /></div>
+            <div><Label>তারিখ</Label><Input type="date" value={attDate} max={today} onChange={(e) => e.target.value && openAtt(e.target.value)} /></div>
+            <p className="rounded-lg bg-muted px-3 py-2 text-sm">সবাই উপস্থিত ধরা আছে। যে আসেনি, তার টিক তুলে দিন।</p>
             <div className="grid grid-cols-2 gap-2">
               <Button type="button" variant="outline" className="h-10" onClick={() => { setPresent(new Set(activeOn(attDate).map((w) => w.id))); setHalf(new Set()); }}>সবাই উপস্থিত</Button>
               <Button type="button" variant="outline" className="h-10" onClick={() => { setPresent(new Set()); setHalf(new Set()); }}>সবাই অনুপস্থিত</Button>
             </div>
             <div className="max-h-72 space-y-2 overflow-y-auto">
-              {(workersQ.data ?? []).map((w) => (
-                <label key={w.id} className="flex items-center gap-3 rounded-lg border p-2">
-                  <Checkbox checked={present.has(w.id)} onCheckedChange={(c) => { const n = new Set(present); c ? n.add(w.id) : n.delete(w.id); setPresent(n); }} />
-                  <span className="flex-1">{w.name}</span>
+              {activeOn(attDate).length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">এই দিনে কেউ কাজে ছিল না</p>}
+              {activeOn(attDate).map((w) => (
+                <label key={w.id} className={`flex items-center gap-3 rounded-lg border p-2 ${present.has(w.id) ? "" : "border-destructive/40 bg-destructive/5"}`}>
+                  <Checkbox className="h-6 w-6" checked={present.has(w.id)} onCheckedChange={(c) => { const n = new Set(present); c ? n.add(w.id) : n.delete(w.id); setPresent(n); }} />
+                  <span className="flex-1">{w.name}{!present.has(w.id) && <span className="ml-1 text-xs text-destructive">অনুপস্থিত</span>}</span>
                   <span onClick={(e) => e.preventDefault()} className="flex items-center gap-1 text-xs">
-                    <Checkbox checked={half.has(w.id)} onCheckedChange={(c) => { const n = new Set(half); c ? n.add(w.id) : n.delete(w.id); setHalf(n); if (c) setPresent(new Set(present).add(w.id)); }} /> হাফ
+                    <Checkbox checked={present.has(w.id) && half.has(w.id)} onCheckedChange={(c) => { const n = new Set(half); c ? n.add(w.id) : n.delete(w.id); setHalf(n); if (c) setPresent(new Set(present).add(w.id)); }} /> হাফ
                   </span>
-                  <span className="text-xs text-muted-foreground">৳ {bn(present.has(w.id) && half.has(w.id) ? wageOf(w, attDate) / 2 : wageOf(w, attDate))}</span>
+                  <span className="w-14 text-right text-xs text-muted-foreground">৳ {bn(!present.has(w.id) ? 0 : half.has(w.id) ? wageOf(w, attDate) / 2 : wageOf(w, attDate))}</span>
                 </label>
               ))}
             </div>
-            <p className="text-sm">উপস্থিত {bn(present.size)} জন{half.size ? ` (হাফ ${bn([...half].filter((id) => present.has(id)).length)})` : ""} • আজকের মজুরি ৳ {bn((workersQ.data ?? []).filter((w) => present.has(w.id)).reduce((a, w) => a + wageOf(w, attDate) * (half.has(w.id) ? 0.5 : 1), 0))}</p>
+            <p className="text-sm">উপস্থিত {bn(activeOn(attDate).filter((w) => present.has(w.id)).length)} জন{[...half].filter((id) => present.has(id)).length ? ` (হাফ ${bn([...half].filter((id) => present.has(id)).length)})` : ""} • এই দিনের মজুরি ৳ {bn(activeOn(attDate).filter((w) => present.has(w.id)).reduce((a, w) => a + wageOf(w, attDate) * (half.has(w.id) ? 0.5 : 1), 0))}</p>
           </div>
           <DialogFooter><Button onClick={() => saveAtt.mutate()} disabled={saveAtt.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
@@ -454,7 +491,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
           <DialogHeader><DialogTitle>{detail?.name} — বিস্তারিত</DialogTitle></DialogHeader>
           {detail && (() => {
             const s = stats.get(detail.id)!;
-            const att = (attQ.data ?? []).filter((a) => a.worker_id === detail.id && a.present).sort((a, b) => b.date.localeCompare(a.date));
+            const marks = (attQ.data ?? []).filter((a: any) => a.worker_id === detail.id && (a.present === false || a.is_half_day)).sort((a, b) => b.date.localeCompare(a.date));
             const pays = (payQ.data ?? []).filter((p) => p.worker_id === detail.id);
             return (
               <div className="space-y-3 text-sm">
@@ -463,9 +500,16 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
                   <div className="rounded-lg border p-2"><div className="text-xs text-muted-foreground">পরিশোধ</div>৳ {bn(s.paid)}</div>
                   <div className="rounded-lg border p-2"><div className="text-xs text-muted-foreground">বাকি</div><b>৳ {bn(s.due)}</b></div>
                 </div>
-                {mode === "daily" && <div><b>উপস্থিতি:</b> {att.length ? att.map((a: any) => bnDate(a.date) + (a.is_half_day ? " (হাফ)" : "")).join(", ") : "—"}</div>}
+                {mode === "daily" && <div>
+                  <div><b>হাজিরা:</b> {fmtDays(s)}{detail.join_date ? ` — ${bnDate(detail.join_date)} থেকে প্রতিদিন উপস্থিত ধরা` : ""}</div>
+                  <div className="mt-1"><b>অনুপস্থিত / হাফ দিন:</b> {marks.length === 0 ? "নেই" : <ul className="mt-1 space-y-1">{marks.map((a: any) => (
+                    <li key={a.id} className="flex items-center justify-between rounded border px-2 py-1">
+                      <span>{bnDate(a.date)} — {a.is_half_day ? "হাফ দিন" : "আসেনি"}</span>
+                      <Button size="sm" variant="ghost" aria-label="মুছুন (উপস্থিত ধরা হবে)" onClick={() => confirm("এই দিন উপস্থিত ধরবেন?") && delAbs.mutate(a.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                    </li>))}</ul>}</div>
+                </div>}
                 {mode === "salary" && (() => {
-                  const abs = (attQ.data ?? []).filter((a) => a.worker_id === detail.id && !a.present || (a.worker_id === detail.id && (a as any).is_half_day)).sort((a, b) => b.date.localeCompare(a.date));
+                  const abs = marks;
                   return <div><b>অনুপস্থিতি / ছুটি:</b> {abs.length === 0 ? "—" : <ul className="mt-1 space-y-1">{abs.map((a: any) => (
                     <li key={a.id} className="flex items-center justify-between rounded border px-2 py-1">
                       <span>{bnDate(a.date)} — {a.is_half_day ? "হাফ দিন" : "পুরো দিন"} {a.note ? `(${a.note})` : ""}</span>
@@ -494,12 +538,12 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
           <DialogFooter><Button onClick={() => saveAbs.mutate()} disabled={saveAbs.isPending}>সংরক্ষণ</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* many days attendance */}
+      {/* many days absent (kiln closed, rain, leave) */}
       <Dialog open={!!bulk} onOpenChange={(o) => !o && setBulk(null)}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>অনেক দিনের হাজিরা একসাথে</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>কয়েক দিন অনুপস্থিত / ভাটা বন্ধ</DialogTitle></DialogHeader>
           {bulk && <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">বাছাই করা সবাইকে এই দিনগুলোতে উপস্থিত ধরা হবে। যেদিনের হাজিরা আগেই দেওয়া আছে, সেদিন বদলাবে না। কেউ কোনোদিন না এলে পরে সেই দিনের হাজিরা খুলে ঠিক করুন।</p>
+            <p className="text-sm text-muted-foreground">বাছাই করা সবাইকে এই দিনগুলোতে অনুপস্থিত ধরা হবে, ওই দিনগুলোর মজুরি যোগ হবে না। ভুল হলে নাম খুলে দিনটা মুছে দিন।</p>
             <div className="grid grid-cols-2 gap-2">
               <div><Label>শুরু</Label><Input type="date" value={bulk.from} onChange={(e) => setBulk({ ...bulk, from: e.target.value })} /></div>
               <div><Label>শেষ</Label><Input type="date" value={bulk.to} onChange={(e) => setBulk({ ...bulk, to: e.target.value })} /></div>
@@ -514,7 +558,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
               ))}
             </div>
           </div>}
-          <DialogFooter><Button onClick={() => saveBulk.mutate()} disabled={saveBulk.isPending}>সংরক্ষণ</Button></DialogFooter>
+          <DialogFooter><Button onClick={() => saveBulk.mutate()} disabled={saveBulk.isPending}>অনুপস্থিত ধরুন</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

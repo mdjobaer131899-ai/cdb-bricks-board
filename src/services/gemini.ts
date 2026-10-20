@@ -409,9 +409,12 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     const rates = (payRates as Row[]).filter((r) => r.worker_id === w.id) as any[];
     const isDaily = w.role === "daily";
     // same rules as the daily-worker and salary pages (salary-accrual.ts)
+    // daily workers are present every day unless a row marks absent / half day
     const earned = isDaily
-      ? dailyEarned({ wage: w.daily_wage, rates, days: mine.filter((a) => a.present).map((a) => ({ date: String(a.date), value: a.is_half_day ? 0.5 : 1 })) })
-      : salaryEarned({ monthly: w.monthly_salary, join: w.join_date, leave: w.leave_date, rates, absences: mine.map((a) => ({ date: String(a.date), half: a.is_half_day })) }).earned;
+      ? dailyEarned({ wage: w.daily_wage, join: w.join_date, leave: w.leave_date, rates, marks: mine.map((a) => ({ date: String(a.date), present: a.present !== false, half: a.is_half_day === true })) }).earned
+      : salaryEarned({ monthly: w.monthly_salary, join: w.join_date, leave: w.leave_date, rates, absences: mine.filter((a) => a.present === false || a.is_half_day === true).map((a) => ({ date: String(a.date), half: a.is_half_day })) }).earned;
+    // today: a daily worker on the payroll is present unless marked otherwise
+    const workingToday = (!w.join_date || String(w.join_date) <= today) && (!w.leave_date || String(w.leave_date) >= today) && w.active !== false;
     const paidSeason = workerPay.filter((p) => p.worker_id === w.id).reduce((a, p) => a + num(p.amount), 0);
     return {
       id: w.id,
@@ -422,7 +425,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
       active: w.active !== false,
       dailyWage: num(w.daily_wage),
       monthlySalary: num(w.monthly_salary),
-      presentToday: att ? att.present === true : null,
+      presentToday: att ? att.present !== false || att.is_half_day === true : isDaily && workingToday ? true : null,
       halfDayToday: att ? att.is_half_day === true : false,
       paidSeason,
       earned,

@@ -16,7 +16,7 @@ import { fetchAllRows } from "@/lib/fetch-all";
 import { bn, todayBD } from "@/lib/format";
 import { createExpense } from "@/lib/expenses.functions";
 import { createSardarPayment } from "@/lib/sardars.functions";
-import { salaryEarned, sardarEarned } from "@/lib/salary-accrual";
+import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
 import { ASSET_PREFIX } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import {
@@ -396,12 +396,25 @@ export function ExpenseEntryDialog({
       return { earned, paid, due: earned - paid };
     },
   });
+  // daily worker / staff: earned this season (same rule as their pages) − paid this season
   const workerPaidQ = useQuery({
     queryKey: ["expense-form-worker-paid", f.personId],
     enabled: open && (head === "daily" || head === "staff") && !!f.personId,
     queryFn: async () => {
-      const rows = await fetchAllRows<{ amount: number }>(() => sdb.from("worker_payments").select("id, amount").eq("worker_id", f.personId).order("id"));
-      return rows.reduce((a, r) => a + Number(r.amount || 0), 0);
+      const [w, pays, att, rates] = await Promise.all([
+        supabase.from("workers").select("id, role, daily_wage, monthly_salary, join_date, leave_date").eq("id", f.personId).maybeSingle(),
+        fetchAllRows<{ amount: number }>(() => sdb.from("worker_payments").select("id, amount").eq("worker_id", f.personId).order("id")),
+        fetchAllRows<{ date: string; present: boolean; is_half_day: boolean }>(() => sdb.from("worker_attendance").select("id, date, present, is_half_day").eq("worker_id", f.personId).order("id")),
+        (supabase as any).from("pay_rates").select("worker_id, amount, effective_from").eq("worker_id", f.personId),
+      ]);
+      const paid = pays.reduce((a, r) => a + Number(r.amount || 0), 0);
+      const wr: any = w.data;
+      if (!wr) return { paid, due: null as number | null };
+      const r = (rates?.data ?? []) as any[];
+      const earned = wr.role === "daily"
+        ? dailyEarned({ wage: wr.daily_wage, join: wr.join_date, leave: wr.leave_date, rates: r, marks: att.map((a) => ({ date: a.date, present: a.present !== false, half: !!a.is_half_day })) }).earned
+        : salaryEarned({ monthly: wr.monthly_salary, join: wr.join_date, leave: wr.leave_date, rates: r, absences: att.filter((a) => a.present === false || a.is_half_day).map((a) => ({ date: a.date, half: a.is_half_day })) }).earned;
+      return { paid, due: earned - paid };
     },
   });
 
@@ -496,6 +509,7 @@ export function ExpenseEntryDialog({
     edit ? null
     : head === "sardar" ? (f.personId ? sardarBalQ.data?.due ?? null : null)
     : head === "ownerSalary" ? (f.personId ? ownerQ.data?.salaryDue ?? null : null)
+    : head === "daily" || head === "staff" ? (f.personId ? workerPaidQ.data?.due ?? null : null)
     : head === "openingOut" ? (opening ? opening.remaining : null)
     : head === "loanRepay" ? (loan ? loan.remaining : null)
     : isSupplierHead && partyIds.length ? party?.due ?? null
@@ -796,7 +810,7 @@ export function ExpenseEntryDialog({
                   </button>
                 )}
                 {(head === "daily" || head === "staff") && f.personId && workerPaidQ.data !== undefined && (
-                  <p className="num text-xs text-muted-foreground">এই মৌসুমে আগে দেওয়া হয়েছে {tk(workerPaidQ.data)}</p>
+                  <p className="num text-xs text-muted-foreground">এই মৌসুমে আগে দেওয়া হয়েছে {tk(workerPaidQ.data.paid)}</p>
                 )}
               </Section>
             )}

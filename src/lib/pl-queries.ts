@@ -1,7 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
-import { sdb } from "@/lib/season-db";
+import { getSeasonRange, sdb } from "@/lib/season-db";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { RAW_TYPES, expenseHead, moneyHead, type MoneyGroup, type MoneyKey } from "@/lib/money-heads";
+import { SARDAR_EARNING_TYPES, dailyDays, salaryDays, type AccrualRange, type PayRate } from "@/lib/salary-accrual";
+import { bn } from "@/lib/format";
 
 export { fetchAllRows };
 
@@ -15,7 +17,11 @@ export { fetchAllRows };
  *
  * Every cost is a line tagged with its head from money-heads.ts, so the page groups
  * them the same way as the cash book and the forms, and a head opens its own lines.
- * Labour (sardar / worker / salary) is still counted by payments made.
+ * Labour is counted by work done, not by money handed over (salary-accrual.ts, the
+ * same rules as the sardar, staff and owner pages): a sardar's kacha / load / unload
+ * entries on their dates (burn sardars by monthly salary), daily workers for every
+ * day present, staff and owner salary day by day. Payments to them (and dadan) are
+ * cash only; what is still owed or paid ahead shows on /dues.
  */
 
 type DateFilter = { from?: string; to?: string };
@@ -58,23 +64,27 @@ const CONTRACT_ITEM_HEAD: Record<string, MoneyKey> = { "জমি ভাড়�
  */
 export async function fetchProfitLoss(filter: DateFilter = {}, opts: { allSeasons?: boolean } = {}): Promise<ProfitLoss> {
   const db: any = opts.allSeasons ? supabase : sdb;
-  const [sales, exp, pur, sar, wrk, veh, own, items] = await Promise.all([
+  const [sales, exp, pur, kacha, work, veh, items, sardars, workers, att, rates, owners] = await Promise.all([
     fetchAllRows<{ total_amount: number; sale_date: string; opening_balance_id: string | null }>(() =>
       ranged(db.from("sales_entries").select("id, total_amount, sale_date, opening_balance_id").eq("status", "approved").order("id"), "sale_date", filter)),
     fetchAllRows<{ amount: number; category: string; expense_date: string; note: string | null }>(() =>
       ranged(db.from("expenses").select("id, amount, category, expense_date, note").order("id"), "expense_date", filter)),
     fetchAllRows<{ total_amount: number; item_name: string; purchase_date: string; material_id: string | null; quantity: number; unit: string | null; supplier: { name: string } | null }>(() =>
       ranged(db.from("purchases").select("id, total_amount, item_name, purchase_date, material_id, quantity, unit, supplier:suppliers(name)").order("id"), "purchase_date", filter)),
-    fetchAllRows<{ amount: number; payment_date: string; sardar: { name: string } | null }>(() =>
-      ranged(db.from("sardar_payments").select("id, amount, payment_date, sardar:sardars(name)").order("id"), "payment_date", filter)),
-    fetchAllRows<{ amount: number; payment_date: string; worker: { name: string; role: string } | null }>(() =>
-      ranged(db.from("worker_payments").select("id, amount, payment_date, worker:workers(name, role)").order("id"), "payment_date", filter)),
+    // sardar work: kacha / load / unload wage lines and old per-category work entries
+    fetchAllRows<{ entry_date: string; entry_type: string; sardar_id: string | null; quantity: number; amount: number }>(() =>
+      ranged(db.from("kacha_brick_entries").select("id, entry_date, entry_type, sardar_id, quantity, amount").order("id"), "entry_date", filter)),
+    fetchAllRows<{ entry_date: string; sardar_id: string | null; quantity: number; amount: number }>(() =>
+      ranged(db.from("sardar_work_entries").select("id, entry_date, sardar_id, quantity, amount").order("id"), "entry_date", filter)),
     fetchAllRows<{ amount: number; expense_date: string; category: string | null }>(() =>
       ranged(db.from("vehicle_expenses").select("id, amount, expense_date, category").order("id"), "expense_date", filter)),
-    // owner salary taken (counted when paid, like staff salaries)
-    fetchAllRows<{ amount: number; txn_date: string; owner: { name: string } | null }>(() =>
-      ranged(db.from("owner_transactions").select("id, amount, txn_date, owner:owners(name)").eq("txn_type", "salary").order("id"), "txn_date", filter)),
     supabase.from("raw_materials").select("id, name, item_group"),
+    fetchAllRows<any>(() => supabase.from("sardars").select("id, name, kind, monthly_salary, join_date, leave_date").order("id")),
+    fetchAllRows<any>(() => supabase.from("workers").select("id, name, role, daily_wage, monthly_salary, join_date, leave_date").order("id")),
+    fetchAllRows<{ worker_id: string; date: string; present: boolean; is_half_day: boolean }>(() =>
+      ranged(db.from("worker_attendance").select("id, worker_id, date, present, is_half_day").order("id"), "date", filter)),
+    fetchAllRows<PayRate & { owner_id?: string | null }>(() => (supabase as any).from("pay_rates").select("id, worker_id, sardar_id, owner_id, amount, effective_from").order("id")),
+    fetchAllRows<{ id: string; name: string }>(() => supabase.from("owners").select("id, name").order("id")),
   ]);
 
   // which purchases are raw material: catalog group, else the known raw names
@@ -94,9 +104,7 @@ export async function fetchProfitLoss(filter: DateFilter = {}, opts: { allSeason
     const line = { key: h.key, date: e.expense_date, name: h.item || e.note || moneyHead(h.key).label, detail: h.item ? e.note ?? "" : "", amount: Number(e.amount || 0) };
     (h.key === "asset" ? assetLines : lines).push(line);
   }
-  for (const r of sar) lines.push({ key: "sardar", date: r.payment_date, name: r.sardar?.name ?? "—", detail: "দেওয়া টাকা", amount: Number(r.amount || 0) });
-  for (const r of wrk) lines.push({ key: r.worker?.role === "daily" ? "daily" : "staff", date: r.payment_date, name: r.worker?.name ?? "—", detail: "দেওয়া টাকা", amount: Number(r.amount || 0) });
-  for (const r of own) lines.push({ key: "ownerSalary", date: r.txn_date, name: r.owner?.name ?? "—", detail: "বেতন", amount: Number(r.amount || 0) });
+  lines.push(...labourLines({ filter, allSeasons: !!opts.allSeasons, kacha, work, sardars, workers, att, rates, owners }));
   for (const r of veh) lines.push({ key: "misc", date: r.expense_date, name: "গাড়ি খরচ", detail: r.category ?? "", amount: Number(r.amount || 0) });
 
   const byHead: Partial<Record<MoneyKey, number>> = {};
@@ -123,6 +131,115 @@ export async function fetchProfitLoss(filter: DateFilter = {}, opts: { allSeason
     assets: assetLines.reduce((a, l) => a + l.amount, 0),
     assetLines,
   };
+}
+
+const BN_MONTH = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+const monthName = (d: string) => BN_MONTH[Number(d.slice(5, 7)) - 1] ?? d.slice(0, 7);
+const KACHA_LABEL: Record<string, string> = { production: "কাঁচা ইট", load: "লোড", unload: "আনলোড" };
+
+/** one line per person per calendar month, dated on the last day counted that month */
+function byMonth(key: MoneyKey, name: string, days: Array<{ date: string; amount: number; value?: number }>, detail: (m: { days: number; count: number }) => string): PLLine[] {
+  const m = new Map<string, { date: string; amount: number; days: number; count: number }>();
+  for (const d of days) {
+    const k = d.date.slice(0, 7);
+    const cur = m.get(k) ?? { date: d.date, amount: 0, days: 0, count: 0 };
+    cur.amount += d.amount;
+    cur.days += d.value ?? 1;
+    cur.count += 1;
+    if (d.date > cur.date) cur.date = d.date;
+    m.set(k, cur);
+  }
+  return [...m.values()]
+    .filter((x) => Math.abs(x.amount) >= 0.5)
+    .map((x) => ({ key, date: x.date, name, detail: `${monthName(x.date)} · ${detail(x)}`, amount: Math.round(x.amount) }));
+}
+
+/** labour cost by work done in the range (see fetchProfitLoss) */
+function labourLines(p: {
+  filter: DateFilter; allSeasons: boolean;
+  kacha: Array<{ entry_date: string; entry_type: string; sardar_id: string | null; quantity: number; amount: number }>;
+  work: Array<{ entry_date: string; sardar_id: string | null; quantity: number; amount: number }>;
+  sardars: any[]; workers: any[];
+  att: Array<{ worker_id: string; date: string; present: boolean; is_half_day: boolean }>;
+  rates: Array<PayRate & { owner_id?: string | null }>;
+  owners: Array<{ id: string; name: string }>;
+}): PLLine[] {
+  const out: PLLine[] = [];
+  const { filter } = p;
+  const inFilter = (d: string) => (!filter.from || d >= filter.from) && (!filter.to || d <= filter.to);
+  // salaries accrue inside the selected season (as on the staff pages); another range
+  // (season and yearly reports) is read as given
+  const range: AccrualRange = p.allSeasons ? { from: filter.from ?? null, to: filter.to ?? null } : getSeasonRange();
+  const sardarName = new Map(p.sardars.map((s) => [s.id as string, String(s.name ?? "—")]));
+  const burn = new Set(p.sardars.filter((s) => s.kind === "burn").map((s) => s.id as string));
+
+  // sardars: their kacha / load / unload wage lines and work entries, by month
+  const sm = new Map<string, Array<{ date: string; amount: number; what: string; qty: number }>>();
+  const push = (id: string | null, x: { date: string; amount: number; what: string; qty: number }) => {
+    const k = id ?? "";
+    if (!sm.has(k)) sm.set(k, []);
+    sm.get(k)!.push(x);
+  };
+  for (const k of p.kacha) {
+    if (!SARDAR_EARNING_TYPES.has(k.entry_type) || (k.sardar_id && burn.has(k.sardar_id))) continue;
+    push(k.sardar_id, { date: k.entry_date, amount: Number(k.amount || 0), what: KACHA_LABEL[k.entry_type] ?? k.entry_type, qty: Number(k.quantity || 0) });
+  }
+  for (const w of p.work) {
+    if (w.sardar_id && burn.has(w.sardar_id)) continue;
+    push(w.sardar_id, { date: w.entry_date, amount: Number(w.amount || 0), what: "কাজ", qty: Number(w.quantity || 0) });
+  }
+  for (const [id, rows] of sm) {
+    const months = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const k = r.date.slice(0, 7);
+      if (!months.has(k)) months.set(k, []);
+      months.get(k)!.push(r);
+    }
+    for (const list of months.values()) {
+      const amount = list.reduce((a, r) => a + r.amount, 0);
+      if (Math.abs(amount) < 0.5) continue;
+      const qty = new Map<string, number>();
+      for (const r of list) qty.set(r.what, (qty.get(r.what) ?? 0) + r.qty);
+      const date = list.reduce((a, r) => (r.date > a ? r.date : a), list[0].date);
+      out.push({
+        key: "sardar", date, name: id ? sardarName.get(id) ?? "—" : "সরদার দেওয়া নেই",
+        detail: `${monthName(date)} · ${[...qty].map(([w, q]) => `${w} ${bn(q)}`).join(" · ")}`, amount: Math.round(amount),
+      });
+    }
+  }
+  // burn sardars (পুড়াই মেস্তুরি): monthly salary
+  for (const s of p.sardars.filter((x) => burn.has(x.id))) {
+    const days = salaryDays({ monthly: s.monthly_salary, join: s.join_date, leave: s.leave_date, rates: p.rates.filter((r) => r.sardar_id === s.id), range }).filter((d) => inFilter(d.date));
+    out.push(...byMonth("sardar", String(s.name ?? "—"), days, (m) => `বেতন ${bn(m.count)} দিন`));
+  }
+
+  // daily workers: every day present unless marked; staff: salary day by day less absences
+  for (const w of p.workers) {
+    const mine = p.att.filter((a) => a.worker_id === w.id);
+    const rates = p.rates.filter((r) => r.worker_id === w.id);
+    if (w.role === "daily") {
+      const days = dailyDays({
+        wage: w.daily_wage, join: w.join_date, leave: w.leave_date, rates, range,
+        marks: mine.map((a) => ({ date: a.date, present: a.present !== false, half: !!a.is_half_day })),
+      }).filter((d) => inFilter(d.date));
+      out.push(...byMonth("daily", String(w.name ?? "—"), days, (m) => `${bn(m.days)} দিন হাজিরা`));
+    } else {
+      const days = salaryDays({
+        monthly: w.monthly_salary, join: w.join_date, leave: w.leave_date, rates, range,
+        absences: mine.filter((a) => a.present === false || a.is_half_day).map((a) => ({ date: a.date, half: a.is_half_day })),
+      }).filter((d) => inFilter(d.date));
+      out.push(...byMonth("staff", String(w.name ?? "—"), days, (m) => `বেতন ${bn(m.count)} দিন`));
+    }
+  }
+
+  // owners' salary: from their first salary rate, like the owners page
+  for (const o of p.owners) {
+    const rates = p.rates.filter((r) => r.owner_id === o.id).sort((a, b) => (a.effective_from < b.effective_from ? -1 : 1));
+    if (!rates.length) continue;
+    const days = salaryDays({ monthly: 0, join: rates[0].effective_from, rates, range }).filter((d) => inFilter(d.date));
+    out.push(...byMonth("ownerSalary", o.name, days, (m) => `বেতন ${bn(m.count)} দিন`));
+  }
+  return out;
 }
 
 /** type: suppliers.material_type, e.g. "গাড়ি ভাড়া" for a vehicle owner */
