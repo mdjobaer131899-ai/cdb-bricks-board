@@ -500,7 +500,7 @@ function CashBookPage() {
                             <span>{displayHead}</span>
                             {booked && (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-success/15 px-1.5 font-semibold text-success">
-                                <Check className="h-3 w-3" />পৃ. {bn(mk?.page ?? 0)}
+                                <Check className="h-3 w-3" />{mk?.page ? `পৃ. ${bn(mk.page)}` : "খাতায়"}
                               </span>
                             )}
                           </span>
