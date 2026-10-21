@@ -20,6 +20,7 @@ import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { toast } from "sonner";
+import { ExpenseEntryDialog } from "@/components/expense-entry";
 
 export const Route = createFileRoute("/_authenticated/sardars")({
   head: () => ({
@@ -46,6 +47,8 @@ function SardarsPage() {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
+  // a payment or dadan goes through the one expense form (sardar head)
+  const [payFor, setPayFor] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [dlg, setDlg] = useState<{ open: boolean; mode: "new" | "edit"; form: SardarForm }>({ open: false, mode: "new", form: emptySardar });
   const [gDlg, setGDlg] = useState<{ open: boolean; mode: "new" | "edit"; form: GroupForm }>({ open: false, mode: "new", form: emptyGroup });
@@ -315,8 +318,12 @@ function SardarsPage() {
                           <TableCell className="text-right tabular-nums">{s.kind === "burn" ? `মাসিক ৳ ${bn(rateAt(sardarRates(s.id), s.monthly_salary, todayBD()))}` : bn(t.qty)}</TableCell>
                           <TableCell className="text-right tabular-nums">৳ {bn(t.earned)}</TableCell>
                           <TableCell className="text-right tabular-nums text-destructive">৳ {bn(t.paid)}</TableCell>
-                          <TableCell className={`text-right font-semibold tabular-nums ${t.due > 0 ? "text-warning" : "text-success"}`}>৳ {bn(t.due)}</TableCell>
+                          <TableCell className={`text-right font-semibold tabular-nums ${t.due > 0.5 ? "text-warning" : t.due < -0.5 ? "text-info" : "text-success"}`}>
+                            {t.due < -0.5 ? <><span className="block text-[11px] font-normal">দাদন</span>৳ {bn(-t.due)}</> : <>৳ {bn(t.due)}</>}
+                          </TableCell>
                           <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button size="sm" variant="outline" onClick={() => setPayFor(s.id)}>টাকা দিন</Button>
                             {isAdmin && (
                               <div className="flex justify-end gap-1">
                                 <Button size="sm" variant="ghost" onClick={() => setDlg({
@@ -328,6 +335,7 @@ function SardarsPage() {
                                 </Button>
                               </div>
                             )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -380,6 +388,10 @@ function SardarsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ExpenseEntryDialog open={!!payFor} onOpenChange={(o) => { if (!o) setPayFor(null); }}
+        head="sardar" lockHead partyId={payFor}
+        onDone={() => qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("sardar") || q.queryKey[0] === "cash" || q.queryKey[0] === "ledger" })} />
 
       <Dialog open={dlg.open} onOpenChange={(o) => setDlg((s) => ({ ...s, open: o }))}>
         <DialogContent className="max-w-md">

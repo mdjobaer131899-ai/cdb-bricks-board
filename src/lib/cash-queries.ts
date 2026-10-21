@@ -1,11 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { ASSET_PREFIX, expenseHead, moneyHead, supplierHead, type MoneyKey } from "@/lib/money-heads";
 
 /**
  * মূল ক্যাশের একটিই হিসাব।
  *
- * নগদ আসে: চুক্তি বহির্ভূত কালেকশন (নগদ আয়)।
+ * নগদ আসে: সব কালেকশন (চুক্তির অগ্রিমও, কারণ টাকাটা হাতে আসে)।
  * নগদ যায়: সাধারণ ব্যয় + সরদার পেমেন্ট + শ্রমিক পেমেন্ট + সরবরাহকারী পেমেন্ট
  *          + গাড়ি খরচ।
  *
@@ -36,19 +37,37 @@ function applyRange<T>(q: T, column: string, f: DateFilter): T {
   return out as T;
 }
 
+/**
+ * Every row of a season-scoped table in the range, page by page, so a total is never cut
+ * at the 1000-row API limit. Returns { data, error } like a single query did.
+ */
+async function rowsOf(table: string, select: string, column: string, f: DateFilter, extra?: (q: any) => any) {
+  try {
+    const data = await fetchAllRows<any>(() => {
+      let q: any = applyRange((sdb as any).from(table).select(select.includes("id") ? select : `id, ${select}`), column, f);
+      if (extra) q = extra(q);
+      return q.order("id");
+    });
+    return { data, error: null as any };
+  } catch (error) {
+    return { data: [] as any[], error };
+  }
+}
+
 /** নির্দিষ্ট পরিসরের (বা সব সময়ের) মোট নগদ আয়, ব্যয় ও নিট ব্যালেন্স */
 export async function fetchCashSummary(filter: DateFilter = {}) {
+  // every collection is cash that came in, a contract's advance too
   const [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay] = await Promise.all([
-    applyRange(sdb.from("collections").select("amount").is("contract_id", null), "payment_date", filter),
-    applyRange(sdb.from("expenses").select("amount, category"), "expense_date", filter),
-    applyRange(sdb.from("sardar_payments").select("amount"), "payment_date", filter),
-    applyRange(sdb.from("worker_payments").select("amount"), "payment_date", filter),
-    applyRange(sdb.from("supplier_payments").select("amount"), "payment_date", filter),
-    applyRange(sdb.from("vehicle_expenses").select("amount"), "expense_date", filter),
-    applyRange(sdb.from("owner_transactions").select("amount, txn_type"), "txn_date", filter),
-    applyRange(sdb.from("loans").select("amount, direction"), "loan_date", filter),
-    applyRange(sdb.from("loan_payments").select("amount, loan:loans(direction)"), "payment_date", filter),
-    applyRange(sdb.from("opening_payments").select("amount, ob:opening_balances(kind)"), "payment_date", filter),
+    rowsOf("collections", "id, amount", "payment_date", filter),
+    rowsOf("expenses", "id, amount, category", "expense_date", filter),
+    rowsOf("sardar_payments", "id, amount", "payment_date", filter),
+    rowsOf("worker_payments", "id, amount", "payment_date", filter),
+    rowsOf("supplier_payments", "id, amount", "payment_date", filter),
+    rowsOf("vehicle_expenses", "id, amount", "expense_date", filter),
+    rowsOf("owner_transactions", "id, amount, txn_type", "txn_date", filter),
+    rowsOf("loans", "id, amount, direction", "loan_date", filter),
+    rowsOf("loan_payments", "id, amount, loan:loans(direction)", "payment_date", filter),
+    rowsOf("opening_payments", "id, amount, ob:opening_balances(kind)", "payment_date", filter),
   ]);
 
   for (const r of [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay]) {
@@ -105,15 +124,15 @@ export type CashHistoryRow = {
 /** মূল ক্যাশের সব আয়-ব্যয়ের হিস্টোরি — fetchCashSummary-র সব খাত থেকে */
 export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHistoryRow[]> {
   const [col, exp, sar, wrk, sup, own, loans, lpay, opay] = await Promise.all([
-    applyRange(sdb.from("collections").select("id, amount, payment_date, note, method, customer:customers(name)").is("contract_id", null), "payment_date", filter),
-    applyRange(sdb.from("expenses").select("id, amount, expense_date, category, note"), "expense_date", filter),
-    applyRange(sdb.from("sardar_payments").select("id, amount, payment_date, note, sardar:sardars(name)"), "payment_date", filter),
-    applyRange(sdb.from("worker_payments").select("id, amount, payment_date, note, worker:workers(name, role)"), "payment_date", filter),
-    applyRange(sdb.from("supplier_payments").select("id, amount, payment_date, note, method, supplier:suppliers(name, material_type)"), "payment_date", filter),
-    applyRange(sdb.from("owner_transactions").select("id, amount, txn_date, txn_type, note, owner:owners(name)"), "txn_date", filter),
-    applyRange(sdb.from("loans").select("id, amount, loan_date, direction, party_name, note"), "loan_date", filter),
-    applyRange(sdb.from("loan_payments").select("id, amount, payment_date, note, loan:loans(direction, party_name)"), "payment_date", filter),
-    applyRange(sdb.from("opening_payments").select("id, amount, payment_date, note, ob:opening_balances(kind, party_name, sardar:sardars(name), worker:workers(name), customer:customers(name))"), "payment_date", filter),
+    rowsOf("collections", "id, amount, payment_date, note, method, customer:customers(name), contract:contracts(contract_no)", "payment_date", filter),
+    rowsOf("expenses", "id, amount, expense_date, category, note", "expense_date", filter),
+    rowsOf("sardar_payments", "id, amount, payment_date, note, sardar:sardars(name)", "payment_date", filter),
+    rowsOf("worker_payments", "id, amount, payment_date, note, worker:workers(name, role)", "payment_date", filter),
+    rowsOf("supplier_payments", "id, amount, payment_date, note, method, supplier:suppliers(name, material_type)", "payment_date", filter),
+    rowsOf("owner_transactions", "id, amount, txn_date, txn_type, note, owner:owners(name)", "txn_date", filter),
+    rowsOf("loans", "id, amount, loan_date, direction, party_name, note", "loan_date", filter),
+    rowsOf("loan_payments", "id, amount, payment_date, note, loan:loans(direction, party_name)", "payment_date", filter),
+    rowsOf("opening_payments", "id, amount, payment_date, note, ob:opening_balances(kind, party_name, sardar:sardars(name), worker:workers(name), customer:customers(name))", "payment_date", filter),
   ]);
   for (const r of [col, exp, sar, wrk, sup, own, loans, lpay, opay]) if (r.error) throw r.error;
   const A = (x: any) => (x.data ?? []) as any[];
@@ -123,7 +142,7 @@ export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHis
     // Bricks given against a supplier due: a brick sale (in) and the due paid (out) of the same amount, so hand cash is unchanged
     ...A(col).map((r) => r.method === BRICK_SETTLE_COLLECTION
       ? row(`c${r.id}`, r.payment_date, "in", "sale", `${r.customer?.name ?? "—"} (বাকির বদলে ইট)`, r.note, r.amount, true)
-      : row(`c${r.id}`, r.payment_date, "in", "sale", r.customer?.name ?? "—", r.note, r.amount)),
+      : row(`c${r.id}`, r.payment_date, "in", "sale", `${r.customer?.name ?? "—"}${r.contract?.contract_no ? ` (চুক্তি ${r.contract.contract_no})` : ""}`, r.note, r.amount)),
     ...A(exp).map((r) => {
       const h = expenseHead(r.category);
       return row(`e${r.id}`, r.expense_date, "out", h.key, h.item || r.note || moneyHead(h.key).label, h.item ? r.note : null, r.amount);
