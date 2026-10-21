@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownUp, CalendarRange, Check, ChevronRight, ListFilter, Lock, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,10 +13,11 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { toast } from "sonner";
 import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/cash-queries";
-import { EXPENSE_HEADS, ExpenseEntryDialog, type HeadKey } from "@/components/expense-entry";
+import { EXPENSE_HEADS, ExpenseEntryDialog, type ExpenseEdit, type HeadKey } from "@/components/expense-entry";
 import { INCOME_HEADS, IncomeEntryDialog, type IncomeKey } from "@/components/income-entry";
 import { HeadTiles } from "@/components/money-form-parts";
-import { TONE_CLASS, isIncome, moneyHead, type MoneyKey } from "@/lib/money-heads";
+import { RAW_TYPES, TONE_CLASS, isIncome, moneyHead, supplierHead, type MoneyKey } from "@/lib/money-heads";
+import { billHead } from "@/lib/ledger";
 import { usePageAccess } from "@/lib/page-permissions";
 import { printTable } from "@/lib/print-table";
 
@@ -27,6 +28,11 @@ export const Route = createFileRoute("/_authenticated/cash-book")({
       { name: "description", content: "মূল ক্যাশের সব নগদ আয় ও ব্যয়: এন্ট্রি, সম্পাদনা, খাতায় তোলার হিসাব।" },
     ],
     links: [{ rel: "canonical", href: "/cash-book" }],
+  }),
+  // ?row=<cash line key> or ?bill=<purchase id> opens that entry (links from খরচের খাতা)
+  validateSearch: (s: Record<string, unknown>): { row?: string; bill?: string } => ({
+    ...(typeof s.row === "string" && s.row ? { row: s.row } : {}),
+    ...(typeof s.bill === "string" && s.bill ? { bill: s.bill } : {}),
   }),
   component: CashBookPage,
 });
@@ -137,6 +143,13 @@ function CashBookPage() {
   const [selected, setSelected] = useState<CashHistoryRow | null>(null);
   const [editRow, setEditRow] = useState<CashHistoryRow | null>(null);
   const [deleteRow, setDeleteRow] = useState<CashHistoryRow | null>(null);
+  // a saved expense / supplier payment / bill changed in the full expense form
+  const [formEdit, setFormEdit] = useState<{ head: HeadKey; edit: ExpenseEdit } | null>(null);
+  const [bill, setBill] = useState<BillRow | null>(null);
+  const [deleteBill, setDeleteBill] = useState<BillRow | null>(null);
+  const navigate = useNavigate();
+  const { row: rowParam, bill: billParam } = Route.useSearch();
+  const clearParam = () => navigate({ to: "/cash-book", search: {}, replace: true });
 
   // heads kept behind the page that owns them, as before
   const allowed = (k: MoneyKey) =>
@@ -167,6 +180,51 @@ function CashBookPage() {
   });
   const period = preset === "season" ? seasonSum.data : periodSum.data;
   const history = useQuery({ queryKey: ["cash-book", "history", range.from, range.to], queryFn: () => fetchCashHistory(filter) });
+
+  // opened from খরচের খাতা: show the whole season, then open that line
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!rowParam || handled.current === rowParam) return;
+    if (preset !== "season") { choosePreset("season"); return; }
+    if (!history.data) return;
+    handled.current = rowParam;
+    const r = history.data.find((x) => x.id === rowParam);
+    if (r) setSelected(r);
+    else toast.error("এন্ট্রিটা এই মৌসুমে পাওয়া যায়নি");
+    clearParam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowParam, preset, history.data]);
+  useEffect(() => {
+    if (!billParam || handled.current === `b${billParam}`) return;
+    handled.current = `b${billParam}`;
+    fetchBill(billParam).then((b) => { if (b) setBill(b); else toast.error("বিলটা পাওয়া যায়নি"); }).catch((e) => toast.error(e.message));
+    clearParam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billParam]);
+
+  /** edit: expenses and supplier payments in the full form, other money rows in the short one */
+  const startEdit = async (r: CashHistoryRow) => {
+    try {
+      const { table, id } = resolveRowKey(r.id);
+      if (table === "expenses") {
+        const { data, error } = await supabase.from("expenses").select("id, expense_date, category, amount, note").eq("id", id).maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error("এন্ট্রিটা পাওয়া যায়নি");
+        setFormEdit({ head: r.key as HeadKey, edit: { table: "expenses", id, date: data.expense_date, category: data.category, amount: Number(data.amount), note: data.note } });
+        return;
+      }
+      if (table === "supplier_payments") {
+        const { data, error } = await supabase.from("supplier_payments").select("id, supplier_id, payment_date, amount, note").eq("id", id).maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error("এন্ট্রিটা পাওয়া যায়নি");
+        setFormEdit({ head: r.key as HeadKey, edit: { table: "supplier_payments", id, supplier_id: data.supplier_id, date: data.payment_date, amount: Number(data.amount), note: data.note } });
+        return;
+      }
+      setEditRow(r);
+    } catch (e: any) {
+      toast.error(e?.message ?? "খোলা যায়নি");
+    }
+  };
 
   const marks = useQuery({
     queryKey: ["book-marks"],
@@ -555,7 +613,7 @@ function CashBookPage() {
               mark={marks.data?.[selected.id]}
               lastPage={lastPage}
               onSaveMark={(page, checked) => saveMark.mutate({ key: selected.id, page, checked })}
-              onEdit={() => { setEditRow(selected); setSelected(null); }}
+              onEdit={() => { const r = selected; setSelected(null); void startEdit(r); }}
               onDelete={() => { setDeleteRow(selected); setSelected(null); }}
             />
           )}
@@ -564,7 +622,115 @@ function CashBookPage() {
 
       {editRow && <RowEditDialog key={editRow.id} row={editRow} onClose={() => setEditRow(null)} onDone={invalidate} />}
       {deleteRow && <RowDeleteDialog key={deleteRow.id} row={deleteRow} onClose={() => setDeleteRow(null)} onDone={invalidate} />}
+
+      <ExpenseEntryDialog
+        open={!!formEdit}
+        onOpenChange={(o) => { if (!o) setFormEdit(null); }}
+        head={formEdit?.head ?? null}
+        edit={formEdit?.edit ?? null}
+        onDone={invalidate}
+      />
+
+      {/* a bill (purchase): not cash, but changed and deleted here too */}
+      <Sheet open={!!bill} onOpenChange={(o) => { if (!o) setBill(null); }}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-3xl pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
+          {bill && (
+            <BillDetail
+              b={bill}
+              onEdit={() => { const b = bill; setBill(null); setFormEdit({ head: b.head as HeadKey, edit: b.edit }); }}
+              onDelete={() => { setDeleteBill(bill); setBill(null); }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
+      {deleteBill && <BillDeleteDialog key={deleteBill.id} b={deleteBill} onClose={() => setDeleteBill(null)} onDone={invalidate} />}
     </div>
+  );
+}
+
+/** one purchases row (a bill) with what the form needs to change it */
+type BillRow = { id: string; date: string; supplier: string; item: string; qty: number; unit: string | null; rate: number; total: number; note: string | null; head: MoneyKey; edit: ExpenseEdit };
+
+async function fetchBill(id: string): Promise<BillRow | null> {
+  const { data, error } = await (supabase as any).from("purchases")
+    .select("id, supplier_id, purchase_date, item_name, material_id, quantity, unit, unit_price, total_amount, note, supplier:suppliers(name, material_type)")
+    .eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const { data: items } = await supabase.from("raw_materials").select("id, name, item_group");
+  const raw = (items ?? []).filter((i: any) => i.item_group === "raw");
+  const rawIds = new Set<string>(raw.map((i: any) => i.id as string));
+  const rawNames = new Set<string>([...RAW_TYPES, ...raw.map((i: any) => String(i.name).normalize("NFC").trim())]);
+  // contract and veku bills keep their own head; others by the item, as on the purchases page
+  const typeHead = supplierHead(data.supplier?.material_type);
+  const head = ["veku", "vehicle", "land", "clean"].includes(typeHead) ? typeHead : billHead(data, rawIds, rawNames);
+  return {
+    id: data.id, date: data.purchase_date, supplier: data.supplier?.name ?? "—", item: data.item_name,
+    qty: Number(data.quantity) || 0, unit: data.unit, rate: Number(data.unit_price) || 0, total: Number(data.total_amount) || 0, note: data.note, head,
+    edit: {
+      table: "purchases", id: data.id, supplier_id: data.supplier_id, date: data.purchase_date, item_name: data.item_name, material_id: data.material_id ?? null,
+      quantity: Number(data.quantity) || 0, unit: data.unit, unit_price: Number(data.unit_price) || 0, total: Number(data.total_amount) || 0, note: data.note,
+    },
+  };
+}
+
+function BillDetail({ b, onEdit, onDelete }: { b: BillRow; onEdit: () => void; onDelete: () => void }) {
+  const { Icon, tone } = lookOf(b.head);
+  return (
+    <div className="space-y-4">
+      <SheetHeader className="text-left">
+        <div className="flex items-center gap-3">
+          <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${tone}`}><Icon className="h-6 w-6" /></span>
+          <div className="min-w-0">
+            <SheetTitle className="break-words leading-snug">{b.supplier}</SheetTitle>
+            <SheetDescription>বিল · {moneyHead(b.head).label} · {bnDate(b.date)}</SheetDescription>
+          </div>
+        </div>
+      </SheetHeader>
+      <div className="space-y-1 rounded-2xl bg-muted/60 p-4 text-sm">
+        <div className="font-semibold">{b.item}</div>
+        {b.qty > 0 && b.unit && <div className="num text-muted-foreground">{bn(b.qty)} {b.unit}{b.rate > 0 ? ` × ${tk(b.rate)}` : ""}</div>}
+        {b.note && <div className="text-muted-foreground">{b.note}</div>}
+        <div className="num pt-1 font-display text-2xl font-extrabold">{tk(b.total)}</div>
+        <p className="text-xs text-muted-foreground">বিল মানে কত টাকার মাল বা কাজ নেওয়া হলো; হাতে নগদ কমে টাকা দিলে।</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" className="h-12 gap-2 rounded-xl text-base font-bold" onClick={onEdit}><Pencil className="h-4 w-4" /> সম্পাদনা</Button>
+        <Button variant="outline" className="h-12 gap-2 rounded-xl border-destructive/40 text-base font-bold text-destructive" onClick={onDelete}><Trash2 className="h-4 w-4" /> মুছুন</Button>
+      </div>
+    </div>
+  );
+}
+
+function BillDeleteDialog({ b, onClose, onDone }: { b: BillRow; onClose: () => void; onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (!password) throw new Error("এডমিন পাসওয়ার্ড দিন");
+      const ok = await verifyAdminPasswordClient(password);
+      if (!ok) throw new Error("এডমিন পাসওয়ার্ড সঠিক নয়");
+      const { error } = await supabase.from("purchases").delete().eq("id", b.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => { toast.success("বিল মুছে ফেলা হয়েছে"); onClose(); onDone(); },
+    onError: (e: Error) => toast.error(e.message || "মুছে ফেলা যায়নি"),
+  });
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Lock className="h-4 w-4 text-destructive" />এডমিন পাসওয়ার্ড দিন</DialogTitle>
+          <DialogDescription>{b.supplier} — {b.item} — {tk(b.total)}। বিল স্থায়ীভাবে মুছে যাবে।</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(e) => { e.preventDefault(); mut.mutate(); }} className="space-y-3">
+          <Input type="password" className="h-11" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} placeholder="এডমিন পাসওয়ার্ড" />
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>বাতিল</Button>
+            <Button type="submit" variant="destructive" disabled={mut.isPending}>মুছুন</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

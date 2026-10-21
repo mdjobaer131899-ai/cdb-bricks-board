@@ -214,7 +214,8 @@ export function ExpenseEntryDialog({
     }
     // expenses row
     const cat = edit.category;
-    const what = cat.includes(" — ") ? cat.slice(cat.indexOf(" — ") + 3) : "";
+    // "আনুষাঙ্গিক — চা" → "চা"; an older free-text category (also from the AI) is kept as it is
+    const what = cat.includes(" — ") ? cat.slice(cat.indexOf(" — ") + 3) : h === "misc" && cat.trim() !== "আনুষাঙ্গিক" ? cat.trim() : "";
     setBillOpen(h === "parts");
     setF({ ...base, what, total: h === "parts" ? String(edit.amount) : "", paid: String(edit.amount), paidTouched: true, date: edit.date, note: edit.note ?? "" });
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -28,6 +28,7 @@ import { Route as AuthenticatedPurchasesRouteImport } from './routes/_authentica
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
 import { Route as AuthenticatedSalariesRouteImport } from './routes/_authenticated/salaries'
 import { Route as AuthenticatedDuesRouteImport } from './routes/_authenticated/dues'
+import { Route as AuthenticatedLedgerRouteImport } from './routes/_authenticated/ledger'
 import { Route as AuthenticatedSardarsRouteImport } from './routes/_authenticated/sardars'
 import { Route as AuthenticatedSeasonsRouteImport } from './routes/_authenticated/seasons'
 import { Route as AuthenticatedWeatherRouteImport } from './routes/_authenticated/weather'
@@ -146,6 +147,12 @@ const AuthenticatedDuesRoute =
     path: '/dues',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedLedgerRoute =
+  AuthenticatedLedgerRouteImport.update({
+    id: '/ledger',
+    path: '/ledger',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSardarsRoute = AuthenticatedSardarsRouteImport.update({
   id: '/sardars',
   path: '/sardars',
@@ -259,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof AuthenticatedReportsRoute
   '/salaries': typeof AuthenticatedSalariesRoute
   '/dues': typeof AuthenticatedDuesRoute
+  '/ledger': typeof AuthenticatedLedgerRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/weather': typeof AuthenticatedWeatherRoute
@@ -293,6 +301,7 @@ export interface FileRoutesByTo {
   '/reports': typeof AuthenticatedReportsRoute
   '/salaries': typeof AuthenticatedSalariesRoute
   '/dues': typeof AuthenticatedDuesRoute
+  '/ledger': typeof AuthenticatedLedgerRoute
   '/sardars': typeof AuthenticatedSardarsRoute
   '/seasons': typeof AuthenticatedSeasonsRoute
   '/weather': typeof AuthenticatedWeatherRoute
@@ -332,6 +341,7 @@ export interface FileRoutesById {
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
   '/_authenticated/salaries': typeof AuthenticatedSalariesRoute
   '/_authenticated/dues': typeof AuthenticatedDuesRoute
+  '/_authenticated/ledger': typeof AuthenticatedLedgerRoute
   '/_authenticated/sardars': typeof AuthenticatedSardarsRoute
   '/_authenticated/seasons': typeof AuthenticatedSeasonsRoute
   '/_authenticated/weather': typeof AuthenticatedWeatherRoute
@@ -372,6 +382,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/salaries'
     | '/dues'
+    | '/ledger'
     | '/sardars'
     | '/seasons'
     | '/weather'
@@ -406,6 +417,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/salaries'
     | '/dues'
+    | '/ledger'
     | '/sardars'
     | '/seasons'
     | '/weather'
@@ -444,6 +456,7 @@ export interface FileRouteTypes {
     | '/_authenticated/reports'
     | '/_authenticated/salaries'
     | '/_authenticated/dues'
+    | '/_authenticated/ledger'
     | '/_authenticated/sardars'
     | '/_authenticated/seasons'
     | '/_authenticated/weather'
@@ -604,6 +617,13 @@ declare module '@tanstack/react-router' {
       path: '/dues'
       fullPath: '/dues'
       preLoaderRoute: typeof AuthenticatedDuesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ledger': {
+      id: '/_authenticated/ledger'
+      path: '/ledger'
+      fullPath: '/ledger'
+      preLoaderRoute: typeof AuthenticatedLedgerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/sardars': {
@@ -775,6 +795,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
   AuthenticatedSalariesRoute: typeof AuthenticatedSalariesRoute
   AuthenticatedDuesRoute: typeof AuthenticatedDuesRoute
+  AuthenticatedLedgerRoute: typeof AuthenticatedLedgerRoute
   AuthenticatedSardarsRoute: typeof AuthenticatedSardarsRoute
   AuthenticatedSeasonsRoute: typeof AuthenticatedSeasonsRoute
   AuthenticatedWeatherRoute: typeof AuthenticatedWeatherRoute
@@ -806,6 +827,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
   AuthenticatedSalariesRoute: AuthenticatedSalariesRoute,
   AuthenticatedDuesRoute: AuthenticatedDuesRoute,
+  AuthenticatedLedgerRoute: AuthenticatedLedgerRoute,
   AuthenticatedSardarsRoute: AuthenticatedSardarsRoute,
   AuthenticatedSeasonsRoute: AuthenticatedSeasonsRoute,
   AuthenticatedWeatherRoute: AuthenticatedWeatherRoute,

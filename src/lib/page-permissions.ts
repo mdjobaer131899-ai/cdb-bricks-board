@@ -24,6 +24,7 @@ export const PAGES: { key: string; label: string }[] = [
   { key: "/opening-balances", label: "পূর্বের বকেয়া ও জের" },
   { key: "/income-expense", label: "লাভ-ক্ষতি" },
   { key: "/dues", label: "পাওনা-দেনা" },
+  { key: "/ledger", label: "খরচের খাতা" },
   { key: "/reports", label: "রিপোর্ট" },
   { key: "/seasons", label: "মৌসুম" },
 ];

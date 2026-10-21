@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck , CloudSun } from "lucide-react";
+import { LayoutDashboard, FileText, FilePlus2, Users, ClipboardCheck, BarChart3, Settings, UserCog, Wallet, Boxes, Users2, Building2, CalendarRange, HandCoins, History, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, BadgeDollarSign, Receipt, ShoppingCart, Crown, Landmark, Scale, PackageCheck , CloudSun, FolderOpen } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar,
 } from "@/components/ui/sidebar";
@@ -39,6 +39,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "ভাটার হিসাব",
     items: [
       { title: "ক্যাশ বই", url: "/cash-book", icon: Receipt },
+      { title: "খরচের খাতা", url: "/ledger", icon: FolderOpen },
       { title: "লাভ-ক্ষতি", url: "/income-expense", icon: Scale },
       { title: "পাওনা-দেনা", url: "/dues", icon: HandCoins },
       { title: "মালামাল ক্রয় ও খরচ", url: "/purchases", icon: ShoppingCart },
