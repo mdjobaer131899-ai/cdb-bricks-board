@@ -263,6 +263,7 @@ function CashBookPage() {
   const [bookMode, setBookMode] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bookPage, setBookPage] = useState("");
+  const [pagesSheet, setPagesSheet] = useState(false);
   const startBooking = () => {
     choosePreset("season");
     setHead(null);
@@ -380,8 +381,6 @@ function CashBookPage() {
     ["in", "আয়"],
     ["out", "ব্যয়"],
     ["old", "পুরোনো বকেয়া"],
-    ["unbooked", "খাতায় তোলা বাকি"],
-    ["booked", "খাতায় তোলা শেষ"],
   ];
 
   const handCash = seasonSum.data?.net ?? 0;
@@ -469,6 +468,12 @@ function CashBookPage() {
           <span className="shrink-0 rounded-xl bg-amber-600 px-3 py-2 text-sm font-bold text-white">খাতায় তুলুন</span>
         </button>
       )}
+      {!bookMode && unbookedAll.length === 0 && marks.isSuccess && pageTotals.length > 0 && (
+        <p className="flex items-center gap-2 px-1 text-xs text-muted-foreground"><Check className="h-4 w-4 text-success" /> সব খরচ খাতায় তোলা আছে</p>
+      )}
+      {!bookMode && pageTotals.length > 0 && (
+        <button type="button" onClick={() => setPagesSheet(true)} className="px-1 text-xs font-semibold text-primary">খাতার পৃষ্ঠা অনুযায়ী মোট দেখুন</button>
+      )}
       {bookMode && (
         <div className="rounded-2xl border border-primary/40 bg-primary/5 px-4 py-3 text-sm">
           <b>খাতায় তোলা:</b> যে খরচগুলো কাগজের খাতায় লিখেছেন সেগুলোতে টিক দিন (দিনের পাশে চাপলে সেদিনের সব), নিচে পৃষ্ঠা নম্বর দিয়ে "তুলুন" চাপুন।
@@ -510,13 +515,6 @@ function CashBookPage() {
               ))}
             </div>
           </div>}
-          {kind === "booked" && pageTotals.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 text-xs">
-              {pageTotals.map(([p, t]) => (
-                <span key={p} className="rounded-full border px-2 py-1">পৃষ্ঠা {bn(p)}: <b className="num">{tk(t)}</b></span>
-              ))}
-            </div>
-          )}
           <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
             <div className="rounded-lg bg-emerald-50 py-1.5 dark:bg-emerald-950/40">
               <div className="text-emerald-700 dark:text-emerald-300">আয়</div>
@@ -634,6 +632,24 @@ function CashBookPage() {
           </div>
         </div>
       )}
+
+      {/* totals per paper-book page, to check against the paper */}
+      <Sheet open={pagesSheet} onOpenChange={setPagesSheet}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-3xl pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
+          <SheetHeader className="text-left">
+            <SheetTitle>খাতার পৃষ্ঠা অনুযায়ী মোট</SheetTitle>
+            <SheetDescription>{rangeText} · কাগজের খাতার প্রতি পৃষ্ঠার যোগফলের সাথে মিলিয়ে নিন</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 divide-y rounded-2xl border">
+            {pageTotals.map(([pg, t]) => (
+              <div key={pg} className="flex items-center justify-between px-4 py-3">
+                <span className="font-semibold">পৃষ্ঠা {bn(pg)}</span>
+                <b className="num">{tk(t)}</b>
+              </div>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Custom date range */}
       <Sheet open={dateSheet} onOpenChange={setDateSheet}>
