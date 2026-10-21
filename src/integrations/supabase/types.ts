@@ -388,6 +388,65 @@ export type Database = {
           },
         ]
       }
+      contract_items: {
+        Row: {
+          brick_type_id: string
+          contract_id: string
+          created_at: string
+          id: string
+          pieces_per_truck: number
+          rate: number
+          trucks: number
+        }
+        Insert: {
+          brick_type_id: string
+          contract_id: string
+          created_at?: string
+          id?: string
+          pieces_per_truck: number
+          rate: number
+          trucks: number
+        }
+        Update: {
+          brick_type_id?: string
+          contract_id?: string
+          created_at?: string
+          id?: string
+          pieces_per_truck?: number
+          rate?: number
+          trucks?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_items_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "brick_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_items_brick_type_id_fkey"
+            columns: ["brick_type_id"]
+            isOneToOne: false
+            referencedRelation: "current_stock"
+            referencedColumns: ["brick_type_id"]
+          },
+          {
+            foreignKeyName: "contract_items_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contract_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_items_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contract_payments: {
         Row: {
           amount: number
@@ -3039,6 +3098,18 @@ export type Database = {
     Functions: {
       acc: { Args: { _code: string }; Returns: string }
       acc_for_method: { Args: { _method: string }; Returns: string }
+      cancel_booking: { Args: { _id: string }; Returns: undefined }
+      create_booking: {
+        Args: {
+          _customer_id: string
+          _date: string
+          _items: Json
+          _method: string
+          _note: string
+          _paid: number
+        }
+        Returns: string
+      }
       current_sardar_rate: {
         Args: { _category_id: string; _on_date?: string; _sardar_id: string }
         Returns: number
