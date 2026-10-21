@@ -259,7 +259,53 @@ function CashBookPage() {
     onError: (e: any) => { toast.error(e.message ?? "সেভ হয়নি"); qc.invalidateQueries({ queryKey: ["book-marks"] }); },
   });
 
+  // ---- খাতায় তোলা: tick many lines at once, one page number for all
+  const [bookMode, setBookMode] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bookPage, setBookPage] = useState("");
+  const startBooking = () => {
+    choosePreset("season");
+    setHead(null);
+    setKind("unbooked");
+    setPicked(new Set());
+    setBookPage(lastPage ? String(lastPage) : "");
+    setBookMode(true);
+  };
+  const stopBooking = () => { setBookMode(false); setPicked(new Set()); setKind("all"); };
+  const togglePick = (ids: string[], on: boolean) => setPicked((old) => {
+    const n = new Set(old);
+    for (const id of ids) on ? n.add(id) : n.delete(id);
+    return n;
+  });
+  const saveBook = useMutation({
+    mutationFn: async () => {
+      const page = Number(bookPage);
+      if (!(page > 0)) throw new Error("খাতার পৃষ্ঠা নম্বর লিখুন");
+      if (picked.size === 0) throw new Error("যেগুলো খাতায় তুলেছেন, সেগুলোতে টিক দিন");
+      const rowsToSave = [...picked].map((k) => ({ entry_key: k, page, checked: true }));
+      for (let i = 0; i < rowsToSave.length; i += 500) {
+        const { error } = await (supabase as any).from("book_marks").upsert(rowsToSave.slice(i, i + 500));
+        if (error) throw error;
+      }
+      return { page, n: rowsToSave.length };
+    },
+    onSuccess: ({ page, n }) => {
+      qc.setQueryData(["book-marks"], (old: any) => {
+        const m = { ...(old ?? {}) };
+        for (const k of picked) m[k] = { page, checked: true };
+        return m;
+      });
+      setLastPage(page);
+      try { localStorage.setItem("cdb-last-book-page", String(page)); } catch { /* storage unavailable */ }
+      toast.success(`${bn(n)}টি এন্ট্রি পৃষ্ঠা ${bn(page)}-এ তোলা হলো`);
+      setPicked(new Set());
+    },
+    onError: (e: any) => toast.error(e.message ?? "সেভ হয়নি"),
+  });
+
   const all = history.data ?? [];
+  const unbookedAll = all.filter((r) => r.dir === "out" && !marks.data?.[r.id]?.checked);
+  const pickedSum = all.filter((r) => picked.has(r.id)).reduce((a, r) => a + r.amount, 0);
   const heads = useMemo(() => {
     const m = new Map<string, { dir: "in" | "out"; key: MoneyKey; total: number; count: number }>();
     for (const r of all) {
@@ -333,7 +379,7 @@ function CashBookPage() {
   const handCash = seasonSum.data?.net ?? 0;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 pb-28 md:pb-6">
+    <div className={`mx-auto max-w-3xl space-y-4 ${bookMode ? "pb-64 md:pb-40" : "pb-28 md:pb-6"}`}>
       {/* Title */}
       <div className="flex items-end justify-between gap-3">
         <div>
@@ -403,6 +449,24 @@ function CashBookPage() {
         </div>
       </div>
 
+      {/* paper book: what is still to be written, one tap to start */}
+      {!bookMode && unbookedAll.length > 0 && marks.isSuccess && (
+        <button type="button" onClick={startBooking}
+          className="flex w-full items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-left dark:border-amber-800 dark:bg-amber-950/30">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"><Check className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-amber-900 dark:text-amber-200">খাতায় তোলা বাকি {bn(unbookedAll.length)}টি</span>
+            <span className="num block text-xs text-amber-800 dark:text-amber-300">{tk(unbookedAll.reduce((a, r) => a + r.amount, 0))} · {preset === "season" ? "এই সিজনে" : rangeText}</span>
+          </span>
+          <span className="shrink-0 rounded-xl bg-amber-600 px-3 py-2 text-sm font-bold text-white">খাতায় তুলুন</span>
+        </button>
+      )}
+      {bookMode && (
+        <div className="rounded-2xl border border-primary/40 bg-primary/5 px-4 py-3 text-sm">
+          <b>খাতায় তোলা:</b> যে খরচগুলো কাগজের খাতায় লিখেছেন সেগুলোতে টিক দিন (দিনের পাশে চাপলে সেদিনের সব), নিচে পৃষ্ঠা নম্বর দিয়ে "তুলুন" চাপুন।
+        </div>
+      )}
+
       {/* List */}
       <section className="overflow-hidden rounded-[20px] border bg-card">
         <div className="space-y-3 border-b p-3">
@@ -464,13 +528,26 @@ function CashBookPage() {
             <Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" />
           </div>
         ) : days.length === 0 ? (
-          <div className="px-4 py-12 text-center text-sm text-muted-foreground">এই সময়ে কোনো লেনদেন নেই</div>
+          <div className="px-4 py-12 text-center text-sm text-muted-foreground">{bookMode ? "সব খরচ খাতায় তোলা হয়ে গেছে ✓" : "এই সময়ে কোনো লেনদেন নেই"}</div>
         ) : (
           days.map(([d, dayRows]) => {
             const inc = dayRows.filter((r) => r.dir === "in").reduce((a, b) => a + b.amount, 0);
             const exp = dayRows.filter((r) => r.dir === "out").reduce((a, b) => a + b.amount, 0);
             return (
               <div key={d}>
+                {bookMode ? (() => {
+                  const ids = dayRows.filter((r) => r.dir === "out").map((r) => r.id);
+                  const allOn = ids.length > 0 && ids.every((id) => picked.has(id));
+                  return (
+                    <button type="button" onClick={() => togglePick(ids, !allOn)} className="flex w-full items-center justify-between gap-2 bg-muted/70 px-3 py-2 text-left text-xs">
+                      <span className="flex items-center gap-2">
+                        <span className={`grid h-6 w-6 place-items-center rounded-md border-2 ${allOn ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40 bg-card"}`}>{allOn && <Check className="h-4 w-4" />}</span>
+                        <b className="text-sm">{bnDate(d)}</b>
+                      </span>
+                      <span className="num font-semibold text-red-700 dark:text-red-300">−{tk(exp)} · দিনের সব</span>
+                    </button>
+                  );
+                })() : (
                 <div className="flex items-center justify-between gap-2 bg-muted/70 px-3 py-2 text-xs">
                   <b className="text-sm">{bnDate(d)}</b>
                   <span className="num flex gap-2 font-semibold">
@@ -478,19 +555,24 @@ function CashBookPage() {
                     {exp > 0 && <span className="text-red-700 dark:text-red-300">−{tk(exp)}</span>}
                   </span>
                 </div>
+                )}
                 <div className="divide-y">
                   {dayRows.map((r) => {
                     const { displayName, displayHead } = parseRowNameAndHead(r);
                     const { Icon, tone } = lookOf(r.key);
                     const mk = marks.data?.[r.id];
                     const booked = r.dir === "out" && !!mk?.checked;
+                    const on = picked.has(r.id);
                     return (
                       <button
                         key={r.id}
                         type="button"
-                        onClick={() => setSelected(r)}
-                        className="flex w-full items-center gap-3 px-3 py-3 text-left transition active:bg-muted/60"
+                        onClick={() => (bookMode ? togglePick([r.id], !on) : setSelected(r))}
+                        className={`flex w-full items-center gap-3 px-3 py-3 text-left transition active:bg-muted/60 ${bookMode && on ? "bg-primary/5" : ""}`}
                       >
+                        {bookMode && (
+                          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>{on && <Check className="h-5 w-5" />}</span>
+                        )}
                         <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>
                           <Icon className="h-5 w-5" aria-hidden="true" />
                         </span>
@@ -519,6 +601,29 @@ function CashBookPage() {
           })
         )}
       </section>
+
+      {bookMode && (
+        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-40 px-3 md:bottom-4">
+          <div className="mx-auto max-w-3xl space-y-2 rounded-2xl border bg-card p-3 shadow-lg">
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-sm font-semibold">
+                পৃষ্ঠা
+                <Input inputMode="numeric" className="h-11 w-20 text-center text-lg font-bold" value={bookPage}
+                  onChange={(e) => setBookPage(e.target.value.replace(/[^0-9]/g, ""))} placeholder="নং" />
+              </label>
+              <span className="num min-w-0 flex-1 text-right text-sm">{bn(picked.size)}টি · <b>{tk(pickedSum)}</b></span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Button variant="outline" className="h-11" onClick={stopBooking}>শেষ</Button>
+              <Button variant="outline" className="h-11" onClick={() => {
+                const ids = rows.filter((r) => r.dir === "out").map((r) => r.id);
+                togglePick(ids, !ids.every((id) => picked.has(id)));
+              }}>সব বাছুন</Button>
+              <Button className="h-11 font-bold" onClick={() => saveBook.mutate()} disabled={saveBook.isPending || picked.size === 0}>তুলুন</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custom date range */}
       <Sheet open={dateSheet} onOpenChange={setDateSheet}>
