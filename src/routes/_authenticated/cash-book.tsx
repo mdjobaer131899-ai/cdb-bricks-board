@@ -297,8 +297,14 @@ function CashBookPage() {
       });
       setLastPage(page);
       try { localStorage.setItem("cdb-last-book-page", String(page)); } catch { /* storage unavailable */ }
-      toast.success(`${bn(n)}টি এন্ট্রি পৃষ্ঠা ${bn(page)}-এ তোলা হলো`);
       setPicked(new Set());
+      const left = (history.data ?? []).filter((r) => r.dir === "out" && !picked.has(r.id) && !marks.data?.[r.id]?.checked).length;
+      if (left === 0) {
+        toast.success(`${bn(n)}টি এন্ট্রি পৃষ্ঠা ${bn(page)}-এ তোলা হলো — সব খাতায় তোলা শেষ`);
+        stopBooking();
+      } else {
+        toast.success(`${bn(n)}টি এন্ট্রি পৃষ্ঠা ${bn(page)}-এ তোলা হলো · বাকি ${bn(left)}টি`);
+      }
     },
     onError: (e: any) => toast.error(e.message ?? "সেভ হয়নি"),
   });
@@ -319,6 +325,8 @@ function CashBookPage() {
   const rows = useMemo(() => {
     const isBooked = (r: CashHistoryRow) => !!marks.data?.[r.id]?.checked;
     const f = all.filter((r) => {
+      // tick mode: only money out that is not yet in the paper book
+      if (bookMode) return r.dir === "out" && !isBooked(r);
       if (head && r.head !== head) return false;
       if (kind === "in") return r.dir === "in";
       if (kind === "out") return r.dir === "out";
@@ -328,7 +336,7 @@ function CashBookPage() {
       return true;
     });
     return newestFirst ? f : [...f].reverse();
-  }, [all, head, kind, marks.data, newestFirst]);
+  }, [all, head, kind, marks.data, newestFirst, bookMode]);
 
   const days = useMemo(() => {
     const m = new Map<string, CashHistoryRow[]>();
@@ -472,19 +480,21 @@ function CashBookPage() {
         <div className="space-y-3 border-b p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="truncate text-sm font-bold">{head ?? "সব লেনদেন"}</div>
+              <div className="truncate text-sm font-bold">{bookMode ? "খাতায় তোলা বাকি" : head ?? "সব লেনদেন"}</div>
               <div className="text-xs text-muted-foreground">{rangeText} · {bn(rows.length)}টি</div>
             </div>
             <div className="flex shrink-0 gap-1.5">
               <Button variant="outline" size="sm" className="h-9 gap-1 rounded-lg" onClick={() => setNewestFirst((v) => !v)}>
                 <ArrowDownUp className="h-4 w-4" />{newestFirst ? "নতুন আগে" : "পুরনো আগে"}
               </Button>
-              <Button variant={head ? "default" : "outline"} size="sm" className="h-9 gap-1 rounded-lg" onClick={() => setHeadSheet(true)}>
-                <ListFilter className="h-4 w-4" />খাত
-              </Button>
+              {!bookMode && (
+                <Button variant={head ? "default" : "outline"} size="sm" className="h-9 gap-1 rounded-lg" onClick={() => setHeadSheet(true)}>
+                  <ListFilter className="h-4 w-4" />খাত
+                </Button>
+              )}
             </div>
           </div>
-          <div className="overflow-x-auto [scrollbar-width:none]">
+          {!bookMode && <div className="overflow-x-auto [scrollbar-width:none]">
             <div className="flex w-max gap-1.5">
               {KIND_CHIPS.map(([k, label]) => (
                 <button
@@ -499,7 +509,7 @@ function CashBookPage() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
           {kind === "booked" && pageTotals.length > 0 && (
             <div className="flex flex-wrap gap-1.5 text-xs">
               {pageTotals.map(([p, t]) => (
@@ -536,7 +546,7 @@ function CashBookPage() {
             return (
               <div key={d}>
                 {bookMode ? (() => {
-                  const ids = dayRows.filter((r) => r.dir === "out").map((r) => r.id);
+                  const ids = dayRows.filter((r) => r.dir === "out" && !marks.data?.[r.id]?.checked).map((r) => r.id);
                   const allOn = ids.length > 0 && ids.every((id) => picked.has(id));
                   return (
                     <button type="button" onClick={() => togglePick(ids, !allOn)} className="flex w-full items-center justify-between gap-2 bg-muted/70 px-3 py-2 text-left text-xs">
@@ -567,10 +577,10 @@ function CashBookPage() {
                       <button
                         key={r.id}
                         type="button"
-                        onClick={() => (bookMode ? togglePick([r.id], !on) : setSelected(r))}
+                        onClick={() => (bookMode && !booked ? togglePick([r.id], !on) : setSelected(r))}
                         className={`flex w-full items-center gap-3 px-3 py-3 text-left transition active:bg-muted/60 ${bookMode && on ? "bg-primary/5" : ""}`}
                       >
-                        {bookMode && (
+                        {bookMode && !booked && (
                           <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>{on && <Check className="h-5 w-5" />}</span>
                         )}
                         <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>
@@ -616,7 +626,7 @@ function CashBookPage() {
             <div className="grid grid-cols-3 gap-2">
               <Button variant="outline" className="h-11" onClick={stopBooking}>শেষ</Button>
               <Button variant="outline" className="h-11" onClick={() => {
-                const ids = rows.filter((r) => r.dir === "out").map((r) => r.id);
+                const ids = rows.filter((r) => r.dir === "out" && !marks.data?.[r.id]?.checked).map((r) => r.id);
                 togglePick(ids, !ids.every((id) => picked.has(id)));
               }}>সব বাছুন</Button>
               <Button className="h-11 font-bold" onClick={() => saveBook.mutate()} disabled={saveBook.isPending || picked.size === 0}>তুলুন</Button>
