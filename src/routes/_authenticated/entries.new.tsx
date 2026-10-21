@@ -19,7 +19,7 @@ import { fetchAllCustomers, fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { fetchCustomerOpeningDues, OPENING_NONE } from "@/lib/opening-adjust";
 import { bn, isoDate } from "@/lib/format";
-import { fetchBookings, isOpen, splitAgainstBooking } from "@/lib/bookings";
+import { fetchBookings, isOpen } from "@/lib/bookings";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/entries/new")({
@@ -39,6 +39,8 @@ const BRICK_ORDER = [
 
 const ADLA_NAMES = new Set(["১ নং আদলা", "২ নং আদলা", "মিক্সার আদলা"]);
 const OTHERS_NAME = "অন্যান্য";
+/** the challan form's "not from a booking" pick */
+const NOT_BOOKING = "__none__";
 
 async function generateNextChallanNo(date?: string): Promise<string> {
   try {
@@ -111,17 +113,15 @@ function NewEntryPage() {
   const openDues = (openingQ.data ?? []).filter((d) => d.remaining_amount > 0.009);
   const selectedOpening = openDues.find((d) => d.id === openingId);
 
-  // bookings that hold the chosen brick type; the first one is picked by default
+  // bookings with trucks left for the chosen brick type. One challan = one truck; the
+  // owner picks for each challan whether it comes from a booking ("" = not picked yet,
+  // NOT_BOOKING = a normal sale at the day's price)
   const bookingChoices = (bookingsQ.data ?? []).flatMap((b) => b.items
     .filter((i) => i.brick_type_id === brickTypeId && i.remaining > 0)
-    .map((i) => ({ id: b.id, no: b.no, rate: i.rate, remaining: i.remaining })));
+    .map((i) => ({ id: b.id, no: b.no, rate: i.rate, remaining: i.remaining, perTruck: i.perTruck })));
   const choice = bookingChoices.find((c) => c.id === contractId);
-  useEffect(() => {
-    if (!brickTypeId) return;
-    setContractId(bookingChoices[0]?.id ?? "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brickTypeId, bookingsQ.data]);
-  useEffect(() => { if (contractId) setOpeningId(""); }, [contractId]);
+  useEffect(() => { setContractId(""); }, [brickTypeId]);
+  useEffect(() => { if (choice) setOpeningId(""); }, [choice]);
 
   useEffect(() => {
     generateNextChallanNo(saleDate).then(setChallanNo);
@@ -138,13 +138,11 @@ function NewEntryPage() {
     }
   }, [brickTypeId, isAdmin, isAdvance, isOthers, selectedBrick]);
 
-  // against a booking: up to what is left at the booking price, the rest at the day's price
-  const split = choice ? splitAgainstBooking(Number(quantity) || 0, choice.remaining) : null;
+  // a booking truck: its actual pieces at the booking price
   const totalAmount = useMemo(() => {
     if (isAdvance) return 0;
-    if (choice && split) return split.fromBooking * choice.rate + split.extra * (Number(unitPrice) || 0);
-    return (Number(quantity) || 0) * (Number(unitPrice) || 0);
-  }, [quantity, unitPrice, isAdvance, choice, split]);
+    return (Number(quantity) || 0) * (choice ? choice.rate : Number(unitPrice) || 0);
+  }, [quantity, unitPrice, isAdvance, choice]);
 
   const selectedCustomer = customersQ.data?.find((c) => c.id === customerId);
 
@@ -167,7 +165,11 @@ function NewEntryPage() {
       toast.error("ইটের ধরনের নাম লিখুন");
       return;
     }
-    if (isAdmin && !isAdvance && !isOthers && !unitPrice && !(choice && split && split.extra === 0)) {
+    if (bookingChoices.length > 0 && !contractId) {
+      toast.error("এই গাড়ি বুকিং থেকে কিনা, বেছে নিন");
+      return;
+    }
+    if (isAdmin && !isAdvance && !isOthers && !unitPrice && !choice) {
       toast.error("একক মূল্য দিন বা অগ্রিম চালান নির্বাচন করুন");
       return;
     }
@@ -198,29 +200,15 @@ function NewEntryPage() {
       created_by: me.user.id,
     });
 
-    // a booking delivery: the booked part at the booking price; anything beyond it is a
-    // second, normal challan at the day's price
-    if (choice && split && split.fromBooking > 0) {
-      const { error } = await sdb.from("sales_entries").insert(row({ challan: targetChallanNo, qty: split.fromBooking, unit: choice.rate, contract: choice.id, note: [`বুকিং ${choice.no}`, notes].filter(Boolean).join(" · ") }) as any);
-      if (error) { setBusy(false); toast.error(error.message); return; }
-      let extraNo = "";
-      if (split.extra > 0) {
-        extraNo = await generateNextChallanNo(saleDate);
-        if (extraNo === targetChallanNo) extraNo = `${targetChallanNo}-ক`;
-        const { error: e2 } = await sdb.from("sales_entries").insert(row({ challan: extraNo, qty: split.extra, unit: finalUnitPrice, contract: null, note: [`বুকিংয়ের বাইরে (চালান ${targetChallanNo}-এর সাথে)`, notes].filter(Boolean).join(" · ") }) as any);
-        if (e2) { setBusy(false); toast.error(`বুকিংয়ের চালান ${targetChallanNo} সেভ হয়েছে, কিন্তু বাড়তি ইটের চালান হয়নি: ${e2.message}`); return; }
-      }
-      setBusy(false);
-      toast.success(extraNo ? `দুটি চালান: ${targetChallanNo} (বুকিং থেকে) আর ${extraNo} (বাড়তি, আজকের দামে)` : `চালান ${targetChallanNo} — বুকিং থেকে`);
-    } else {
-      const { error } = await sdb.from("sales_entries").insert(row({ challan: targetChallanNo, qty: finalQuantity, unit: finalUnitPrice, contract: null }) as any);
-      setBusy(false);
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-      toast.success(`এন্ট্রি সংরক্ষিত হয়েছে — চালান নং ${targetChallanNo}`);
+    const { error } = await sdb.from("sales_entries").insert(row(choice
+      ? { challan: targetChallanNo, qty: finalQuantity, unit: choice.rate, contract: choice.id, note: [`বুকিং ${choice.no}`, notes].filter(Boolean).join(" · ") }
+      : { challan: targetChallanNo, qty: finalQuantity, unit: finalUnitPrice, contract: null }) as any);
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
     }
+    toast.success(`এন্ট্রি সংরক্ষিত হয়েছে — চালান নং ${targetChallanNo}${choice ? ` (বুকিং ${choice.no} থেকে)` : ""}`);
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["sales"] });
     qc.invalidateQueries({ queryKey: ["customers-all"] });
@@ -322,7 +310,7 @@ function NewEntryPage() {
               </PopoverContent>
             </Popover>
 
-            {customerId && openDues.length > 0 && !contractId && (
+            {customerId && openDues.length > 0 && !choice && (
               <div className="mt-3 space-y-1.5 rounded-lg border border-info/30 bg-info/5 p-3">
                 <Label>গত বছরের বকেয়া থেকে সমন্বয় (ঐচ্ছিক)</Label>
                 <Select value={openingId || OPENING_NONE} onValueChange={(v) => setOpeningId(v === OPENING_NONE ? "" : v)}>
@@ -401,24 +389,20 @@ function NewEntryPage() {
 
         {bookingChoices.length > 0 && (
           <Card className="border-info/40">
-            <CardHeader className="pb-3"><CardTitle className="text-base">ঠিক দামে বুকিং</CardTitle></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">এই গাড়ি কি বুকিং থেকে?</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {bookingChoices.map((c) => (
                 <button key={c.id} type="button" onClick={() => setContractId(c.id)}
                   className={`flex w-full items-center justify-between gap-2 rounded-xl border p-3 text-left ${contractId === c.id ? "border-primary bg-primary/5 ring-1 ring-primary" : ""}`}>
-                  <span><b>{c.no}</b> থেকে দিন<span className="block text-xs text-muted-foreground">বাকি {bn(c.remaining)} পিস</span></span>
+                  <span><b>হ্যাঁ, {c.no} থেকে</b><span className="block text-xs text-muted-foreground">বাকি {bn(c.remaining)} গাড়ি</span></span>
                   <b className="num shrink-0">প্রতি পিস ৳{bn(c.rate)}</b>
                 </button>
               ))}
-              <button type="button" onClick={() => setContractId("")}
-                className={`w-full rounded-xl border p-3 text-left text-sm ${!contractId ? "border-primary bg-primary/5 ring-1 ring-primary" : ""}`}>
-                বুকিং থেকে নয় — আজকের দামে বিক্রি
+              <button type="button" onClick={() => setContractId(NOT_BOOKING)}
+                className={`w-full rounded-xl border p-3 text-left text-sm ${contractId === NOT_BOOKING ? "border-primary bg-primary/5 ring-1 ring-primary" : ""}`}>
+                <b>না, আজকের দামে</b>
+                <span className="block text-xs text-muted-foreground">নগদ দিলে কালেকশনে লিখুন, না হলে অগ্রিম টাকা থাকলে সেখান থেকে কাটবে</span>
               </button>
-              {choice && split && split.extra > 0 && (
-                <p className="rounded-xl bg-warning/10 p-2 text-sm text-warning">
-                  বুকিংয়ে বাকি {bn(choice.remaining)} পিস। তাই দুটি চালান হবে: {bn(split.fromBooking)} পিস বুকিংয়ের দামে, আর বাড়তি {bn(split.extra)} পিস আজকের দামে।
-                </p>
-              )}
             </CardContent>
           </Card>
         )}
@@ -428,14 +412,14 @@ function NewEntryPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">মূল্য</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {choice && split && split.extra === 0 ? (
+                {choice ? (
                   <div className="space-y-1.5">
                     <Label>একক মূল্য (বুকিংয়ের দাম)</Label>
                     <Input value={`৳ ${bn(choice.rate)}`} disabled />
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <Label>{choice ? "বাড়তি ইটের আজকের দাম (৳)" : "একক মূল্য (৳)"}</Label>
+                    <Label>একক মূল্য (৳)</Label>
                     <Input
                       type="number"
                       min={0}

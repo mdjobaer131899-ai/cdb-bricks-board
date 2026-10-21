@@ -43,7 +43,7 @@ export function buildDues(s: KilnSnapshot): { receive: DueLine[]; pay: DueLine[]
     line("sardar-due", "সরদার পাবে", s.sardars.map((x) => ({ name: x.name, amount: x.due, sub: x.kindLabel })), "/sardars"),
     line("staff-due", "স্টাফ ও শ্রমিক পাবে", s.workers.map((w) => ({ name: w.name, amount: w.due, sub: w.isDaily ? "ডেলি" : "মেস্তুরি / ম্যানেজার" })), "/salaries"),
     line("supplier-due", "সাপ্লায়ার, ভেকু, গাড়ি ও জমির মালিক পাবে", s.suppliers.map((x) => ({ name: x.name, amount: x.due, sub: supplierSub(x.material) })), "/purchases"),
-    line("booking-owed", "ঠিক দামে বুকিং (ইট দেওয়া বাকি)", (s.bookings ?? []).map((b) => ({ name: b.customer, amount: b.owed, sub: `${b.no} · ${bn(b.piecesLeft)} পিস বাকি`, to: "/customers/$id", params: { id: b.customerId } })), "/advance-sales", { t: "booking" }),
+    line("booking-owed", "ঠিক দামে বুকিং (ইট দেওয়া বাকি)", (s.bookings ?? []).map((b) => ({ name: b.customer, amount: b.owed, sub: `${b.no} · ${bn(b.trucksLeft)} গাড়ি বাকি`, to: "/customers/$id", params: { id: b.customerId } })), "/advance-sales", { t: "booking" }),
     line("customer-advance", "গ্রাহকের অগ্রিম (ইট দেওয়া বাকি)", s.customers.map((c) => ({ name: c.name, amount: -c.balance, to: "/customers/$id", params: { id: c.id } })), "/advance-sales"),
     line("old-brick-due", "গত বছরের অগ্রিম (ইট দেওয়া বাকি)", open("customer_brick_due"), "/opening-balances"),
     line("old-payable", "পূর্বের দেনা", [...open("sardar_payable"), ...open("other_payable")], "/opening-balances"),

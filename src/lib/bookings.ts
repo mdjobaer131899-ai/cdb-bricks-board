@@ -2,13 +2,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchAllRows } from "@/lib/fetch-all";
 
 /**
- * ঠিক দামে বুকিং (অগ্রিম ইট বিক্রি): a customer books bricks of one or more types at a
- * fixed price per piece and pays in full up front. Challans against the booking keep
- * that price; pieces beyond it are a normal sale at the day's price.
+ * ঠিক দামে বুকিং (অগ্রিম ইট বিক্রি): a customer books a number of trucks (গাড়ি) of one
+ * or more brick types at a fixed price per piece and pays in full up front (trucks ×
+ * usual pieces per truck × rate). Each challan is one truck; the owner picks per challan
+ * whether it comes from the booking (2-3 a day, say). A booking truck is priced at the
+ * booking rate for its actual pieces; any other truck is a normal sale at the day's price.
  *
  * Stored as a contracts row (contract_type 'yearly_fixed') + contract_items (one row per
- * brick type with quantity and rate) + collections with contract_id (the money). Read
- * all-time: a booking lives until its bricks are delivered, across seasons.
+ * brick type: trucks, pieces_per_truck, rate) + collections with contract_id (the money).
+ * Read all-time: a booking lives until its trucks are delivered, across seasons.
  *
  * অগ্রিম টাকা (money first, the day's price at delivery) is not a booking: it is a plain
  * collection and lives in the customer's normal account.
@@ -17,13 +19,18 @@ import { fetchAllRows } from "@/lib/fetch-all";
 export type BookingItem = {
   brick_type_id: string;
   brick: string;
-  quantity: number;
+  /** trucks booked */
+  trucks: number;
+  /** usual pieces in one truck (sets the price paid up front) */
+  perTruck: number;
+  /** price per piece */
   rate: number;
-  /** delivered on approved challans */
+  /** trucks delivered on approved challans, and their pieces */
   delivered: number;
-  /** on challans still waiting for approval */
+  deliveredPieces: number;
+  /** trucks on challans still waiting for approval */
   pending: number;
-  /** still to give = quantity − delivered − pending */
+  /** trucks still to give = trucks − delivered − pending */
   remaining: number;
 };
 
@@ -58,7 +65,7 @@ export async function fetchBookings(opts: { customerId?: string } = {}): Promise
   const ids = list.map((c) => c.id as string);
 
   const [items, sales, cols, bricks] = await Promise.all([
-    fetchAllRows<any>(() => (supabase as any).from("contract_items").select("id, contract_id, brick_type_id, quantity, rate").in("contract_id", ids).order("id")),
+    fetchAllRows<any>(() => (supabase as any).from("contract_items").select("id, contract_id, brick_type_id, trucks, pieces_per_truck, rate").in("contract_id", ids).order("id")),
     fetchAllRows<any>(() => supabase.from("sales_entries").select("id, contract_id, brick_type_id, quantity, total_amount, status").in("contract_id", ids).neq("status", "rejected").order("id")),
     fetchAllRows<any>(() => supabase.from("collections").select("id, contract_id, amount").in("contract_id", ids).order("id")),
     supabase.from("brick_types").select("id, name"),
@@ -68,20 +75,24 @@ export async function fetchBookings(opts: { customerId?: string } = {}): Promise
   return list.map((c) => {
     const mine = sales.filter((s) => s.contract_id === c.id);
     const its: BookingItem[] = items.filter((i) => i.contract_id === c.id).map((i) => {
+      // one challan = one truck
       const of = mine.filter((s) => s.brick_type_id === i.brick_type_id);
-      const delivered = of.filter((s) => s.status === "approved").reduce((a, s) => a + Number(s.quantity || 0), 0);
-      const pending = of.filter((s) => s.status === "pending").reduce((a, s) => a + Number(s.quantity || 0), 0);
-      const quantity = Number(i.quantity || 0);
+      const ok = of.filter((s) => s.status === "approved");
+      const delivered = ok.length;
+      const pending = of.filter((s) => s.status === "pending").length;
+      const trucks = Number(i.trucks || 0);
       return {
-        brick_type_id: i.brick_type_id, brick: (brickName.get(i.brick_type_id) as string) ?? "ইট", quantity, rate: Number(i.rate || 0),
-        delivered, pending, remaining: Math.max(0, quantity - delivered - pending),
+        brick_type_id: i.brick_type_id, brick: (brickName.get(i.brick_type_id) as string) ?? "ইট",
+        trucks, perTruck: Number(i.pieces_per_truck || 0), rate: Number(i.rate || 0),
+        delivered, deliveredPieces: ok.reduce((a, s) => a + Number(s.quantity || 0), 0), pending,
+        remaining: Math.max(0, trucks - delivered - pending),
       };
     });
     const paid = cols.filter((x) => x.contract_id === c.id).reduce((a, x) => a + Number(x.amount || 0), 0);
     const deliveredValue = mine.filter((s) => s.status === "approved").reduce((a, s) => a + Number(s.total_amount || 0), 0);
     return {
       id: c.id, no: c.contract_no, customer_id: c.customer_id, customer: c.customer?.name ?? "—", date: c.start_date, status: c.status, note: c.notes,
-      items: its, value: its.reduce((a, i) => a + i.quantity * i.rate, 0), paid, deliveredValue, owed: paid - deliveredValue,
+      items: its, value: its.reduce((a, i) => a + i.trucks * i.perTruck * i.rate, 0), paid, deliveredValue, owed: paid - deliveredValue,
     };
   });
 }
@@ -94,13 +105,4 @@ export function bookingFor(bookings: Booking[], bookingId: string, brickTypeId: 
   const b = bookings.find((x) => x.id === bookingId);
   const item = b?.items.find((i) => i.brick_type_id === brickTypeId);
   return b && item ? { booking: b, item } : null;
-}
-
-/**
- * How a challan of `qty` pieces splits against a booking line: up to what is left at the
- * booking price, the rest as a normal sale (the day's price).
- */
-export function splitAgainstBooking(qty: number, remaining: number) {
-  const fromBooking = Math.max(0, Math.min(qty, remaining));
-  return { fromBooking, extra: Math.max(0, qty - fromBooking) };
 }

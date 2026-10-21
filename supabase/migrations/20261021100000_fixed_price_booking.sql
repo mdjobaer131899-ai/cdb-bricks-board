@@ -1,6 +1,8 @@
--- Fixed-price brick booking (অগ্রিম ইট বিক্রি): a customer books bricks of one or more
--- types at a fixed price per piece and pays in full up front. Challans delivered
--- against it keep that price; bricks beyond the booking are a normal sale.
+-- Fixed-price brick booking (অগ্রিম ইট বিক্রি): a customer books a number of trucks
+-- (গাড়ি) of one or more brick types at a fixed price per piece and pays in full up
+-- front (trucks × usual pieces per truck × rate). Each challan against it is one truck
+-- and keeps that price for its actual pieces; the owner decides per challan whether a
+-- truck comes from the booking — other trucks are a normal sale at the day's price.
 --
 -- A booking is a contracts row (contract_type 'yearly_fixed') with its brick types in
 -- contract_items; the money is a collections row with contract_id. Advance money
@@ -10,7 +12,8 @@ create table if not exists public.contract_items (
   id uuid primary key default gen_random_uuid(),
   contract_id uuid not null references public.contracts(id) on delete cascade,
   brick_type_id uuid not null references public.brick_types(id) on delete restrict,
-  quantity numeric not null check (quantity > 0),
+  trucks numeric not null check (trucks > 0),
+  pieces_per_truck numeric not null check (pieces_per_truck > 0),
   rate numeric not null check (rate >= 0),
   created_at timestamptz not null default now(),
   unique (contract_id, brick_type_id)
@@ -47,10 +50,11 @@ begin
     raise exception 'অন্তত একটি ইটের ধরন দিন';
   end if;
   for it in select * from jsonb_array_elements(_items) loop
-    if coalesce((it->>'quantity')::numeric, 0) <= 0 then raise exception 'পরিমাণ দিন'; end if;
+    if coalesce((it->>'trucks')::numeric, 0) <= 0 then raise exception 'কত গাড়ি, দিন'; end if;
+    if coalesce((it->>'pieces_per_truck')::numeric, 0) <= 0 then raise exception 'গাড়িতে কত পিস, দিন'; end if;
     if coalesce((it->>'rate')::numeric, -1) < 0 then raise exception 'দাম দিন'; end if;
-    v_qty := v_qty + (it->>'quantity')::numeric;
-    v_value := v_value + (it->>'quantity')::numeric * (it->>'rate')::numeric;
+    v_qty := v_qty + (it->>'trucks')::numeric * (it->>'pieces_per_truck')::numeric;
+    v_value := v_value + (it->>'trucks')::numeric * (it->>'pieces_per_truck')::numeric * (it->>'rate')::numeric;
   end loop;
 
   select count(*) + 1 into v_n from public.contracts where contract_type = 'yearly_fixed';
@@ -60,12 +64,13 @@ begin
     v_n := v_n + 1;
   end loop;
 
-  insert into public.contracts (contract_no, customer_id, contract_type, start_date, fixed_rate, booked_quantity, booked_value, notes, created_by, approved_by)
-  values (v_no, _customer_id, 'yearly_fixed', _date, null, v_qty, round(v_value, 2), nullif(trim(_note), ''), auth.uid(), auth.uid())
+  insert into public.contracts (contract_no, customer_id, contract_type, start_date, fixed_rate, booked_quantity, booked_value, truck_quantity, notes, created_by, approved_by)
+  values (v_no, _customer_id, 'yearly_fixed', _date, null, v_qty, round(v_value, 2),
+          (select sum((x->>'trucks')::numeric) from jsonb_array_elements(_items) x), nullif(trim(_note), ''), auth.uid(), auth.uid())
   returning id into v_id;
 
-  insert into public.contract_items (contract_id, brick_type_id, quantity, rate)
-  select v_id, (x->>'brick_type_id')::uuid, (x->>'quantity')::numeric, (x->>'rate')::numeric
+  insert into public.contract_items (contract_id, brick_type_id, trucks, pieces_per_truck, rate)
+  select v_id, (x->>'brick_type_id')::uuid, (x->>'trucks')::numeric, (x->>'pieces_per_truck')::numeric, (x->>'rate')::numeric
   from jsonb_array_elements(_items) x;
 
   if coalesce(_paid, 0) > 0 then

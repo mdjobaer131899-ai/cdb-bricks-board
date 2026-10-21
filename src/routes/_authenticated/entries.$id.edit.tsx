@@ -241,11 +241,12 @@ function EditEntryPage() {
       setConfirmApprove(false);
       return;
     }
-    // a booking delivery must fit what is left on it (this challan's own pieces are already counted as waiting)
+    // one challan = one truck; the booking must still have a truck for it
+    // (this challan, if already waiting on the booking, is counted in what is left)
     if (selectedBooking) {
-      const own = entry.contract_id === selectedBooking.id && entry.status === "pending" ? Number(entry.quantity) || 0 : 0;
-      if (qty > selectedBooking.remaining + own + 0.001) {
-        toast.error(`বুকিং ${selectedBooking.no}-এ বাকি ${bn(selectedBooking.remaining + own)} পিস। বাড়তিটা আলাদা চালানে আজকের দামে দিন।`);
+      const own = entry.contract_id === selectedBooking.id && entry.status === "pending" ? 1 : 0;
+      if (selectedBooking.remaining + own < 1) {
+        toast.error(`বুকিং ${selectedBooking.no}-এর সব গাড়ি দেওয়া শেষ। এটা আজকের দামে দিন।`);
         setConfirmApprove(false);
         return;
       }
@@ -444,7 +445,7 @@ function EditEntryPage() {
                   </SelectItem>
                   {bookingOptions.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.no} · প্রতি পিস ৳{bn(c.rate)} · বাকি {bn(c.remaining)}
+                      {c.no} · প্রতি পিস ৳{bn(c.rate)} · বাকি {bn(c.remaining)} গাড়ি
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -164,7 +164,7 @@ export interface KilnSnapshot {
   loans: { party: string; amount: number; direction: string; date: string }[];
   loanPaid: { party: string; amount: number; direction: string }[];
   /** fixed-price bookings with bricks still owed (lib/bookings.ts), all time */
-  bookings: { id: string; no: string; customerId: string; customer: string; owed: number; piecesLeft: number }[];
+  bookings: { id: string; no: string; customerId: string; customer: string; owed: number; trucksLeft: number }[];
   cashSeason: CashSummary | null;
   cashToday: CashSummary | null;
   failed: string[];
@@ -458,7 +458,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
   try {
     bookings = (await fetchBookings()).map((b) => ({
       id: b.id, no: b.no, customerId: b.customer_id, customer: b.customer, owed: b.owed,
-      piecesLeft: b.items.reduce((a, i) => a + i.remaining, 0),
+      trucksLeft: b.items.reduce((a, i) => a + i.remaining, 0),
     }));
   } catch (e: any) {
     console.warn("[AI] বুকিং পড়া যায়নি:", e?.message ?? e);

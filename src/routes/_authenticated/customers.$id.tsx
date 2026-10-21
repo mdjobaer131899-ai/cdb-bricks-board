@@ -214,7 +214,7 @@ function CustomerDetailPage() {
         const regular = regularSales - regularPaid; // > 0 customer owes, < 0 advance money
         const bookings = bookingsQ.data ?? [];
         const owed = bookings.reduce((a, b) => a + b.owed, 0); // > 0 bricks we still give
-        const piecesLeft = bookings.reduce((a, b) => a + b.items.reduce((s2, i) => s2 + i.remaining, 0), 0);
+        const trucksLeft = bookings.reduce((a, b) => a + b.items.reduce((s2, i) => s2 + i.remaining, 0), 0);
         const net = regular - owed;
         return (
           <Card>
@@ -238,12 +238,12 @@ function CustomerDetailPage() {
                     {bookings.map((b) => (
                       <div key={b.id} className="text-sm">
                         <div className="flex justify-between"><b>{b.no}</b><span className="tabular-nums">টাকা ৳ {bn(Math.round(b.paid))} · ইট দেওয়া ৳ {bn(Math.round(b.deliveredValue))}</span></div>
-                        <div className="text-xs text-muted-foreground">{b.items.map((i) => `${i.brick}: বাকি ${bn(i.remaining)} পিস (৳${bn(i.rate)})`).join(" · ")}</div>
+                        <div className="text-xs text-muted-foreground">{b.items.map((i) => `${i.brick}: ${bn(i.trucks)} গাড়ির ${bn(i.delivered)} দেওয়া, বাকি ${bn(i.remaining)} গাড়ি (প্রতি পিস ৳${bn(i.rate)})`).join(" · ")}</div>
                       </div>
                     ))}
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-center">
-                    <Mini label="বাকি ইট" value={`${bn(piecesLeft)} পিস`} />
+                    <Mini label="বাকি গাড়ি" value={`${bn(trucksLeft)} গাড়ি`} />
                     <Mini label={owed >= 0 ? "ইট দেওয়া বাকি" : "গ্রাহকের বাকি"} value={`৳ ${bn(Math.abs(Math.round(owed)))}`} tone="warning" />
                   </div>
                 </div>

@@ -82,15 +82,15 @@ function BookingTab({ isAdmin }: { isAdmin: boolean }) {
   const all = q.data ?? [];
   const open = all.filter(isOpen);
   const list = showDone ? all : open;
-  const piecesLeft = open.reduce((a, b) => a + b.items.reduce((s, i) => s + i.remaining, 0), 0);
+  const trucksLeft = open.reduce((a, b) => a + b.items.reduce((s, i) => s + i.remaining, 0), 0);
   const owed = all.filter((b) => b.owed > 0.5).reduce((a, b) => a + b.owed, 0);
 
   const print = () => printTable({
     title: "ঠিক দামে বুকিং",
-    headers: ["বুকিং", "গ্রাহক", "ইট", "বুকিং", "দাম", "দেওয়া", "বাকি"],
+    headers: ["বুকিং", "গ্রাহক", "ইট", "বুকিং (গাড়ি)", "প্রতি পিস", "দেওয়া (গাড়ি)", "বাকি (গাড়ি)"],
     rightCols: [3, 4, 5, 6],
-    rows: list.flatMap((b) => b.items.map((i) => [b.no, b.customer, i.brick, bn(i.quantity), tk(i.rate), bn(i.delivered), bn(i.remaining)])),
-    totals: [["বাকি ইট (পিস)", bn(piecesLeft)], ["ইট দেওয়া বাকি (টাকায়)", tk(owed)]],
+    rows: list.flatMap((b) => b.items.map((i) => [b.no, b.customer, i.brick, bn(i.trucks), tk(i.rate), bn(i.delivered), bn(i.remaining)])),
+    totals: [["বাকি গাড়ি", bn(trucksLeft)], ["ইট দেওয়া বাকি (টাকায়)", tk(owed)]],
   });
 
   return (
@@ -101,8 +101,8 @@ function BookingTab({ isAdmin }: { isAdmin: boolean }) {
           <div className="num font-display text-xl font-extrabold text-info">{tk(owed)}</div>
         </div>
         <div className="rounded-2xl border bg-card p-3">
-          <div className="text-xs font-semibold text-muted-foreground">বাকি ইট</div>
-          <div className="num font-display text-xl font-extrabold">{bn(piecesLeft)} পিস</div>
+          <div className="text-xs font-semibold text-muted-foreground">বাকি গাড়ি</div>
+          <div className="num font-display text-xl font-extrabold">{bn(trucksLeft)} গাড়ি</div>
         </div>
       </div>
 
@@ -133,14 +133,14 @@ function BookingTab({ isAdmin }: { isAdmin: boolean }) {
                 <div key={i.brick_type_id} className="px-4 py-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold">{i.brick}</span>
-                    <span className="num text-sm text-muted-foreground">প্রতি পিস {tk(i.rate)}</span>
+                    <span className="num text-sm text-muted-foreground">প্রতি পিস {tk(i.rate)} · গাড়িতে ~{bn(i.perTruck)} পিস</span>
                   </div>
                   <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
-                    <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(100, ((i.delivered + i.pending) / (i.quantity || 1)) * 100)}%` }} />
+                    <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.min(100, ((i.delivered + i.pending) / (i.trucks || 1)) * 100)}%` }} />
                   </div>
                   <div className="num mt-1 flex justify-between text-xs">
-                    <span>বুকিং {bn(i.quantity)} · দেওয়া {bn(i.delivered)}{i.pending ? ` · অনুমোদনের অপেক্ষায় ${bn(i.pending)}` : ""}</span>
-                    <b className={i.remaining > 0 ? "text-warning" : "text-success"}>বাকি {bn(i.remaining)}</b>
+                    <span>বুকিং {bn(i.trucks)} গাড়ি · দেওয়া {bn(i.delivered)} ({bn(i.deliveredPieces)} পিস){i.pending ? ` · অপেক্ষায় ${bn(i.pending)}` : ""}</span>
+                    <b className={i.remaining > 0 ? "text-warning" : "text-success"}>বাকি {bn(i.remaining)} গাড়ি</b>
                   </div>
                 </div>
               ))}
@@ -159,7 +159,7 @@ function BookingTab({ isAdmin }: { isAdmin: boolean }) {
           {showDone ? "শুধু চলতি বুকিং দেখান" : `শেষ হওয়া বুকিংও দেখান (${bn(all.length - open.length)})`}
         </button>
       )}
-      <p className="px-1 text-xs text-muted-foreground">ইট দেওয়ার সময় "নতুন চালান"-এ গ্রাহক আর ইটের ধরন বাছলে তার বুকিং দেখাবে। বুকিংয়ের চেয়ে বেশি দিলে বাড়তিটা আলাদা চালানে সেদিনের দামে যায়।</p>
+      <p className="px-1 text-xs text-muted-foreground">প্রতিটি চালান এক গাড়ি। "নতুন চালান"-এ গ্রাহক আর ইট বাছলে বুকিং দেখাবে; যে গাড়ি বুকিং থেকে দিচ্ছেন সেটায় বুকিং বাছুন, দাম হবে বুকিংয়ের দাম × আসল পিস। বাকি গাড়িগুলো "বুকিং থেকে নয়" বাছলে সেদিনের দামে যায়, তার নগদ টাকা কালেকশনে নিন, না হলে অগ্রিম টাকা থেকে কাটে।</p>
 
       {newOpen && <NewBookingDialog onClose={() => setNewOpen(false)} />}
       {cancel && <CancelDialog b={cancel} onClose={() => setCancel(null)} />}
@@ -167,7 +167,7 @@ function BookingTab({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-type Line = { brick_type_id: string; quantity: string; rate: string };
+type Line = { brick_type_id: string; trucks: string; perTruck: string; rate: string };
 
 function NewBookingDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
@@ -176,29 +176,31 @@ function NewBookingDialog({ onClose }: { onClose: () => void }) {
   const bricks = (bricksQ.data ?? []).filter((b: any) => b.name !== "অন্যান্য");
   const [customerId, setCustomerId] = useState("");
   const [date, setDate] = useState(todayBD());
-  const [lines, setLines] = useState<Line[]>([{ brick_type_id: "", quantity: "", rate: "" }]);
+  const [lines, setLines] = useState<Line[]>([{ brick_type_id: "", trucks: "", perTruck: "", rate: "" }]);
   const [method, setMethod] = useState("cash");
   const [note, setNote] = useState("");
 
-  const value = lines.reduce((a, l) => a + (Number(l.quantity) || 0) * (Number(l.rate) || 0), 0);
+  const lineValue = (l: Line) => (Number(l.trucks) || 0) * (Number(l.perTruck) || 0) * (Number(l.rate) || 0);
+  const value = lines.reduce((a, l) => a + lineValue(l), 0);
   const setLine = (i: number, p: Partial<Line>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...p } : l)));
   const used = new Set(lines.map((l) => l.brick_type_id));
 
   const save = useMutation({
     mutationFn: async () => {
       if (!customerId) throw new Error("গ্রাহক বাছুন");
-      const items = lines.filter((l) => l.brick_type_id || l.quantity || l.rate);
+      const items = lines.filter((l) => l.brick_type_id || l.trucks || l.rate);
       if (!items.length) throw new Error("অন্তত একটি ইটের ধরন দিন");
       for (const l of items) {
         if (!l.brick_type_id) throw new Error("ইটের ধরন বাছুন");
-        if (!(Number(l.quantity) > 0)) throw new Error("পরিমাণ দিন");
+        if (!(Number(l.trucks) > 0)) throw new Error("কত গাড়ি, লিখুন");
+        if (!(Number(l.perTruck) > 0)) throw new Error("এক গাড়িতে কত পিস, লিখুন");
         if (!(Number(l.rate) > 0)) throw new Error("প্রতি পিসের দাম দিন");
       }
       // the whole booked value is taken today
       const amount = Math.round(value * 100) / 100;
       const { error } = await (supabase.rpc as any)("create_booking", {
         _customer_id: customerId, _date: date,
-        _items: items.map((l) => ({ brick_type_id: l.brick_type_id, quantity: Number(l.quantity), rate: Number(l.rate) })),
+        _items: items.map((l) => ({ brick_type_id: l.brick_type_id, trucks: Number(l.trucks), pieces_per_truck: Number(l.perTruck), rate: Number(l.rate) })),
         _paid: amount, _method: method, _note: note,
       });
       if (error) throw new Error(error.message);
@@ -222,8 +224,8 @@ function NewBookingDialog({ onClose }: { onClose: () => void }) {
             </Select>
           </Section>
 
-          <Section label="কোন ইট, কত, কী দামে" action={
-            <button type="button" className="flex items-center gap-1 text-xs font-bold text-primary" onClick={() => setLines((ls) => [...ls, { brick_type_id: "", quantity: "", rate: "" }])}><Plus className="h-3.5 w-3.5" /> আরেক ধরন</button>
+          <Section label="কোন ইট, কত গাড়ি, কী দামে" action={
+            <button type="button" className="flex items-center gap-1 text-xs font-bold text-primary" onClick={() => setLines((ls) => [...ls, { brick_type_id: "", trucks: "", perTruck: "", rate: "" }])}><Plus className="h-3.5 w-3.5" /> আরেক ধরন</button>
           }>
             {lines.map((l, i) => (
               <div key={i} className="space-y-1.5 rounded-xl bg-muted/50 p-2">
@@ -237,11 +239,12 @@ function NewBookingDialog({ onClose }: { onClose: () => void }) {
                   </Select>
                   {lines.length > 1 && <Button type="button" size="icon" variant="ghost" className="h-10 w-10" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label="সরান"><X className="h-4 w-4" /></Button>}
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div><Label className="text-xs">পরিমাণ (পিস)</Label><Input className="h-10" type="number" inputMode="numeric" min="0" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} /></div>
-                  <div><Label className="text-xs">প্রতি পিস দাম (৳)</Label><Input className="h-10" type="number" inputMode="decimal" min="0" step="0.01" value={l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} /></div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div><Label className="text-xs">কত গাড়ি</Label><Input className="h-10" type="number" inputMode="numeric" min="0" value={l.trucks} onChange={(e) => setLine(i, { trucks: e.target.value })} /></div>
+                  <div><Label className="text-xs">গাড়িতে পিস</Label><Input className="h-10" type="number" inputMode="numeric" min="0" value={l.perTruck} onChange={(e) => setLine(i, { perTruck: e.target.value })} /></div>
+                  <div><Label className="text-xs">প্রতি পিস ৳</Label><Input className="h-10" type="number" inputMode="decimal" min="0" step="0.01" value={l.rate} onChange={(e) => setLine(i, { rate: e.target.value })} /></div>
                 </div>
-                {Number(l.quantity) > 0 && Number(l.rate) > 0 && <div className="num text-right text-xs text-muted-foreground">= {tk(Number(l.quantity) * Number(l.rate))}</div>}
+                {lineValue(l) > 0 && <div className="num text-right text-xs text-muted-foreground">{bn(Number(l.trucks))} গাড়ি × {bn(Number(l.perTruck))} পিস × {tk(Number(l.rate))} = {tk(lineValue(l))}</div>}
               </div>
             ))}
             <div className="num flex items-center justify-between rounded-xl bg-muted px-3 py-2 font-bold"><span>মোট দাম</span><span>{tk(value)}</span></div>
