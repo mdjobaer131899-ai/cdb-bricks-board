@@ -4,6 +4,7 @@ import { fetchCashSummary } from "@/lib/cash-queries";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
 import { payWorker } from "@/lib/worker-pay";
+import { fetchBookings } from "@/lib/bookings";
 
 /* ============================================================================
  * CDB Bricks AI ব্রেন
@@ -162,6 +163,8 @@ export interface KilnSnapshot {
   opening: OpeningLine[];
   loans: { party: string; amount: number; direction: string; date: string }[];
   loanPaid: { party: string; amount: number; direction: string }[];
+  /** fixed-price bookings with bricks still owed (lib/bookings.ts), all time */
+  bookings: { id: string; no: string; customerId: string; customer: string; owed: number; piecesLeft: number }[];
   cashSeason: CashSummary | null;
   cashToday: CashSummary | null;
   failed: string[];
@@ -450,10 +453,23 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     };
   });
 
+  // fixed-price bookings: money taken, bricks still to give
+  let bookings: KilnSnapshot["bookings"] = [];
+  try {
+    bookings = (await fetchBookings()).map((b) => ({
+      id: b.id, no: b.no, customerId: b.customer_id, customer: b.customer, owed: b.owed,
+      piecesLeft: b.items.reduce((a, i) => a + i.remaining, 0),
+    }));
+  } catch (e: any) {
+    console.warn("[AI] বুকিং পড়া যায়নি:", e?.message ?? e);
+    failed.push("বুকিং");
+  }
+
   return {
     today,
     yesterday,
     monthStart,
+    bookings,
     customers: Array.from(custMap.values()),
     brickTypes: brickTypes.map((b) => ({
       id: b.id,

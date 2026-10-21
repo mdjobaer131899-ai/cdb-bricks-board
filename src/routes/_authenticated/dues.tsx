@@ -35,7 +35,7 @@ function DuesPage() {
   const pTotal = (dues?.pay ?? []).reduce((a, l) => a + l.total, 0);
   const net = rTotal - pTotal;
   // part of what we owe is bricks (advance taken), not cash
-  const brickOwed = (dues?.pay ?? []).filter((l) => l.key === "customer-advance" || l.key === "old-brick-due").reduce((a, l) => a + l.total, 0);
+  const brickOwed = (dues?.pay ?? []).filter((l) => l.key === "customer-advance" || l.key === "old-brick-due" || l.key === "booking-owed").reduce((a, l) => a + l.total, 0);
 
   const print = () => printTable({
     title: "পাওনা-দেনা",

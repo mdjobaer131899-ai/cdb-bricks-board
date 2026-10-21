@@ -9,7 +9,7 @@ export const PAGES: { key: string; label: string }[] = [
   { key: "/approvals", label: "অনুমোদন" },
   { key: "/customers", label: "গ্রাহক" },
   { key: "/collections", label: "কালেকশন" },
-  { key: "/advance-sales", label: "অগ্রিম ইট বিক্রয়" },
+  { key: "/advance-sales", label: "অগ্রিম বিক্রি (বুকিং ও অগ্রিম টাকা)" },
   { key: "/production-steps/kacha", label: "কাঁচা ইট (মিল)" },
   { key: "/production-steps/load", label: "ভাটায় ঢোকানো" },
   { key: "/production-steps/unload", label: "বের করা" },

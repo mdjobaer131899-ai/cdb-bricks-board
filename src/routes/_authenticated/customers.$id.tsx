@@ -12,6 +12,7 @@ import { sdb } from "@/lib/season-db";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { CustomerLedger } from "@/components/customer-ledger";
+import { fetchBookings } from "@/lib/bookings";
 import { InvoiceDocument, type InvoiceData } from "@/components/invoice-document";
 import { shareNodeAsImage, downloadNodeAsImage, printNode } from "@/lib/share-invoice";
 
@@ -41,26 +42,18 @@ function CustomerDetailPage() {
     },
   });
 
-  const contractsQ = useQuery({
-    queryKey: ["customer-contracts", id],
-    queryFn: async () => {
-      const { data, error } = await sdb
-        .from("contracts")
-        .select("id, contract_no, status, contract_type, booked_quantity, delivered_quantity, booked_value, fixed_rate")
-        .eq("customer_id", id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  // fixed-price bookings: their own account (paid in full, bricks still to give)
+  const bookingsQ = useQuery({ queryKey: ["bookings", id], queryFn: () => fetchBookings({ customerId: id }) });
 
   const collectionsTotalQ = useQuery({
     queryKey: ["customer-collections-total", id],
     queryFn: async () => {
+      // the normal account only: money taken for a booking belongs to the booking
       const { data, error } = await sdb
         .from("collections")
         .select("amount")
-        .eq("customer_id", id);
+        .eq("customer_id", id)
+        .is("contract_id", null);
       if (error) throw error;
       return (data ?? []).reduce((s, r) => s + Number(r.amount || 0), 0);
     },
@@ -72,7 +65,7 @@ function CustomerDetailPage() {
     queryFn: async () => {
       const { data, error } = await sdb
         .from("sales_entries")
-        .select("id, challan_no, sale_date, quantity, total_amount, status, brick_type:brick_types(name), custom_brick_name")
+        .select("id, challan_no, sale_date, quantity, total_amount, status, contract_id, brick_type:brick_types(name), custom_brick_name")
         .eq("customer_id", id)
         .order("sale_date", { ascending: true })
         .order("created_at", { ascending: true });
@@ -214,30 +207,54 @@ function CustomerDetailPage() {
         </CardContent>
       </Card>
 
-      {/* 360 Summary: Contracts, Collections, Advance, Due */}
+      {/* The customer's accounts, apart, and the total below */}
       {(() => {
-        const contracts = contractsQ.data ?? [];
-        const totalCollected = collectionsTotalQ.data ?? 0;
-        const totalBookedQty = contracts.reduce((s, c) => s + Number(c.booked_quantity || 0), 0);
-        const totalDeliveredQty = contracts.reduce((s, c) => s + Number(c.delivered_quantity || 0), 0);
-        const totalBookedValue = contracts.reduce((s, c) => s + Number(c.booked_value || 0), 0);
-        const advance = Number(customer.advance_balance || 0);
-        // Due = approved sales - collections (positive = customer owes)
-        const due = totals.approved - totalCollected;
+        const regularSales = rows.filter((r: any) => r.status === "approved" && !r.contract_id).reduce((a, r) => a + (Number(r.total_amount) || 0), 0);
+        const regularPaid = collectionsTotalQ.data ?? 0;
+        const regular = regularSales - regularPaid; // > 0 customer owes, < 0 advance money
+        const bookings = bookingsQ.data ?? [];
+        const owed = bookings.reduce((a, b) => a + b.owed, 0); // > 0 bricks we still give
+        const piecesLeft = bookings.reduce((a, b) => a + b.items.reduce((s2, i) => s2 + i.remaining, 0), 0);
+        const net = regular - owed;
         return (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">গ্রাহক ৩৬০° সারসংক্ষেপ</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Mini label="মোট চুক্তি বুকিং (পিস)" value={bn(totalBookedQty)} />
-              <Mini label="ডেলিভারি হয়েছে" value={bn(totalDeliveredQty)} />
-              <Mini label="চুক্তি বাকি" value={bn(Math.max(0, totalBookedQty - totalDeliveredQty))} tone="warning" />
-              <Mini label="মোট চুক্তি মূল্য" value={`৳ ${bn(totalBookedValue)}`} />
-              <Mini label="মোট কালেকশন" value={`৳ ${bn(totalCollected)}`} tone="success" />
-              <Mini label="অগ্রিম জমা" value={`৳ ${bn(advance)}`} tone={advance > 0 ? "success" : undefined} />
-              <Mini label={due >= 0 ? "মোট বকেয়া" : "অতিরিক্ত জমা"} value={`৳ ${bn(Math.abs(Math.round(due)))}`} tone={due > 0 ? "destructive" : "success"} />
-              <Mini label="সক্রিয় চুক্তি" value={`${bn(contracts.filter((c) => c.status === "active").length)} টি`} />
+            <CardHeader><CardTitle className="text-base">হিসাব (এই মৌসুম)</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-xl border p-3">
+                <div className="mb-2 text-sm font-bold">সাধারণ কেনা ও অগ্রিম টাকা</div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <Mini label="ইট নিয়েছে" value={`৳ ${bn(Math.round(regularSales))}`} />
+                  <Mini label="টাকা দিয়েছে" value={`৳ ${bn(Math.round(regularPaid))}`} tone="success" />
+                  <Mini label={regular >= 0 ? "বাকি" : "অগ্রিম জমা"} value={`৳ ${bn(Math.abs(Math.round(regular)))}`} tone={regular > 0.5 ? "warning" : "success"} />
+                </div>
+              </div>
+              {bookings.length > 0 && (
+                <div className="rounded-xl border p-3">
+                  <div className="mb-2 flex items-center justify-between text-sm font-bold">
+                    <span>ঠিক দামে বুকিং</span>
+                    <Link to="/advance-sales" search={{ t: "booking" }} className="text-xs font-semibold text-primary">সব বুকিং</Link>
+                  </div>
+                  <div className="space-y-1.5">
+                    {bookings.map((b) => (
+                      <div key={b.id} className="text-sm">
+                        <div className="flex justify-between"><b>{b.no}</b><span className="tabular-nums">টাকা ৳ {bn(Math.round(b.paid))} · ইট দেওয়া ৳ {bn(Math.round(b.deliveredValue))}</span></div>
+                        <div className="text-xs text-muted-foreground">{b.items.map((i) => `${i.brick}: বাকি ${bn(i.remaining)} পিস (৳${bn(i.rate)})`).join(" · ")}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+                    <Mini label="বাকি ইট" value={`${bn(piecesLeft)} পিস`} />
+                    <Mini label={owed >= 0 ? "ইট দেওয়া বাকি" : "গ্রাহকের বাকি"} value={`৳ ${bn(Math.abs(Math.round(owed)))}`} tone="warning" />
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-between rounded-xl bg-muted px-3 py-3">
+                <b>সব মিলিয়ে</b>
+                <b className={`tabular-nums ${net > 0.5 ? "text-warning" : "text-success"}`}>
+                  {Math.abs(net) < 0.5 ? "সমান" : net > 0 ? `গ্রাহক দেবে ৳ ${bn(Math.round(net))}` : `আমরা দেব (ইট) ৳ ${bn(Math.round(-net))}`}
+                </b>
+              </div>
+              <p className="text-xs text-muted-foreground">গত বছরের জের এখানে নেই, তা নিচের লেজারে আর "পূর্বের বকেয়া" পাতায়।</p>
             </CardContent>
           </Card>
         );

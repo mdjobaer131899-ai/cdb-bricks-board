@@ -20,7 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck, adminOnly: true },
       { title: "গ্রাহক", url: "/customers", icon: Users },
       { title: "কালেকশন", url: "/collections", icon: Wallet },
-      { title: "অগ্রিম ইট বিক্রয়", url: "/advance-sales", icon: PackageCheck },
+      { title: "অগ্রিম বিক্রি", url: "/advance-sales", icon: PackageCheck },
     ],
   },
   {

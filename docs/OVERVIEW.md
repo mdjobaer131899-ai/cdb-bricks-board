@@ -84,7 +84,7 @@ supabase/
 | `/challans`, `/challans/$id` | চালান তালিকা ও ইনভয়েস | তারিখ ধরে চালান দেখা, প্রিন্ট বা শেয়ার | `sales_entries` |
 | `/customers`, `/customers/$id` | গ্রাহক | তালিকা, ৩৬০° সারসংক্ষেপ, লেজার (বিস্তারিত পাতা শুধু admin) | `customers`, `sales_entries`, `collections`, `opening_balances` |
 | `/collections` | কালেকশন | গ্রাহকের টাকা জমা নেওয়া, গ্রাহকভিত্তিক নগদ হিসাব | `collections` |
-| `/advance-sales` | অগ্রিম ইট বিক্রয় | কে কত টাকা দিয়েছে আর কত টাকার ইট নিয়েছে | `collections`, `sales_entries` |
+| `/advance-sales` | অগ্রিম বিক্রি | দুই ভাগ: **ঠিক দামে বুকিং** (কয়েক ধরনের ইট, প্রতিটার ঠিক দাম, পুরো টাকা আগে; পরে দাম বদলালেও এই দামে ইট; চালানে বুকিং বাছলে বাকি পর্যন্ত এই দামে, বাড়তি আলাদা চালানে সেদিনের দামে) আর **অগ্রিম টাকা** (আগে টাকা, ইট নেওয়ার দিনের দামে) | `contracts` + `contract_items` + `collections.contract_id` (RPC `create_booking`, `cancel_booking`; [bookings.ts](../src/lib/bookings.ts)); অগ্রিম টাকা = `collections` (চুক্তি ছাড়া) |
 
 **চালানের ধাপ:** তৈরি (pending) → admin দাম বসিয়ে অনুমোদন (approved) → তখনই স্টক কমে, গ্রাহকের হিসাব আর জার্নাল আপডেট হয় (ট্রিগার দিয়ে)। admin নিজে চালান বানালে তা সাথে সাথে অনুমোদিত হয় (`sales_admin_auto_approve` ট্রিগার)। চালান নম্বর ডাটাবেস ফাংশন `next_challan_number` দেয়, ফরম্যাট `CDB-YYYYMMDD-001`।
 

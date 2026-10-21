@@ -19,6 +19,7 @@ import { sdb } from "@/lib/season-db";
 import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { isoDate, bn } from "@/lib/format";
+import { fetchBookings, isOpen } from "@/lib/bookings";
 import { fetchCustomerOpeningDues, OPENING_NONE } from "@/lib/opening-adjust";
 import { toast } from "sonner";
 
@@ -96,25 +97,20 @@ function EditEntryPage() {
   const [contractId, setContractId] = useState<string>("");
   const [openingId, setOpeningId] = useState<string>("");
 
-  // Active contracts for this entry's customer (admins use this to assign delivery to a contract)
+  // the customer's fixed-price bookings that hold this brick type (lib/bookings.ts)
   const customerId = entryQ.data?.customer_id;
-  const contractsQ = useQuery({
-    queryKey: ["contracts-for-customer", customerId],
+  const bookingsQ = useQuery({
+    queryKey: ["bookings", customerId],
     enabled: !!customerId && isAdmin,
-    queryFn: async () => {
-      const { data, error } = await sdb
-        .from("contracts")
-        .select("id, contract_no, contract_type, fixed_rate, booked_quantity, status, priority, expiry_date")
-        .eq("customer_id", customerId!)
-        .in("status", ["active"])
-        .order("priority", { ascending: true })
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => fetchBookings({ customerId: customerId! }),
   });
-  const contracts = contractsQ.data ?? [];
-  const selectedContract = contracts.find((c) => c.id === contractId);
+  const bookingOptions = (bookingsQ.data ?? [])
+    .filter((b) => b.id === entryQ.data?.contract_id || isOpen(b))
+    .flatMap((b) => {
+      const it = b.items.find((i) => i.brick_type_id === brickTypeId);
+      return it ? [{ id: b.id, no: b.no, rate: it.rate, remaining: it.remaining }] : [];
+    });
+  const selectedBooking = bookingOptions.find((c) => c.id === contractId);
 
   // গত বছরের গ্রাহক বকেয়া — এই চালান দিয়ে সমন্বয় করা যাবে
   const openingQ = useQuery({
@@ -146,13 +142,11 @@ function EditEntryPage() {
     setLoaded(true);
   }, [entryQ.data, loaded]);
 
-  // When admin picks a yearly_fixed contract, auto-lock the unit price.
+  // a challan against a booking always takes the booking's price for its brick type
   useEffect(() => {
-    if (!isAdmin || !selectedContract) return;
-    if (selectedContract.contract_type === "yearly_fixed" && selectedContract.fixed_rate != null) {
-      setUnitPrice(String(selectedContract.fixed_rate));
-    }
-  }, [contractId, selectedContract, isAdmin]);
+    if (!isAdmin || !selectedBooking) return;
+    setUnitPrice(String(selectedBooking.rate));
+  }, [contractId, selectedBooking?.rate, isAdmin]);
 
   const entry = entryQ.data;
   const selectedBrick = orderedBricks.find((b) => b.id === brickTypeId);
@@ -247,10 +241,14 @@ function EditEntryPage() {
       setConfirmApprove(false);
       return;
     }
-    if (!hasOpening && contracts.length > 0 && (!contractId || contractId === CASH_VALUE)) {
-      toast.error("এই গ্রাহকের active contract আছে — অনুমোদনের আগে contract নির্বাচন করুন");
-      setConfirmApprove(false);
-      return;
+    // a booking delivery must fit what is left on it (this challan's own pieces are already counted as waiting)
+    if (selectedBooking) {
+      const own = entry.contract_id === selectedBooking.id && entry.status === "pending" ? Number(entry.quantity) || 0 : 0;
+      if (qty > selectedBooking.remaining + own + 0.001) {
+        toast.error(`বুকিং ${selectedBooking.no}-এ বাকি ${bn(selectedBooking.remaining + own)} পিস। বাড়তিটা আলাদা চালানে আজকের দামে দিন।`);
+        setConfirmApprove(false);
+        return;
+      }
     }
     setBusy(true);
     const { error } = await supabase
@@ -424,46 +422,44 @@ function EditEntryPage() {
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
-                চুক্তি / খাত নির্বাচন
+                ঠিক দামে বুকিং
               </CardTitle>
-              {selectedContract?.contract_type === "yearly_fixed" && (
+              {selectedBooking && (
                 <Badge variant="outline" className="text-xs gap-1">
                   <Lock className="h-3 w-3" /> রেট লক
                 </Badge>
               )}
             </CardHeader>
             <CardContent className="space-y-2">
-              <Label>এই ডেলিভারি কোন খাতে যাবে?</Label>
+              <Label>এই ইট কি কোনো বুকিং থেকে?</Label>
               <Select value={contractId || CASH_VALUE} onValueChange={setContractId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="চুক্তি বা ক্যাশ নির্বাচন করুন" />
+                  <SelectValue placeholder="বুকিং বা সাধারণ বিক্রি" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={CASH_VALUE}>
                     <span className="inline-flex items-center gap-2">
-                      <Wallet className="h-4 w-4" /> ক্যাশ সেল (কোনো চুক্তি নয়)
+                      <Wallet className="h-4 w-4" /> বুকিং নয় — আজকের দামে
                     </span>
                   </SelectItem>
-                  {contracts.map((c) => (
+                  {bookingOptions.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.contract_no} · {CONTRACT_TYPE_LABEL[c.contract_type] ?? c.contract_type}
-                      {c.fixed_rate != null ? ` · ৳${bn(c.fixed_rate)}` : ""}
+                      {c.no} · প্রতি পিস ৳{bn(c.rate)} · বাকি {bn(c.remaining)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {contractsQ.isLoading && (
-                <p className="text-xs text-muted-foreground">চুক্তি লোড হচ্ছে…</p>
+              {bookingsQ.isLoading && (
+                <p className="text-xs text-muted-foreground">বুকিং লোড হচ্ছে…</p>
               )}
-              {!contractsQ.isLoading && contracts.length === 0 && (
+              {!bookingsQ.isLoading && bookingOptions.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  এই গ্রাহকের কোনো সক্রিয় চুক্তি নেই — ক্যাশ সেল হিসেবে অনুমোদন হবে।
+                  এই গ্রাহকের এই ইটের কোনো বুকিং নেই — আজকের দামে বিক্রি হবে।
                 </p>
               )}
-              {selectedContract && (
+              {selectedBooking && (
                 <div className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
-                  বুকড পরিমাণ: <span className="font-semibold text-foreground">{bn(selectedContract.booked_quantity)}</span>
-                  {selectedContract.expiry_date && <> · মেয়াদ: <span className="font-semibold text-foreground">{selectedContract.expiry_date}</span></>}
+                  দাম বুকিংয়ের: <span className="font-semibold text-foreground">৳{bn(selectedBooking.rate)}</span> প্রতি পিস (বদলানো যায় না)
                 </div>
               )}
             </CardContent>
@@ -516,6 +512,7 @@ function EditEntryPage() {
                     min={0}
                     step="0.01"
                     value={unitPrice}
+                    disabled={!!selectedBooking}
                     onChange={(e) => setUnitPrice(e.target.value)}
                     className="pl-9 font-semibold text-primary"
                     placeholder="০"
