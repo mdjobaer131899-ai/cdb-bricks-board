@@ -23,8 +23,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/80d87ca8-ec6e-4f64-a9db-c80ca15bde03/id-preview-78885079--57bdcb50-1fe5-4e30-8035-0bce45d3b6ee.lovable.app-1780640857850.png" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
+      // installable app (Add to home screen / Install)
+      { name: "theme-color", content: "#a63a1c" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "CDB Bricks" },
     ],
     links: [
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "icon", type: "image/png", sizes: "48x48", href: "/favicon-48.png" },
+      { rel: "icon", type: "image/svg+xml", href: "/cdb-logo.svg" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Anek+Bangla:wght@500;600;700;800&display=swap" },
@@ -133,10 +142,20 @@ function AuthSync() {
   return null;
 }
 
+/** registers public/sw.js on every visit, so the phone can install the app */
+function InstallableApp() {
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => { /* not critical */ });
+  }, []);
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
+      <InstallableApp />
       <AuthSync />
       <KeyboardAware />
       <Outlet />
