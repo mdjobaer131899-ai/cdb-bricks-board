@@ -1,7 +1,7 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, Eye, FolderOpen, Printer, Search } from "lucide-react";
+import { ArrowLeft, ChevronRight, Pencil, Printer, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,9 +12,9 @@ import { printTable } from "@/lib/print-table";
 import { useSeason } from "@/lib/season-context";
 
 /**
- * খরচের খাতা: every money-out head as a folder, the people or items inside, and each
- * one's dated lines with a running balance. Read only — a line opens the page where it
- * is changed (the cash book for money and bills). Numbers come from lib/ledger.ts.
+ * খরচের খাতা: every money-out head is a folder → the names inside → one name's lines.
+ * Everywhere the same sum: আগের বাকি + কাজ/বিল − দিলাম = এখন বাকি. Read only; a line
+ * opens the page where it is changed (the cash book for money and bills).
  */
 type Search = { h?: string; p?: string };
 
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/ledger")({
   head: () => ({
     meta: [
       { title: "খরচের খাতা — CDB Bricks" },
-      { name: "description", content: "সব খরচ খাত অনুযায়ী আলাদা ফোল্ডারে: কত বিল, কত দিলাম, কত বাকি, তারিখ ধরে।" },
+      { name: "description", content: "সব খরচ খাত অনুযায়ী আলাদা ফোল্ডারে: আগের বাকি, কাজ বা বিল, কত দিলাম, এখন কত বাকি।" },
     ],
   }),
   validateSearch: (s: Record<string, unknown>): Search => ({
@@ -34,13 +34,14 @@ export const Route = createFileRoute("/_authenticated/ledger")({
 
 const tk = (n: number) => `৳${bn(Math.round(Math.abs(n)))}`;
 const GROUPS: MoneyGroup[] = [...COST_GROUPS, "move"];
+const BN_MONTH = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
+const monthTitle = (d: string) => `${BN_MONTH[Number(d.slice(5, 7)) - 1] ?? ""} ${bn(Number(d.slice(0, 4)))}`;
 
-/** "বাকি ৳X" / "অগ্রিম ৳X" / "সমান" for a balance */
-function dueText(f: LedgerFolder, due: number) {
-  if (Math.abs(due) < 0.5) return "সমান";
-  return due > 0 ? `${f.words.due} ${tk(due)}` : `${f.words.ahead} ${tk(due)}`;
+/** the word and colour of a balance: owed (amber), paid ahead (blue), settled (green) */
+function due(f: LedgerFolder, n: number) {
+  if (Math.abs(n) < 0.5) return { word: "সমান", tone: "text-success" };
+  return n > 0 ? { word: f.words.due, tone: "text-warning" } : { word: f.words.ahead, tone: "text-info" };
 }
-const dueTone = (due: number) => (Math.abs(due) < 0.5 ? "text-success" : due > 0 ? "text-warning" : "text-info");
 
 function LedgerPage() {
   const { h, p } = Route.useSearch();
@@ -57,13 +58,11 @@ function LedgerPage() {
     else go(p ? { h } : {});
   };
 
-  if (q.isError) {
-    return <div className="mx-auto max-w-3xl rounded-2xl border bg-card p-4 text-sm text-destructive">খাতা আনা যায়নি। ইন্টারনেট দেখে পাতাটা আবার খুলুন।</div>;
-  }
+  if (q.isError) return <div className="mx-auto max-w-2xl rounded-2xl border bg-card p-4 text-sm text-destructive">খাতা আনা যায়নি। ইন্টারনেট দেখে পাতাটা আবার খুলুন।</div>;
   if (!q.data) {
     return (
-      <div className="mx-auto max-w-3xl space-y-3">
-        <Skeleton className="h-24 rounded-[20px]" /><Skeleton className="h-40 rounded-[20px]" /><Skeleton className="h-40 rounded-[20px]" />
+      <div className="mx-auto max-w-2xl space-y-3">
+        <Skeleton className="h-28 rounded-[20px]" /><Skeleton className="h-12 rounded-2xl" /><Skeleton className="h-64 rounded-[20px]" />
       </div>
     );
   }
@@ -72,211 +71,228 @@ function LedgerPage() {
   return <Home folders={folders} seasonName={season?.name ?? ""} onOpen={(key, id) => go(id ? { h: key, p: id } : { h: key })} />;
 }
 
-/* ---------------- all folders ---------------- */
+/* ================= all folders ================= */
 function Home({ folders, seasonName, onOpen }: { folders: LedgerFolder[]; seasonName: string; onOpen: (key: MoneyKey, id?: string) => void }) {
   const [term, setTerm] = useState("");
-  const cost = folders.filter((f) => COST_GROUPS.includes(f.group));
-  const seasonCost = cost.reduce((a, f) => a + f.seasonBill, 0);
-  const seasonPaid = folders.filter((f) => f.key !== "openingOut").reduce((a, f) => a + f.seasonPaid, 0);
+  const used = folders.filter((f) => f.people.length > 0);
+  const cost = used.filter((f) => COST_GROUPS.includes(f.group)).reduce((a, f) => a + f.bill, 0);
+  // what we owe or paid ahead (a loan we gave is owed to us, so it stays out)
+  const people = used.filter((f) => !f.cashOnly && f.key !== "loanGive").flatMap((f) => f.people);
+  const owe = people.filter((x) => x.due > 0.5).reduce((a, x) => a + x.due, 0);
+  const ahead = people.filter((x) => x.due < -0.5).reduce((a, x) => a - x.due, 0);
 
   const found = useMemo(() => {
     const t = term.trim().normalize("NFC").toLowerCase();
     if (!t) return [];
-    return folders.flatMap((f) => f.people.filter((x) => x.name.normalize("NFC").toLowerCase().includes(t)).map((x) => ({ f, x }))).slice(0, 30);
-  }, [term, folders]);
+    return used.flatMap((f) => f.people.filter((x) => x.name.normalize("NFC").toLowerCase().includes(t)).map((x) => ({ f, x }))).slice(0, 40);
+  }, [term, used]);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 pb-28 md:pb-6">
+    <div className="mx-auto max-w-2xl space-y-4 pb-28 md:pb-6">
       <div>
         <h1 className="font-display text-[26px] font-extrabold leading-tight">খরচের খাতা</h1>
-        <p className="text-sm text-muted-foreground">প্রতিটি খরচ আলাদা ফোল্ডারে{seasonName ? ` · ${seasonName}` : ""}</p>
+        <p className="text-sm text-muted-foreground">খাত বেছে নিন, তারপর নাম{seasonName ? ` · ${seasonName}` : ""}</p>
       </div>
 
-      <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-        <div className="text-xs font-bold tracking-[0.12em] text-stone-300">এই মৌসুমের খরচ</div>
-        <div className="mt-2 font-display num text-[40px] font-extrabold leading-[0.95] tracking-tight">{tk(seasonCost)}</div>
-        <div className="mt-3.5 grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="text-xs font-semibold text-stone-300">এই মৌসুমে দিলাম</div>
-            <div className="num text-lg font-bold">{tk(seasonPaid)}</div>
-          </div>
-          <Link to="/dues" className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <span>
-              <span className="block text-xs font-semibold text-stone-300">কে কত পাবে</span>
-              <span className="text-sm font-bold">পাওনা-দেনা</span>
-            </span>
-            <ChevronRight className="h-4 w-4" />
-          </Link>
+      <section className="bg-brick-pattern grid grid-cols-2 gap-3 overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
+        <div>
+          <div className="text-xs font-bold text-stone-300">এই মৌসুমে খরচ</div>
+          <div className="mt-1 font-display num text-[28px] font-extrabold leading-none">{tk(cost)}</div>
         </div>
+        <div>
+          <div className="text-xs font-bold text-stone-300">এখন বাকি দিতে হবে</div>
+          <div className="mt-1 font-display num text-[28px] font-extrabold leading-none text-amber-300">{tk(owe)}</div>
+        </div>
+        {ahead > 0.5 && (
+          <p className="col-span-2 text-xs text-stone-300">অগ্রিম বা দাদন দেওয়া আছে <b className="num text-sky-300">{tk(ahead)}</b> (কাজ বা বিল এলে কেটে যাবে)</p>
+        )}
       </section>
 
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input className="h-12 rounded-2xl pl-9 text-base" placeholder="নাম খুঁজুন (সরদার, দোকান, শ্রমিক…)" value={term} onChange={(e) => setTerm(e.target.value)} />
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+        <Input className="h-12 rounded-2xl pl-11 pr-10 text-base" placeholder="নাম খুঁজুন" value={term} onChange={(e) => setTerm(e.target.value)} />
+        {term && (
+          <button type="button" onClick={() => setTerm("")} aria-label="মুছুন" className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-muted-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {term.trim() ? (
-        <section className="overflow-hidden rounded-[20px] border bg-card">
-          {found.length === 0 ? <p className="p-4 text-sm text-muted-foreground">কিছু পাওয়া যায়নি</p> : (
-            <div className="divide-y">
-              {found.map(({ f, x }) => (
-                <button key={`${f.key}-${x.id}`} type="button" onClick={() => onOpen(f.key, x.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-muted/60">
-                  <HeadIcon k={f.key} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words font-semibold">{x.name}</span>
-                    <span className="text-xs text-muted-foreground">{f.label}</span>
-                  </span>
-                  {!f.cashOnly && <b className={`num shrink-0 text-sm ${dueTone(x.due)}`}>{dueText(f, x.due)}</b>}
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+        <Card>
+          {found.length === 0 ? <p className="p-4 text-sm text-muted-foreground">এই নামে কিছু নেই</p> : found.map(({ f, x }) => (
+            <Row key={`${f.key}-${x.id}`} onClick={() => onOpen(f.key, x.id)} icon={<HeadIcon k={f.key} />} title={x.name} sub={f.label}
+              right={<Amount f={f} n={f.cashOnly ? x.bill : x.due} cash={f.cashOnly} />} />
+          ))}
+        </Card>
       ) : (
         GROUPS.map((g) => {
-          const list = folders.filter((f) => f.group === g);
+          const list = used.filter((f) => f.group === g);
           if (!list.length) return null;
           return (
-            <section key={g} className="space-y-2">
-              <h2 className="section-label px-1">{GROUP_LABEL[g]}</h2>
-              <div className="grid grid-cols-2 gap-2">
-                {list.map((f) => {
-                  const empty = f.people.length === 0;
-                  return (
-                    <button key={f.key} type="button" disabled={empty} onClick={() => onOpen(f.key)}
-                      className={`flex min-h-[124px] flex-col gap-1.5 rounded-2xl border bg-card p-3 text-left transition active:scale-[0.99] ${empty ? "opacity-50" : "hover:bg-muted/50"}`}>
-                      <span className="flex items-center justify-between">
-                        <HeadIcon k={f.key} />
-                        {!empty && <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                      </span>
-                      <span className="text-[15px] font-bold leading-tight">{f.label}</span>
-                      {empty ? (
-                        <span className="mt-auto text-xs text-muted-foreground">এখনো কিছু নেই</span>
-                      ) : (
-                        <>
-                          <span className="num mt-auto text-xs text-muted-foreground">এই মৌসুমে {tk(f.cashOnly ? f.seasonBill : f.key === "openingOut" ? f.seasonPaid : f.seasonBill)}{f.key === "openingOut" ? " দিলাম" : ""}</span>
-                          {!f.cashOnly ? (
-                            <span className={`num text-sm font-extrabold ${dueTone(f.due)}`}>{dueText(f, f.due)}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{bn(f.people.length)}টি নাম</span>
-                          )}
-                        </>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+            <section key={g} className="space-y-1.5">
+              <h2 className="px-1 text-xs font-bold tracking-wide text-muted-foreground">{GROUP_LABEL[g]}</h2>
+              <Card>
+                {list.map((f) => (
+                  <Row key={f.key} onClick={() => onOpen(f.key)} icon={<HeadIcon k={f.key} />} title={f.label}
+                    sub={f.cashOnly ? `${bn(f.people.length)}টি খাতে` : `${bn(f.people.length)} জন · এই মৌসুমে ${f.words.bill} ${tk(f.bill)}`}
+                    right={<Amount f={f} n={f.cashOnly ? f.bill : f.due} cash={f.cashOnly} />} />
+                ))}
+              </Card>
             </section>
           );
         })
       )}
-      <ReadOnlyNote />
+      <Hint />
     </div>
   );
 }
 
-/* ---------------- one folder: the people inside ---------------- */
+/* ================= one folder ================= */
 function FolderView({ f, onBack, onOpen }: { f: LedgerFolder; onBack: () => void; onOpen: (id: string) => void }) {
   const print = () => printTable({
     title: `খরচের খাতা — ${f.label}`,
-    headers: f.cashOnly ? ["নাম", "খরচ"] : ["নাম", f.words.bill, f.words.paid, "বাকি"],
-    rightCols: f.cashOnly ? [1] : [1, 2, 3],
-    rows: f.people.map((x) => f.cashOnly ? [x.name, tk(x.bill)] : [x.name, tk(x.bill), tk(x.paid), `${x.due < 0 ? "−" : ""}${tk(x.due)}`]),
-    totals: f.cashOnly ? [["মোট", tk(f.bill)]] : [[f.words.bill, tk(f.bill)], [f.words.paid, tk(f.paid)], [x0(f.due, f), tk(f.due)]],
+    headers: f.cashOnly ? ["নাম", "খরচ"] : ["নাম", "আগের বাকি", f.words.bill, f.words.paid, "এখন বাকি"],
+    rightCols: f.cashOnly ? [1] : [1, 2, 3, 4],
+    rows: f.people.map((x) => f.cashOnly ? [x.name, tk(x.bill)] : [x.name, signed(x.prev), tk(x.bill), tk(x.paid), signed(x.due)]),
+    totals: f.cashOnly ? [["মোট", tk(f.bill)]] : [["আগের বাকি", signed(f.prev)], [f.words.bill, tk(f.bill)], [f.words.paid, tk(f.paid)], ["এখন বাকি", signed(f.due)]],
   });
   return (
-    <div className="mx-auto max-w-3xl space-y-4 pb-28 md:pb-6">
-      <Header title={f.label} sub={f.note} k={f.key} onBack={onBack} onPrint={print} />
-      <Totals f={f} bill={f.bill} paid={f.paid} due={f.due} />
-      <section className="overflow-hidden rounded-[20px] border bg-card">
-        <div className="divide-y">
-          {f.people.map((x) => (
-            <button key={x.id} type="button" onClick={() => onOpen(x.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-muted/60">
-              <span className="min-w-0 flex-1">
-                <span className="block break-words font-semibold">{x.name}</span>
-                <span className="num text-xs text-muted-foreground">
-                  {x.sub ? `${x.sub} · ` : ""}
-                  {f.cashOnly ? `${bn(x.lines.length)}টি লাইন` : `${f.words.bill} ${tk(x.bill)} · ${f.words.paid} ${tk(x.paid)}`}
-                </span>
-              </span>
-              <b className={`num shrink-0 text-sm ${f.cashOnly ? "" : dueTone(x.due)}`}>{f.cashOnly ? tk(x.bill) : dueText(f, x.due)}</b>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-            </button>
-          ))}
-        </div>
-      </section>
-      <ReadOnlyNote />
+    <div className="mx-auto max-w-2xl space-y-4 pb-28 md:pb-6">
+      <Header title={f.label} k={f.key} onBack={onBack} onPrint={print} />
+      <Sum f={f} prev={f.prev} bill={f.bill} paid={f.paid} now={f.due} />
+      <p className="px-1 text-xs text-muted-foreground">{f.note}</p>
+      <Card>
+        {f.people.map((x) => (
+          <Row key={x.id} onClick={() => onOpen(x.id)} title={x.name}
+            sub={f.cashOnly ? `${bn(x.lines.length)}টি খরচ` : [x.sub, `${f.words.bill} ${tk(x.bill)} · ${f.words.paid} ${tk(x.paid)}`].filter(Boolean).join(" · ")}
+            right={<Amount f={f} n={f.cashOnly ? x.bill : x.due} cash={f.cashOnly} />} />
+        ))}
+      </Card>
+      <Hint />
     </div>
   );
 }
-const x0 = (due: number, f: LedgerFolder) => (due >= 0 ? f.words.due : f.words.ahead);
 
-/* ---------------- one person: dated lines with a running balance ---------------- */
+/* ================= one name: this season's lines by month ================= */
 function PersonView({ f, who, onBack }: { f: LedgerFolder; who: LedgerPerson; onBack: () => void }) {
   const navigate = useNavigate();
-  let run = 0;
+  // running balance from what was owed at the season start
+  let run = who.prev;
   const rows = who.lines.map((l) => { run += l.bill - l.paid; return { l, run }; });
-  const shown = [...rows].reverse(); // newest first on screen
+  const months = useMemo(() => {
+    const m = new Map<string, typeof rows>();
+    for (const r of [...rows].reverse()) {
+      const k = r.l.date.slice(0, 7);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(r);
+    }
+    return [...m.entries()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [who]);
   const open = (l: LedgerLine) => { if (l.link) navigate({ to: l.link.to as never, search: (l.link.search ?? {}) as never }); };
+
   const print = () => printTable({
     title: `${who.name} — ${f.label}`,
     subtitle: who.sub,
     headers: f.cashOnly ? ["তারিখ", "বিবরণ", "টাকা"] : ["তারিখ", "বিবরণ", f.words.bill, f.words.paid, "বাকি"],
     rightCols: f.cashOnly ? [2] : [2, 3, 4],
-    rows: rows.map(({ l, run }) => f.cashOnly
-      ? [bnDate(l.date), [l.text, l.sub].filter(Boolean).join(" · "), tk(l.bill)]
-      : [bnDate(l.date), [l.text, l.sub].filter(Boolean).join(" · "), l.bill ? tk(l.bill) : "", l.paid ? tk(l.paid) : "", `${run < 0 ? "−" : ""}${tk(run)}`]),
-    totals: f.cashOnly ? [["মোট", tk(who.bill)]] : [[f.words.bill, tk(who.bill)], [f.words.paid, tk(who.paid)], [x0(who.due, f), tk(who.due)]],
+    rows: [
+      ...(!f.cashOnly && Math.abs(who.prev) >= 0.5 ? [["", "আগের বাকি", "", "", signed(who.prev)]] : []),
+      ...rows.map(({ l, run }) => f.cashOnly
+        ? [bnDate(l.date), [l.text, l.sub].filter(Boolean).join(" · "), tk(l.bill)]
+        : [bnDate(l.date), [l.text, l.sub].filter(Boolean).join(" · "), l.bill ? tk(l.bill) : "", l.paid ? tk(l.paid) : "", signed(run)]),
+    ],
+    totals: f.cashOnly ? [["মোট", tk(who.bill)]] : [["আগের বাকি", signed(who.prev)], [f.words.bill, tk(who.bill)], [f.words.paid, tk(who.paid)], ["এখন বাকি", signed(who.due)]],
   });
+
   return (
-    <div className="mx-auto max-w-3xl space-y-4 pb-28 md:pb-6">
-      <Header title={who.name} sub={`${f.label}${who.sub ? ` · ${who.sub}` : ""}`} k={f.key} onBack={onBack} onPrint={print} />
-      <Totals f={f} bill={who.bill} paid={who.paid} due={who.due} />
-      <section className="overflow-hidden rounded-[20px] border bg-card">
-        <div className="flex items-center justify-between border-b bg-muted/60 px-4 py-2 text-xs font-semibold text-muted-foreground">
-          <span>তারিখ ও বিবরণ (নতুন আগে)</span>
-          <span>{f.cashOnly ? "টাকা" : "টাকা · তখন বাকি"}</span>
+    <div className="mx-auto max-w-2xl space-y-4 pb-28 md:pb-6">
+      <Header title={who.name} sub={[f.label, who.sub].filter(Boolean).join(" · ")} k={f.key} onBack={onBack} onPrint={print} />
+      <Sum f={f} prev={who.prev} bill={who.bill} paid={who.paid} now={who.due} />
+
+      {rows.length === 0 && <p className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">এই মৌসুমে কোনো লেনদেন নেই, শুধু আগের বাকি।</p>}
+      {months.map(([k, list]) => (
+        <section key={k} className="space-y-1.5">
+          <h2 className="px-1 text-xs font-bold tracking-wide text-muted-foreground">{monthTitle(`${k}-01`)}</h2>
+          <Card>
+            {list.map(({ l, run }) => {
+              const d = due(f, run);
+              const body = (
+                <>
+                  <span className="w-12 shrink-0 text-center">
+                    <span className="block font-display text-lg font-extrabold leading-none">{bn(Number(l.date.slice(8, 10)))}</span>
+                    <span className="block text-[10px] text-muted-foreground">{BN_MONTH[Number(l.date.slice(5, 7)) - 1]}</span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words font-semibold leading-snug">{l.text}</span>
+                    {l.sub && <span className="block break-words text-xs text-muted-foreground">{l.sub}</span>}
+                  </span>
+                  <span className="shrink-0 text-right">
+                    {f.cashOnly ? <b className="num block">{tk(l.bill)}</b> : (
+                      <>
+                        {l.bill > 0 && <b className="num block">+{tk(l.bill)}</b>}
+                        {l.paid > 0 && <b className="num block text-red-700 dark:text-red-300">−{tk(l.paid)}</b>}
+                        <span className={`num block text-[11px] ${d.tone}`}>{d.word} {Math.abs(run) >= 0.5 ? tk(run) : ""}</span>
+                      </>
+                    )}
+                  </span>
+                  {l.link ? <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <span className="w-3.5 shrink-0" />}
+                </>
+              );
+              return l.link ? (
+                <button key={l.id} type="button" onClick={() => open(l)} title={l.linkLabel} className="flex w-full items-center gap-3 px-3 py-3 text-left transition active:bg-muted/60">{body}</button>
+              ) : (
+                <div key={l.id} className="flex items-center gap-3 px-3 py-3">{body}</div>
+              );
+            })}
+          </Card>
+        </section>
+      ))}
+      {!f.cashOnly && Math.abs(who.prev) >= 0.5 && (
+        <div className="flex items-center justify-between rounded-2xl border border-dashed px-4 py-3 text-sm">
+          <span className="font-semibold">মৌসুম শুরুর আগের বাকি</span>
+          <b className={`num ${due(f, who.prev).tone}`}>{due(f, who.prev).word} {tk(who.prev)}</b>
         </div>
-        <div className="divide-y">
-          {shown.map(({ l, run }) => {
-            const inner = (
-              <>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs text-muted-foreground">{bnDate(l.date)}</span>
-                  <span className="block break-words font-semibold leading-snug">{l.text}</span>
-                  {l.sub && <span className="block break-words text-xs text-muted-foreground">{l.sub}</span>}
-                </span>
-                <span className="shrink-0 text-right">
-                  {f.cashOnly ? (
-                    <b className="num block text-red-700 dark:text-red-300">{tk(l.bill)}</b>
-                  ) : (
-                    <>
-                      {l.bill > 0 && <b className="num block text-foreground">+{tk(l.bill)}</b>}
-                      {l.paid > 0 && <b className="num block text-red-700 dark:text-red-300">−{tk(l.paid)}</b>}
-                      <span className={`num block text-[11px] font-semibold ${dueTone(run)}`}>{dueText(f, run)}</span>
-                    </>
-                  )}
-                </span>
-                {l.link ? <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" /> : <span className="w-4 shrink-0" />}
-              </>
-            );
-            return l.link ? (
-              <button key={l.id} type="button" onClick={() => open(l)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-muted/60" title={l.linkLabel}>
-                {inner}
-              </button>
-            ) : (
-              <div key={l.id} className="flex items-center gap-3 px-4 py-3">{inner}</div>
-            );
-          })}
-        </div>
-      </section>
-      <ReadOnlyNote />
+      )}
+      <Hint />
     </div>
   );
 }
 
-/* ---------------- pieces ---------------- */
+/* ================= pieces ================= */
+const signed = (n: number) => `${n < -0.5 ? "−" : ""}${tk(n)}`;
+
+function Card({ children }: { children: ReactNode }) {
+  return <section className="divide-y overflow-hidden rounded-[20px] border bg-card">{children}</section>;
+}
+
+function Row({ onClick, icon, title, sub, right }: { onClick: () => void; icon?: ReactNode; title: string; sub?: string; right: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-muted/60">
+      {icon}
+      <span className="min-w-0 flex-1">
+        <span className="block break-words font-semibold leading-snug">{title}</span>
+        {sub && <span className="num block text-xs text-muted-foreground">{sub}</span>}
+      </span>
+      <span className="shrink-0 text-right">{right}</span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
+
+/** the right-hand number of a row: the balance with its word, or the amount spent */
+function Amount({ f, n, cash }: { f: LedgerFolder; n: number; cash?: boolean }) {
+  if (cash) return <b className="num">{tk(n)}</b>;
+  const d = due(f, n);
+  return (
+    <>
+      <span className={`block text-[11px] font-semibold ${d.tone}`}>{d.word}</span>
+      {Math.abs(n) >= 0.5 && <b className={`num block ${d.tone}`}>{tk(n)}</b>}
+    </>
+  );
+}
+
 function HeadIcon({ k }: { k: MoneyKey }) {
   const h = moneyHead(k);
   return <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${TONE_CLASS[h.tone]}`}><h.icon className="h-5 w-5" /></span>;
@@ -284,51 +300,61 @@ function HeadIcon({ k }: { k: MoneyKey }) {
 
 function Header({ title, sub, k, onBack, onPrint }: { title: string; sub?: string; k: MoneyKey; onBack: () => void; onPrint: () => void }) {
   return (
-    <div className="flex items-start gap-3 pt-1">
+    <div className="flex items-center gap-3 pt-1">
       <button type="button" onClick={onBack} aria-label="ফিরে যান" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border bg-card transition active:scale-95">
         <ArrowLeft className="h-5 w-5" />
       </button>
+      <HeadIcon k={k} />
       <div className="min-w-0 flex-1">
-        <h1 className="font-display flex items-center gap-2 break-words text-[22px] font-extrabold leading-tight"><span className="hidden sm:inline-flex"><HeadIcon k={k} /></span>{title}</h1>
-        {sub && <p className="text-sm text-muted-foreground">{sub}</p>}
+        <h1 className="font-display break-words text-[22px] font-extrabold leading-tight">{title}</h1>
+        {sub && <p className="truncate text-sm text-muted-foreground">{sub}</p>}
       </div>
       <Button variant="outline" size="icon" className="h-11 w-11 shrink-0 rounded-xl" onClick={onPrint} aria-label="প্রিন্ট"><Printer className="h-5 w-5" /></Button>
     </div>
   );
 }
 
-function Totals({ f, bill, paid, due }: { f: LedgerFolder; bill: number; paid: number; due: number }) {
+/** one sum, the same on every level: আগের বাকি + কাজ/বিল − দিলাম = এখন বাকি */
+function Sum({ f, prev, bill, paid, now }: { f: LedgerFolder; prev: number; bill: number; paid: number; now: number }) {
   if (f.cashOnly) {
     return (
-      <div className="rounded-2xl border bg-card p-3">
-        <div className="text-xs font-semibold text-muted-foreground">মোট খরচ</div>
-        <div className="num font-display text-2xl font-extrabold">{tk(bill)}</div>
+      <div className="rounded-[20px] border bg-card p-4">
+        <div className="text-xs font-semibold text-muted-foreground">এই মৌসুমে খরচ</div>
+        <div className="num font-display text-3xl font-extrabold">{tk(bill)}</div>
       </div>
     );
   }
+  const d = due(f, now);
+  const p = due(f, prev);
   return (
-    <div className="grid grid-cols-3 gap-2">
-      <div className="rounded-2xl border bg-card p-3">
-        <div className="text-xs font-semibold text-muted-foreground">{f.words.bill}</div>
-        <div className="num text-base font-bold sm:text-lg">{tk(bill)}</div>
+    <div className="overflow-hidden rounded-[20px] border bg-card">
+      <div className="grid grid-cols-3 divide-x text-center">
+        <div className="px-2 py-3">
+          <div className="text-[11px] font-semibold text-muted-foreground">আগের {Math.abs(prev) >= 0.5 && prev < 0 ? p.word : "বাকি"}</div>
+          <div className="num text-base font-bold">{tk(prev)}</div>
+        </div>
+        <div className="px-2 py-3">
+          <div className="text-[11px] font-semibold text-muted-foreground">+ {f.words.bill}</div>
+          <div className="num text-base font-bold">{tk(bill)}</div>
+        </div>
+        <div className="px-2 py-3">
+          <div className="text-[11px] font-semibold text-muted-foreground">− {f.words.paid}</div>
+          <div className="num text-base font-bold text-red-700 dark:text-red-300">{tk(paid)}</div>
+        </div>
       </div>
-      <div className="rounded-2xl border bg-card p-3">
-        <div className="text-xs font-semibold text-muted-foreground">{f.words.paid}</div>
-        <div className="num text-base font-bold text-red-700 dark:text-red-300 sm:text-lg">{tk(paid)}</div>
-      </div>
-      <div className="rounded-2xl border bg-card p-3">
-        <div className="text-xs font-semibold text-muted-foreground">{x0(due, f)}</div>
-        <div className={`num text-base font-bold sm:text-lg ${dueTone(due)}`}>{tk(due)}</div>
+      <div className="flex items-center justify-between border-t bg-muted/50 px-4 py-3">
+        <span className="font-bold">= এখন {d.word}</span>
+        <b className={`num font-display text-2xl font-extrabold ${d.tone}`}>{Math.abs(now) >= 0.5 ? tk(now) : "৳০"}</b>
       </div>
     </div>
   );
 }
 
-function ReadOnlyNote() {
+function Hint() {
   return (
-    <p className="flex items-start gap-2 rounded-2xl bg-muted/60 px-3 py-2.5 text-xs text-muted-foreground">
-      <Eye className="mt-0.5 h-4 w-4 shrink-0" />
-      <span>এই খাতা শুধু দেখার জন্য। কোনো লাইন বদলাতে বা মুছতে তার উপর চাপুন — আয়-ব্যয়ের পাতা (ক্যাশ বই) খুলবে, সেখানে সংশোধন ও মোছা যায়। কাজের লাইন (কাঁচা ইট, হাজিরা, বেতন) খোলে তার নিজের পাতায়। <FolderOpen className="inline h-3 w-3" /></span>
+    <p className="flex items-center justify-center gap-1.5 px-1 text-center text-xs text-muted-foreground">
+      <Pencil className="h-3.5 w-3.5" /> চিহ্নওয়ালা লাইনে চাপলে সংশোধন ও মোছার পাতা খোলে · এখানে শুধু দেখা
     </p>
   );
 }
+

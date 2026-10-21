@@ -38,17 +38,20 @@ export type LedgerLine = {
   linkLabel?: string;
 };
 
+/**
+ * One name inside a folder, as one sum: prev (what was owed when this season began:
+ * last season's due, older bills and payments) + bill (this season) − paid (this
+ * season) = due (now). `lines` are this season's lines only.
+ */
 export type LedgerPerson = {
   id: string;
   name: string;
   sub?: string;
   lines: LedgerLine[];
+  prev: number;
   bill: number;
   paid: number;
   due: number;
-  /** this season only (no carried-over lines) */
-  seasonBill: number;
-  seasonPaid: number;
 };
 
 export type LedgerFolder = {
@@ -61,11 +64,10 @@ export type LedgerFolder = {
   cashOnly: boolean;
   note: string;
   people: LedgerPerson[];
+  prev: number;
   bill: number;
   paid: number;
   due: number;
-  seasonBill: number;
-  seasonPaid: number;
 };
 
 const BN_MONTH = ["জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"];
@@ -79,7 +81,7 @@ const KACHA_LABEL: Record<string, string> = { production: "কাঁচা ই�
 const KACHA_PAGE: Record<string, string> = { production: "/production-steps/kacha", load: "/production-steps/load", unload: "/production-steps/unload" };
 const CONTRACT_ITEM_HEAD: Record<string, MoneyKey> = { "জমি ভাড়া": "land", "পরিচ্ছন্ন কর্মী": "clean", "গাড়ি ভাড়া": "vehicle", "ভেকু": "veku" };
 
-const LABOUR_WORDS = { bill: "কাজ / পাওনা", paid: "দিলাম", due: "বাকি", ahead: "অগ্রিম" };
+const LABOUR_WORDS = { bill: "কাজ", paid: "দিলাম", due: "বাকি", ahead: "অগ্রিম" };
 const SELLER_WORDS = { bill: "বিল", paid: "দিলাম", due: "বাকি", ahead: "আগাম দেওয়া" };
 const CASH_WORDS = { bill: "খরচ", paid: "দিলাম", due: "বাকি", ahead: "আগাম" };
 
@@ -87,22 +89,21 @@ const CASH_WORDS = { bill: "খরচ", paid: "দিলাম", due: "বাক
 const cashLink = (key: string): LedgerLink => ({ to: "/cash-book", search: { row: key } });
 const billLink = (id: string): LedgerLink => ({ to: "/cash-book", search: { bill: id } });
 
-/** a line of this season (not last season's due, not the carried-over balance) */
-const isSeasonLine = (l: LedgerLine) => {
+/** before this season: last season's due itself, and anything dated before the season start */
+const isEarlier = (l: LedgerLine) => {
   const s = getSeasonRange();
-  return !l.id.startsWith("pre-") && !l.id.startsWith("ob-") && (!s || (l.date >= s.from && l.date <= s.to));
+  return l.id.startsWith("ob-") || (!!s && l.date < s.from);
 };
 
 function person(id: string, name: string, lines: LedgerLine[], sub?: string): LedgerPerson {
-  // by date; on the same day a bill comes before the money given for it
-  const sorted = [...lines].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (b.bill > 0 ? 1 : 0) - (a.bill > 0 ? 1 : 0)));
-  const bill = sorted.reduce((a, l) => a + l.bill, 0);
-  const paid = sorted.reduce((a, l) => a + l.paid, 0);
-  const sl = sorted.filter(isSeasonLine);
-  return {
-    id, name, sub, lines: sorted, bill, paid, due: bill - paid,
-    seasonBill: sl.reduce((a, l) => a + l.bill, 0), seasonPaid: sl.reduce((a, l) => a + l.paid, 0),
-  };
+  const earlier = lines.filter(isEarlier);
+  // this season by date; on the same day a bill comes before the money given for it
+  const now = lines.filter((l) => !isEarlier(l))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (b.bill > 0 ? 1 : 0) - (a.bill > 0 ? 1 : 0)));
+  const prev = earlier.reduce((a, l) => a + l.bill - l.paid, 0);
+  const bill = now.reduce((a, l) => a + l.bill, 0);
+  const paid = now.reduce((a, l) => a + l.paid, 0);
+  return { id, name, sub, lines: now, prev, bill, paid, due: prev + bill - paid };
 }
 
 /** groups day amounts into one line per calendar month */
@@ -159,7 +160,8 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
 
   const folders = new Map<MoneyKey, LedgerPerson[]>();
   const add = (k: MoneyKey, p: LedgerPerson) => {
-    if (!p.lines.length) return;
+    // nothing this season and nothing owed: leave the name out
+    if (!p.lines.length && Math.abs(p.prev) < 0.5) return;
     if (!folders.has(k)) folders.set(k, []);
     folders.get(k)!.push(p);
   };
@@ -233,9 +235,9 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
       sal.push({ id: `o-${t.id}`, date: t.txn_date, text: "বেতন নিলেন", sub: t.note ?? undefined, bill: 0, paid: Number(t.amount || 0), link: cashLink(`o${t.id}`), linkLabel: "ক্যাশ বই" });
     }
     add("ownerSalary", person(o.id, o.name, sal));
-    const wd: LedgerLine[] = ownTx.filter((x) => x.owner_id === o.id && x.txn_type === "withdraw").map((t) => ({
+    const wd: LedgerLine[] = ownTx.filter((x) => x.owner_id === o.id && x.txn_type === "withdraw" && inSeason(x.txn_date)).map((t) => ({
       id: `o-${t.id}`, date: t.txn_date, text: "উত্তোলন", sub: t.note ?? undefined, bill: Number(t.amount || 0), paid: Number(t.amount || 0),
-      ...(inSeason(t.txn_date) ? { link: cashLink(`o${t.id}`), linkLabel: "ক্যাশ বই" } : {}),
+      link: cashLink(`o${t.id}`), linkLabel: "ক্যাশ বই",
     }));
     add("ownerWithdraw", person(o.id, o.name, wd));
   }
@@ -259,22 +261,17 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
     const pays = supPay.filter((p) => (p.supplier_id ?? "__none__") === s.id || (s.id === "__none__" && p.supplier_id && !supplierIds.has(p.supplier_id)));
     if (!bills.length && !pays.length) continue;
     const lines: LedgerLine[] = [];
-    let preBill = 0, prePaid = 0;
+    // bills and payments before the season only add up to "আগের বাকি" (person())
     for (const b of bills) {
-      if (season && b.purchase_date < season.from) { preBill += Number(b.total_amount || 0); continue; }
       const qty = Number(b.quantity) > 0 && b.unit ? `${bn(Number(b.quantity))} ${b.unit}` : "";
       const rate = Number(b.unit_price) > 0 && qty ? ` × ${tk(Number(b.unit_price))}` : "";
       lines.push({ id: `b-${b.id}`, date: b.purchase_date, text: `${b.item_name}${qty ? ` · ${qty}${rate}` : ""}`, sub: b.note ?? undefined, bill: Number(b.total_amount || 0), paid: 0, link: billLink(b.id), linkLabel: "আয়-ব্যয় (ক্যাশ বই)" });
     }
     for (const p of pays) {
-      if (season && p.payment_date < season.from) { prePaid += Number(p.amount || 0); continue; }
       lines.push({
         id: `p-${p.id}`, date: p.payment_date, text: p.method === "bricks" ? "ইট দিয়ে শোধ" : "টাকা দিলাম", sub: p.note ?? undefined, bill: 0, paid: Number(p.amount || 0),
         link: cashLink(`p${p.id}`), linkLabel: p.method === "bricks" ? "ক্যাশ বই (চালান থেকে বদলায়)" : "ক্যাশ বই",
       });
-    }
-    if (preBill || prePaid) {
-      lines.push({ id: `pre-${s.id}`, date: season ? dayBefore(season.from) : "2000-01-01", text: "আগের জের (এই মৌসুম শুরুর আগে)", sub: `বিল ${tk(preBill)} · দিলাম ${tk(prePaid)}`, bill: preBill, paid: prePaid });
     }
     // a bill's own head decides contract folders (land, veku …); sellers go by what they sold
     const head = s.id === "__none__" ? "parts" : supHead(s);
@@ -314,7 +311,9 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
   }
 
   /* ---------- old dues (every one, also those shown inside a person's ledger above) ---------- */
-  for (const ob of openings) {
+  // a sardar's or worker's old due is already in their own folder; only the rest here
+  const known = new Set([...sardars.map((x) => x.id as string), ...workers.map((x) => x.id as string)]);
+  for (const ob of openings.filter((o) => !(o.sardar_id && known.has(o.sardar_id)) && !(o.worker_id && known.has(o.worker_id)))) {
     add("openingOut", person(ob.id, ob.display_name || ob.party_name || "—", openLine(ob), ob.kind === "sardar_payable" ? "সরদার / শ্রমিক" : "অন্যান্য"));
   }
 
@@ -330,18 +329,15 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
       : cashOnly ? CASH_WORDS
       : h.group === "labour" ? LABOUR_WORDS
       : SELLER_WORDS;
-    const note = h.group === "labour"
-      ? "এই মৌসুমের কাজ আর দেওয়া টাকা, সাথে গত বছরের বকেয়া ও তার শোধ। দাদন বা অগ্রিম বেশি দিলে বাকি ঋণাত্মক (অগ্রিম) দেখায়।"
-      : cashOnly ? "নগদে খরচ, বাকি থাকে না। এই মৌসুমের হিসাব" + (h.key === "ownerWithdraw" ? " (উত্তোলন শুরু থেকে)।" : "।")
-      : h.key === "loanGive" || h.key === "loanRepay" || h.key === "openingOut" ? "শুরু থেকে এখন পর্যন্ত।"
-      : "বাকি শুরু থেকে এখন পর্যন্ত; এই মৌসুমের আগের সব একটি \"আগের জের\" লাইনে।";
+    const note = h.group === "labour" ? "আগের বাকি = গত বছরের বকেয়া। এই মৌসুমের কাজ যোগ হয়, দেওয়া টাকা বাদ যায়।"
+      : cashOnly ? "নগদে খরচ, বাকি থাকে না। এই মৌসুমের হিসাব।"
+      : "আগের বাকি = এই মৌসুম শুরুর আগের সব হিসাব। তারপর এই মৌসুমের বিল যোগ, দেওয়া টাকা বাদ।";
     out.push({
       key: h.key, label: h.label, group: h.group, words, cashOnly, note, people,
+      prev: people.reduce((a, p) => a + p.prev, 0),
       bill: people.reduce((a, p) => a + p.bill, 0),
       paid: people.reduce((a, p) => a + p.paid, 0),
       due: people.reduce((a, p) => a + p.due, 0),
-      seasonBill: people.reduce((a, p) => a + p.seasonBill, 0),
-      seasonPaid: people.reduce((a, p) => a + p.seasonPaid, 0),
     });
   }
   return out;
