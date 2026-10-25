@@ -261,10 +261,14 @@ function CashBookPage() {
 
   // ---- খাতায় তোলা: tick many lines at once, one page number for all
   const [bookMode, setBookMode] = useState(false);
+  // what tick mode is for: lines not yet in the paper book, or lines ticked earlier without a
+  // page number (they count in no page total until one is given)
+  const [bookTarget, setBookTarget] = useState<"unbooked" | "nopage">("unbooked");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bookPage, setBookPage] = useState("");
   const [pagesSheet, setPagesSheet] = useState(false);
   const startBooking = () => {
+    setBookTarget("unbooked");
     choosePreset("season");
     setHead(null);
     setKind("unbooked");
@@ -272,7 +276,23 @@ function CashBookPage() {
     setBookPage(lastPage ? String(lastPage) : "");
     setBookMode(true);
   };
-  const stopBooking = () => { setBookMode(false); setPicked(new Set()); setKind("all"); };
+  const stopBooking = () => { setBookMode(false); setBookTarget("unbooked"); setPicked(new Set()); setKind("all"); };
+  const startPageFix = () => {
+    setBookTarget("nopage");
+    choosePreset("season");
+    setHead(null);
+    setKind("all");
+    setPicked(new Set());
+    setBookPage(lastPage ? String(lastPage) : "");
+    setPagesSheet(false);
+    setBookMode(true);
+  };
+  /** a line that can be ticked in the current tick mode (money out only) */
+  const pickable = (r: CashHistoryRow) => {
+    if (r.dir !== "out") return false;
+    const mk = marks.data?.[r.id];
+    return bookTarget === "nopage" ? !!mk?.checked && !mk.page : !mk?.checked;
+  };
   const togglePick = (ids: string[], on: boolean) => setPicked((old) => {
     const n = new Set(old);
     for (const id of ids) on ? n.add(id) : n.delete(id);
@@ -299,9 +319,9 @@ function CashBookPage() {
       setLastPage(page);
       try { localStorage.setItem("cdb-last-book-page", String(page)); } catch { /* storage unavailable */ }
       setPicked(new Set());
-      const left = (history.data ?? []).filter((r) => r.dir === "out" && !picked.has(r.id) && !marks.data?.[r.id]?.checked).length;
+      const left = (history.data ?? []).filter((r) => pickable(r) && !picked.has(r.id)).length;
       if (left === 0) {
-        toast.success(`${bn(n)}টি এন্ট্রি পৃষ্ঠা ${bn(page)}-এ তোলা হলো — সব খাতায় তোলা শেষ`);
+        toast.success(`${bn(n)}টি এন্ট্রি পৃষ্ঠা ${bn(page)}-এ তোলা হলো — ${bookTarget === "nopage" ? "সবগুলোতে পৃষ্ঠা নম্বর বসানো শেষ" : "সব খাতায় তোলা শেষ"}`);
         stopBooking();
       } else {
         toast.success(`${bn(n)}টি এন্ট্রি পৃষ্ঠা ${bn(page)}-এ তোলা হলো · বাকি ${bn(left)}টি`);
@@ -312,6 +332,8 @@ function CashBookPage() {
 
   const all = history.data ?? [];
   const unbookedAll = all.filter((r) => r.dir === "out" && !marks.data?.[r.id]?.checked);
+  // ticked as written in the paper book, but with no page number: in no page's total
+  const noPageAll = all.filter((r) => r.dir === "out" && !!marks.data?.[r.id]?.checked && !marks.data?.[r.id]?.page);
   const pickedSum = all.filter((r) => picked.has(r.id)).reduce((a, r) => a + r.amount, 0);
   const heads = useMemo(() => {
     const m = new Map<string, { dir: "in" | "out"; key: MoneyKey; total: number; count: number }>();
@@ -327,7 +349,7 @@ function CashBookPage() {
     const isBooked = (r: CashHistoryRow) => !!marks.data?.[r.id]?.checked;
     const f = all.filter((r) => {
       // tick mode: only money out that is not yet in the paper book
-      if (bookMode) return r.dir === "out" && !isBooked(r);
+      if (bookMode) return pickable(r);
       if (head && r.head !== head) return false;
       if (kind === "in") return r.dir === "in";
       if (kind === "out") return r.dir === "out";
@@ -337,7 +359,8 @@ function CashBookPage() {
       return true;
     });
     return newestFirst ? f : [...f].reverse();
-  }, [all, head, kind, marks.data, newestFirst, bookMode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [all, head, kind, marks.data, newestFirst, bookMode, bookTarget]);
 
   const days = useMemo(() => {
     const m = new Map<string, CashHistoryRow[]>();
@@ -351,13 +374,18 @@ function CashBookPage() {
   const listIn = rows.filter((r) => r.dir === "in").reduce((a, b) => a + b.amount, 0);
   const listOut = rows.filter((r) => r.dir === "out").reduce((a, b) => a + b.amount, 0);
 
+  // money out per paper-book page, in page order (money in is not ticked into pages)
   const pageTotals = useMemo(() => {
-    const m = new Map<number, number>();
+    const m = new Map<number, { total: number; n: number }>();
     for (const r of all) {
       const mk = marks.data?.[r.id];
-      if (r.dir === "out" && mk?.checked && mk.page) m.set(mk.page, (m.get(mk.page) ?? 0) + r.amount);
+      if (r.dir === "out" && mk?.checked && mk.page) {
+        const c = m.get(mk.page) ?? { total: 0, n: 0 };
+        c.total += r.amount; c.n += 1;
+        m.set(mk.page, c);
+      }
     }
-    return [...m.entries()].sort((a, b) => b[0] - a[0]);
+    return [...m.entries()].sort((a, b) => a[0] - b[0]);
   }, [all, marks.data]);
 
   const rangeText = range.from || range.to
@@ -471,12 +499,26 @@ function CashBookPage() {
       {!bookMode && unbookedAll.length === 0 && marks.isSuccess && pageTotals.length > 0 && (
         <p className="flex items-center gap-2 px-1 text-xs text-muted-foreground"><Check className="h-4 w-4 text-success" /> সব খরচ খাতায় তোলা আছে</p>
       )}
-      {!bookMode && pageTotals.length > 0 && (
+      {!bookMode && (pageTotals.length > 0 || noPageAll.length > 0) && (
         <button type="button" onClick={() => setPagesSheet(true)} className="px-1 text-xs font-semibold text-primary">খাতার পৃষ্ঠা অনুযায়ী মোট দেখুন</button>
+      )}
+      {!bookMode && noPageAll.length > 0 && marks.isSuccess && (
+        <button type="button" onClick={startPageFix}
+          className="flex w-full items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-left text-sm dark:border-amber-800 dark:bg-amber-950/30">
+          <span className="min-w-0">
+            <b className="text-amber-900 dark:text-amber-200">পৃষ্ঠা নম্বর নেই {bn(noPageAll.length)}টি খরচে</b>
+            <span className="num block text-xs text-amber-800 dark:text-amber-300">{tk(noPageAll.reduce((a, r) => a + r.amount, 0))} · খাতায় তোলা, কিন্তু কোনো পৃষ্ঠার মোটে নেই</span>
+          </span>
+          <span className="shrink-0 rounded-xl bg-amber-600 px-3 py-2 text-xs font-bold text-white">পৃষ্ঠা বসান</span>
+        </button>
       )}
       {bookMode && (
         <div className="rounded-2xl border border-primary/40 bg-primary/5 px-4 py-3 text-sm">
-          <b>খাতায় তোলা:</b> যে খরচগুলো কাগজের খাতায় লিখেছেন সেগুলোতে টিক দিন (দিনের পাশে চাপলে সেদিনের সব), নিচে পৃষ্ঠা নম্বর দিয়ে "তুলুন" চাপুন।
+          {bookTarget === "nopage" ? (
+            <><b>পৃষ্ঠা নম্বর বসানো:</b> এগুলো আগে খাতায় তোলা হয়েছিল, কিন্তু পৃষ্ঠা নম্বর ছাড়া। কাগজের খাতার একই পৃষ্ঠার খরচগুলোতে টিক দিন (দিনের পাশে চাপলে সেদিনের সব), নিচে সেই পৃষ্ঠা নম্বর দিয়ে "তুলুন" চাপুন।</>
+          ) : (
+            <><b>খাতায় তোলা:</b> যে খরচগুলো কাগজের খাতায় লিখেছেন সেগুলোতে টিক দিন (দিনের পাশে চাপলে সেদিনের সব), নিচে পৃষ্ঠা নম্বর দিয়ে "তুলুন" চাপুন।</>
+          )}
         </div>
       )}
 
@@ -485,7 +527,7 @@ function CashBookPage() {
         <div className="space-y-3 border-b p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="truncate text-sm font-bold">{bookMode ? "খাতায় তোলা বাকি" : head ?? "সব লেনদেন"}</div>
+              <div className="truncate text-sm font-bold">{bookMode ? (bookTarget === "nopage" ? "পৃষ্ঠা নম্বর নেই" : "খাতায় তোলা বাকি") : head ?? "সব লেনদেন"}</div>
               <div className="text-xs text-muted-foreground">{rangeText} · {bn(rows.length)}টি</div>
             </div>
             <div className="flex shrink-0 gap-1.5">
@@ -536,7 +578,7 @@ function CashBookPage() {
             <Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" />
           </div>
         ) : days.length === 0 ? (
-          <div className="px-4 py-12 text-center text-sm text-muted-foreground">{bookMode ? "সব খরচ খাতায় তোলা হয়ে গেছে ✓" : "এই সময়ে কোনো লেনদেন নেই"}</div>
+          <div className="px-4 py-12 text-center text-sm text-muted-foreground">{bookMode ? (bookTarget === "nopage" ? "সবগুলোতে পৃষ্ঠা নম্বর আছে ✓" : "সব খরচ খাতায় তোলা হয়ে গেছে ✓") : "এই সময়ে কোনো লেনদেন নেই"}</div>
         ) : (
           days.map(([d, dayRows]) => {
             const inc = dayRows.filter((r) => r.dir === "in").reduce((a, b) => a + b.amount, 0);
@@ -544,7 +586,7 @@ function CashBookPage() {
             return (
               <div key={d}>
                 {bookMode ? (() => {
-                  const ids = dayRows.filter((r) => r.dir === "out" && !marks.data?.[r.id]?.checked).map((r) => r.id);
+                  const ids = dayRows.filter(pickable).map((r) => r.id);
                   const allOn = ids.length > 0 && ids.every((id) => picked.has(id));
                   return (
                     <button type="button" onClick={() => togglePick(ids, !allOn)} className="flex w-full items-center justify-between gap-2 bg-muted/70 px-3 py-2 text-left text-xs">
@@ -570,15 +612,16 @@ function CashBookPage() {
                     const { Icon, tone } = lookOf(r.key);
                     const mk = marks.data?.[r.id];
                     const booked = r.dir === "out" && !!mk?.checked;
+                    const canPick = bookMode && pickable(r);
                     const on = picked.has(r.id);
                     return (
                       <button
                         key={r.id}
                         type="button"
-                        onClick={() => (bookMode && !booked ? togglePick([r.id], !on) : setSelected(r))}
+                        onClick={() => (canPick ? togglePick([r.id], !on) : setSelected(r))}
                         className={`flex w-full items-center gap-3 px-3 py-3 text-left transition active:bg-muted/60 ${bookMode && on ? "bg-primary/5" : ""}`}
                       >
-                        {bookMode && !booked && (
+                        {canPick && (
                           <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>{on && <Check className="h-5 w-5" />}</span>
                         )}
                         <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>
@@ -624,7 +667,7 @@ function CashBookPage() {
             <div className="grid grid-cols-3 gap-2">
               <Button variant="outline" className="h-11" onClick={stopBooking}>শেষ</Button>
               <Button variant="outline" className="h-11" onClick={() => {
-                const ids = rows.filter((r) => r.dir === "out" && !marks.data?.[r.id]?.checked).map((r) => r.id);
+                const ids = rows.filter(pickable).map((r) => r.id);
                 togglePick(ids, !ids.every((id) => picked.has(id)));
               }}>সব বাছুন</Button>
               <Button className="h-11 font-bold" onClick={() => saveBook.mutate()} disabled={saveBook.isPending || picked.size === 0}>তুলুন</Button>
@@ -638,15 +681,24 @@ function CashBookPage() {
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-3xl pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
           <SheetHeader className="text-left">
             <SheetTitle>খাতার পৃষ্ঠা অনুযায়ী মোট</SheetTitle>
-            <SheetDescription>{rangeText} · কাগজের খাতার প্রতি পৃষ্ঠার যোগফলের সাথে মিলিয়ে নিন</SheetDescription>
+            <SheetDescription>{rangeText} · শুধু খরচ (টাকা গেছে) গোনা হয়। কাগজের খাতার প্রতি পৃষ্ঠার খরচের যোগফলের সাথে মিলিয়ে নিন</SheetDescription>
           </SheetHeader>
           <div className="mt-4 divide-y rounded-2xl border">
             {pageTotals.map(([pg, t]) => (
               <div key={pg} className="flex items-center justify-between px-4 py-3">
-                <span className="font-semibold">পৃষ্ঠা {bn(pg)}</span>
-                <b className="num">{tk(t)}</b>
+                <span className="font-semibold">পৃষ্ঠা {bn(pg)} <span className="text-xs font-normal text-muted-foreground">· {bn(t.n)}টি</span></span>
+                <b className="num">{tk(t.total)}</b>
               </div>
             ))}
+            {noPageAll.length > 0 && (
+              <div className="flex items-center justify-between gap-2 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
+                <span className="min-w-0">
+                  <span className="font-semibold text-amber-900 dark:text-amber-200">পৃষ্ঠা নম্বর নেই</span>
+                  <span className="num block text-xs text-amber-800 dark:text-amber-300">{bn(noPageAll.length)}টি · {tk(noPageAll.reduce((a, r) => a + r.amount, 0))}</span>
+                </span>
+                <Button size="sm" className="shrink-0" onClick={startPageFix}>পৃষ্ঠা বসান</Button>
+              </div>
+            )}
           </div>
         </SheetContent>
       </Sheet>
