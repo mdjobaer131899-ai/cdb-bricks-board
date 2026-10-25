@@ -121,6 +121,8 @@ export interface OpeningLine {
   amount: number;
   paid: number;
   remaining: number;
+  /** last season's brick advance: bricks still to give at its price per piece (null if not set) */
+  remainingQty: number | null;
   customerId: string | null;
   sardarId: string | null;
   workerId: string | null;
@@ -320,7 +322,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
   ] = await Promise.all([
     safeRows("গ্রাহক", failed, db.from("customers").select("id,name,phone").order("name").limit(5000)),
     safeRows("গ্রাহকের চালান", failed,
-      allRows(() => db.from("sales_entries").select("id,customer_id,total_amount,quantity").eq("status", "approved").is("contract_id", null).order("id"))),
+      allRows(() => db.from("sales_entries").select("id,customer_id,total_amount,quantity").eq("status", "approved").is("contract_id", null).is("opening_balance_id", null).order("id"))),
     safeRows("গ্রাহকের জমা", failed,
       allRows(() => db.from("collections").select("id,customer_id,amount").is("contract_id", null).order("id"))),
     safeRows("চালান", failed,
@@ -344,7 +346,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     safeRows("সাপ্লায়ার পেমেন্ট", failed, allRows(() => db.from("supplier_payments").select("id,supplier_id,amount,payment_date").order("id"))),
     safeRows("গাড়ি", failed, db.from("vehicles").select("vehicle_no,type,driver_name,active")),
     safeRows("পূর্বের জের", failed,
-      db.from("opening_balance_summary").select("id,display_name,party_name,kind,amount,paid_amount,remaining_amount,customer_id,sardar_id,worker_id")),
+      db.from("opening_balance_summary").select("id,display_name,party_name,kind,amount,paid_amount,remaining_amount,remaining_qty,customer_id,sardar_id,worker_id")),
     // a loan runs across seasons, as on the loans page
     safeRows("ঋণ", failed, db.from("loans").select("party_name,amount,direction,loan_date").limit(5000)),
     safeRows("ঋণ পরিশোধ", failed, db.from("loan_payments").select("amount,loan:loans(direction,party_name)").limit(5000)),
@@ -498,6 +500,7 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
       amount: num(o.amount),
       paid: num(o.paid_amount),
       remaining: num(o.remaining_amount),
+      remainingQty: o.remaining_qty == null ? null : num(o.remaining_qty),
       customerId: o.customer_id ?? null,
       sardarId: o.sardar_id ?? null,
       workerId: o.worker_id ?? null,
@@ -953,6 +956,11 @@ const OPENING_KIND: Record<string, string> = {
   customer_receivable: "আমাদের পাওনা (তারা দেবে)",
 };
 
+/** "৩,৮৮,০০০ ইট, ১৯৪ গাড়ি" (a truck is 2000 bricks) */
+function bricksText(qty: number): string {
+  return `${bn(Math.round(qty))} ইট, ${bn(Math.round((qty / 2000) * 100) / 100)} গাড়ি`;
+}
+
 /** One previous-season balance: total, what was paid when, what is left */
 function openingDetail(o: OpeningLine): string {
   const weOwe = o.kind !== "customer_receivable";
@@ -960,7 +968,7 @@ function openingDetail(o: OpeningLine): string {
   lines.push(`• মোট: ${tk(o.amount)}`);
   lines.push(`• ${weOwe ? (o.kind === "customer_brick_due" ? "সমন্বয়/ফেরত" : "নিয়েছেন (শোধ)") : "আদায় হয়েছে"}: ${tk(o.paid)}`);
   for (const p of o.payments) lines.push(`   • ${bnDate(p.date)}: ${tk(p.amount)}`);
-  lines.push(o.remaining > 0.5 ? `👉 বাকি: ${tk(o.remaining)}` : "👉 পুরো শোধ হয়ে গেছে");
+  lines.push(o.remaining > 0.5 ? `👉 বাকি: ${tk(o.remaining)}${o.remainingQty != null ? ` (${bricksText(o.remainingQty)})` : ""}` : "👉 পুরো শোধ হয়ে গেছে");
   return lines.join("\n");
 }
 
@@ -1067,7 +1075,7 @@ function openingBlock(s: KilnSnapshot): string {
   }
   if (bricks.length) {
     lines.push(`অগ্রিম নিয়েছি, ইট দেওয়া বাকি — মোট ${tk(sum(bricks))}:`);
-    lines.push(listLines(bricks, (o, i) => `${bn(i + 1)}. ${o.name}: মোট ${tk(o.amount)}, সমন্বয় ${tk(o.paid)}, বাকি ${tk(o.remaining)}`));
+    lines.push(listLines(bricks, (o, i) => `${bn(i + 1)}. ${o.name}: মোট ${tk(o.amount)}, সমন্বয় ${tk(o.paid)}, বাকি ${tk(o.remaining)}${o.remainingQty != null ? ` (${bricksText(o.remainingQty)})` : ""}`));
   }
   if (receivable.length) {
     lines.push(`আমাদের পাওনা (তারা দেবে) — বাকি মোট ${tk(sum(receivable))}:`);

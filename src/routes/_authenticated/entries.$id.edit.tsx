@@ -20,7 +20,7 @@ import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { isoDate, bn } from "@/lib/format";
 import { fetchBookings, isOpen } from "@/lib/bookings";
-import { fetchCustomerOpeningDues, OPENING_NONE } from "@/lib/opening-adjust";
+import { fetchCustomerOpeningDues, OPENING_NONE, PIECES_PER_TRUCK, openingDueLabel, piecesLabel } from "@/lib/opening-adjust";
 import { toast } from "sonner";
 
 const CASH_VALUE = "__cash__";
@@ -123,6 +123,13 @@ function EditEntryPage() {
   );
   const selectedOpening = openDues.find((d) => d.id === openingId);
   const hasOpening = !!openingId && openingId !== OPENING_NONE;
+  // bricks against last season's advance go at that season's price (lock_opening_rate in the DB)
+  const openRate = hasOpening ? selectedOpening?.unit_rate ?? null : null;
+  // bricks still owed on that advance, counting this challan's own pieces back in when it is
+  // already linked to it (the summary view counts pending challans too)
+  const openingRoom = selectedOpening?.remaining_qty != null
+    ? selectedOpening.remaining_qty + (entryQ.data && (entryQ.data as any).opening_balance_id === selectedOpening.id ? Number(entryQ.data.quantity) || 0 : 0)
+    : null;
 
   useEffect(() => {
     const e = entryQ.data;
@@ -147,6 +154,12 @@ function EditEntryPage() {
     if (!isAdmin || !selectedBooking) return;
     setUnitPrice(String(selectedBooking.rate));
   }, [contractId, selectedBooking?.rate, isAdmin]);
+
+  // and a challan against last season's advance takes that advance's price
+  useEffect(() => {
+    if (!isAdmin || openRate == null) return;
+    setUnitPrice(String(openRate));
+  }, [openingId, openRate, isAdmin]);
 
   const entry = entryQ.data;
   const selectedBrick = orderedBricks.find((b) => b.id === brickTypeId);
@@ -482,15 +495,27 @@ function EditEntryPage() {
                   <SelectItem value={OPENING_NONE}>— না, এ বছরের নতুন বিক্রয় —</SelectItem>
                   {openDues.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
-                      {bn(d.fiscal_year)} সালের অগ্রিম · বাকি ৳{bn(d.remaining_amount)}
+                      {openingDueLabel(d)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {selectedOpening ? (
-                <p className="text-xs text-muted-foreground">
-                  অনুমোদনের পর এই চালানের টাকা {bn(selectedOpening.fiscal_year)} সালের বকেয়া থেকে বাদ যাবে — এ বছরের পাওনা বাড়বে না।
-                </p>
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  {openRate != null && (
+                    <p>
+                      দাম গত বছরের চুক্তিমতো: প্রতি পিস <b className="text-foreground">৳{bn(openRate)}</b> (গাড়ি ৳{bn(openRate * PIECES_PER_TRUCK)}) — বদলানো যাবে না।
+                    </p>
+                  )}
+                  <p>
+                    এই চালানের টাকা শুধু {bn(selectedOpening.fiscal_year)} সালের বাকি থেকে কাটবে, এ বছরের অগ্রিম বা বাকিতে যাবে না।
+                  </p>
+                  {openingRoom != null && (Number(quantity) || 0) > openingRoom && (
+                    <p className="font-semibold text-destructive">
+                      গত বছরের বাকি আছে মাত্র {piecesLabel(openingRoom)} — পরিমাণ এর বেশি।
+                    </p>
+                  )}
+                </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
                   গত বছরের অগ্রিমের বিপরীতে ইট দিলে এখানে নির্বাচন করুন।
@@ -513,7 +538,7 @@ function EditEntryPage() {
                     min={0}
                     step="0.01"
                     value={unitPrice}
-                    disabled={!!selectedBooking}
+                    disabled={!!selectedBooking || openRate != null}
                     onChange={(e) => setUnitPrice(e.target.value)}
                     className="pl-9 font-semibold text-primary"
                     placeholder="০"

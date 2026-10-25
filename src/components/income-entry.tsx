@@ -80,13 +80,13 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
   const customer = head === "sale" ? customers.find((c) => nfc(c.name) === nfc(f.party)) : undefined;
 
   // the customer's account, the same rule as the collections page, dashboard and AI
-  // (all approved non-contract challans − all non-contract collections)
+  // (all approved challans that are not from a booking or last season's advance − all non-contract collections)
   const custBalQ = useQuery({
     queryKey: ["income-form-customer", customer?.id],
     enabled: open && !!customer,
     queryFn: async () => {
       const [sales, cols] = await Promise.all([
-        fetchAllRows<{ total_amount: number }>(() => supabase.from("sales_entries").select("id, total_amount").eq("customer_id", customer!.id).eq("status", "approved").is("contract_id", null).order("id")),
+        fetchAllRows<{ total_amount: number }>(() => supabase.from("sales_entries").select("id, total_amount").eq("customer_id", customer!.id).eq("status", "approved").is("contract_id", null).is("opening_balance_id", null).order("id")),
         fetchAllRows<{ amount: number }>(() => supabase.from("collections").select("id, amount").eq("customer_id", customer!.id).is("contract_id", null).order("id")),
       ]);
       return sales.reduce((a, r) => a + Number(r.total_amount || 0), 0) - cols.reduce((a, r) => a + Number(r.amount || 0), 0);

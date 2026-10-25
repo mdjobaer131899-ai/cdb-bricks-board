@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchAllCustomers, fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
-import { fetchCustomerOpeningDues, OPENING_NONE } from "@/lib/opening-adjust";
+import { fetchCustomerOpeningDues, OPENING_NONE, PIECES_PER_TRUCK, openingDueLabel, piecesLabel } from "@/lib/opening-adjust";
 import { bn, isoDate } from "@/lib/format";
 import { fetchBookings, isOpen } from "@/lib/bookings";
 import { toast } from "sonner";
@@ -112,6 +112,9 @@ function NewEntryPage() {
   });
   const openDues = (openingQ.data ?? []).filter((d) => d.remaining_amount > 0.009);
   const selectedOpening = openDues.find((d) => d.id === openingId);
+  // bricks against last season's advance always go at that season's price (the database
+  // trigger lock_opening_rate enforces it too)
+  const openRate = selectedOpening?.unit_rate ?? null;
 
   // bookings with trucks left for the chosen brick type. One challan = one truck; the
   // owner picks for each challan whether it comes from a booking ("" = not picked yet,
@@ -138,11 +141,12 @@ function NewEntryPage() {
     }
   }, [brickTypeId, isAdmin, isAdvance, isOthers, selectedBrick]);
 
-  // a booking truck: its actual pieces at the booking price
+  // a booking truck: its actual pieces at the booking price; last season's advance at its price
   const totalAmount = useMemo(() => {
     if (isAdvance) return 0;
-    return (Number(quantity) || 0) * (choice ? choice.rate : Number(unitPrice) || 0);
-  }, [quantity, unitPrice, isAdvance, choice]);
+    return (Number(quantity) || 0) * (choice ? choice.rate : openRate ?? (Number(unitPrice) || 0));
+  }, [quantity, unitPrice, isAdvance, choice, openRate]);
+  const overOpening = !!selectedOpening && selectedOpening.remaining_qty != null && (Number(quantity) || 0) > selectedOpening.remaining_qty;
 
   const selectedCustomer = customersQ.data?.find((c) => c.id === customerId);
 
@@ -169,7 +173,7 @@ function NewEntryPage() {
       toast.error("এই গাড়ি বুকিং থেকে কিনা, বেছে নিন");
       return;
     }
-    if (isAdmin && !isAdvance && !isOthers && !unitPrice && !choice) {
+    if (isAdmin && !isAdvance && !isOthers && !unitPrice && !choice && !openRate) {
       toast.error("একক মূল্য দিন বা অগ্রিম চালান নির্বাচন করুন");
       return;
     }
@@ -202,7 +206,7 @@ function NewEntryPage() {
 
     const { error } = await sdb.from("sales_entries").insert(row(choice
       ? { challan: targetChallanNo, qty: finalQuantity, unit: choice.rate, contract: choice.id, note: [`বুকিং ${choice.no}`, notes].filter(Boolean).join(" · ") }
-      : { challan: targetChallanNo, qty: finalQuantity, unit: finalUnitPrice, contract: null }) as any);
+      : { challan: targetChallanNo, qty: finalQuantity, unit: openRate ?? finalUnitPrice, contract: null }) as any);
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -321,16 +325,27 @@ function NewEntryPage() {
                     <SelectItem value={OPENING_NONE}>— সমন্বয় নয় (এই বছরের নতুন বিক্রয়) —</SelectItem>
                     {openDues.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
-                        {bn(d.fiscal_year)} সালের অগ্রিম • বাকি ৳{bn(d.remaining_amount)}
+                        {openingDueLabel(d)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 {selectedOpening && (
-                  <p className="text-xs text-muted-foreground">
-                    এই চালানের ৳{bn(totalAmount)} টাকা {bn(selectedOpening.fiscal_year)} সালের বকেয়া (৳{bn(selectedOpening.remaining_amount)}) থেকে বাদ যাবে —
-                    নতুন বছরের পাওনা বাড়বে না।
-                  </p>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    {openRate != null && (
+                      <p>
+                        দাম গত বছরের চুক্তিমতো: প্রতি পিস <b className="text-foreground">৳{bn(openRate)}</b> (গাড়ি ৳{bn(openRate * PIECES_PER_TRUCK)}) — বদলানো যাবে না।
+                      </p>
+                    )}
+                    <p>
+                      এই চালানের ৳{bn(totalAmount)} শুধু {bn(selectedOpening.fiscal_year)} সালের বাকি থেকে কাটবে, এ বছরের অগ্রিম বা বাকিতে যাবে না।
+                    </p>
+                    {overOpening && selectedOpening.remaining_qty != null && (
+                      <p className="font-semibold text-destructive">
+                        গত বছরের বাকি আছে মাত্র {piecesLabel(selectedOpening.remaining_qty)} — পরিমাণ এর বেশি দিয়েছেন।
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -416,6 +431,11 @@ function NewEntryPage() {
                   <div className="space-y-1.5">
                     <Label>একক মূল্য (বুকিংয়ের দাম)</Label>
                     <Input value={`৳ ${bn(choice.rate)}`} disabled />
+                  </div>
+                ) : openRate != null ? (
+                  <div className="space-y-1.5">
+                    <Label>একক মূল্য (গত বছরের দাম)</Label>
+                    <Input value={`৳ ${bn(openRate)}`} disabled />
                   </div>
                 ) : (
                   <div className="space-y-1.5">

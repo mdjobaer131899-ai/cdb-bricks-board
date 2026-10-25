@@ -302,7 +302,7 @@ function MoneyTab() {
       const [c, col, s] = await Promise.all([
         supabase.from("customers").select("id,name,phone").order("name"),
         fetchAllRows<any>(() => supabase.from("collections").select("id, customer_id, amount").is("contract_id", null).order("id")),
-        fetchAllRows<any>(() => supabase.from("sales_entries").select("id, customer_id, quantity, total_amount").eq("status", "approved").is("contract_id", null).order("id")),
+        fetchAllRows<any>(() => supabase.from("sales_entries").select("id, customer_id, quantity, total_amount").eq("status", "approved").is("contract_id", null).is("opening_balance_id", null).order("id")),
       ]);
       if (c.error) throw c.error;
       return (c.data ?? []).map((cu) => {

@@ -4,8 +4,8 @@ import { bn } from "@/lib/format";
 /**
  * পাওনা-দেনা: who owes the kiln and whom the kiln owes, built from the one snapshot
  * (services/gemini.ts getKilnSnapshot), so the dues page, the dashboard tiles and the AI
- * always show the same numbers. Rules: customers = all approved non-contract challans −
- * collections; sardars and staff = this season's earnings − this season's pay (old dues are
+ * always show the same numbers. Rules: customers = all approved challans that are not from a
+ * booking or last season's advance − non-contract collections; sardars and staff = this season's earnings − this season's pay (old dues are
  * the opening balances); suppliers, contract people and loans = all-time; a fixed-price
  * booking = money taken − bricks delivered at its price (lib/bookings.ts).
  */
@@ -21,7 +21,11 @@ function line(key: string, label: string, people: DuePerson[], to: string, searc
 }
 
 export function buildDues(s: KilnSnapshot): { receive: DueLine[]; pay: DueLine[] } {
-  const open = (kind: string) => s.opening.filter((o) => o.kind === kind && o.remaining > 0.5).map((o) => ({ name: o.name, amount: o.remaining }));
+  const open = (kind: string) => s.opening.filter((o) => o.kind === kind && o.remaining > 0.5).map((o) => ({
+    name: o.name,
+    amount: o.remaining,
+    sub: o.remainingQty != null ? `${bn(Math.round((o.remainingQty / 2000) * 100) / 100)} গাড়ি (${bn(Math.round(o.remainingQty))} ইট) বাকি` : undefined,
+  }));
   const loansBy = (dir: string) => {
     const m = new Map<string, number>();
     for (const l of s.loans) if (l.direction === dir) m.set(l.party, (m.get(l.party) ?? 0) + l.amount);

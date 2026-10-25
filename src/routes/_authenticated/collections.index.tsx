@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
@@ -69,22 +70,25 @@ type CashLedgerRow = {
 };
 
 async function fetchCashLedger(): Promise<CashLedgerRow[]> {
-  // Approved cash (non-contract) sales per customer
-  const { data: sales, error: sErr } = await supabase
-    .from("sales_entries")
-    .select("customer_id, total_amount, customer:customers(id, name)")
-    .eq("status", "approved")
-    .is("contract_id", null)
-    .limit(5000);
-  if (sErr) throw sErr;
+  // Approved non-contract sales per customer, read page by page (a season has thousands of
+  // challans, more than the 1000-row API limit). Bricks against last season's advance
+  // settle that advance only, so they are left out.
+  const sales = await fetchAllRows<{ customer_id: string; total_amount: number; customer: { id: string; name: string } | null }>(() =>
+    supabase
+      .from("sales_entries")
+      .select("id, customer_id, total_amount, customer:customers(id, name)")
+      .eq("status", "approved")
+      .is("contract_id", null)
+      .is("opening_balance_id", null)
+      .order("id"));
 
   // Non-contract collections per customer
-  const { data: cols, error: cErr } = await supabase
-    .from("collections")
-    .select("customer_id, amount, customer:customers(id, name)")
-    .is("contract_id", null)
-    .limit(5000);
-  if (cErr) throw cErr;
+  const cols = await fetchAllRows<{ customer_id: string; amount: number; customer: { id: string; name: string } | null }>(() =>
+    supabase
+      .from("collections")
+      .select("id, customer_id, amount, customer:customers(id, name)")
+      .is("contract_id", null)
+      .order("id"));
 
   const map = new Map<string, CashLedgerRow>();
   for (const r of (sales ?? []) as Array<{ customer_id: string; total_amount: number; customer: { id: string; name: string } | null }>) {

@@ -1102,6 +1102,7 @@ export type Database = {
           note: string | null
           party_name: string | null
           sardar_id: string | null
+          unit_rate: number | null
           updated_at: string
           worker_id: string | null
         }
@@ -1118,6 +1119,7 @@ export type Database = {
           note?: string | null
           party_name?: string | null
           sardar_id?: string | null
+          unit_rate?: number | null
           updated_at?: string
           worker_id?: string | null
         }
@@ -1134,6 +1136,7 @@ export type Database = {
           note?: string | null
           party_name?: string | null
           sardar_id?: string | null
+          unit_rate?: number | null
           updated_at?: string
           worker_id?: string | null
         }
@@ -3012,9 +3015,12 @@ export type Database = {
           party_name: string | null
           payments_amount: number | null
           remaining_amount: number | null
+          remaining_qty: number | null
           sales_adjusted: number | null
           sales_adjusted_qty: number | null
           sardar_id: string | null
+          total_qty: number | null
+          unit_rate: number | null
           worker_id: string | null
         }
         Relationships: [

@@ -13,6 +13,7 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { CustomerLedger } from "@/components/customer-ledger";
 import { fetchBookings } from "@/lib/bookings";
+import { fetchCustomerOpeningDues, piecesLabel } from "@/lib/opening-adjust";
 import { InvoiceDocument, type InvoiceData } from "@/components/invoice-document";
 import { shareNodeAsImage, downloadNodeAsImage, printNode } from "@/lib/share-invoice";
 
@@ -44,6 +45,8 @@ function CustomerDetailPage() {
 
   // fixed-price bookings: their own account (paid in full, bricks still to give)
   const bookingsQ = useQuery({ queryKey: ["bookings", id], queryFn: () => fetchBookings({ customerId: id }) });
+  // last season's brick advance: its own account, settled only by challans linked to it
+  const oldAdvanceQ = useQuery({ queryKey: ["customer-opening-dues", id], queryFn: () => fetchCustomerOpeningDues(id) });
 
   const collectionsTotalQ = useQuery({
     queryKey: ["customer-collections-total", id],
@@ -65,7 +68,7 @@ function CustomerDetailPage() {
     queryFn: async () => {
       const { data, error } = await sdb
         .from("sales_entries")
-        .select("id, challan_no, sale_date, quantity, total_amount, status, contract_id, brick_type:brick_types(name), custom_brick_name")
+        .select("id, challan_no, sale_date, quantity, total_amount, status, contract_id, opening_balance_id, brick_type:brick_types(name), custom_brick_name")
         .eq("customer_id", id)
         .order("sale_date", { ascending: true })
         .order("created_at", { ascending: true });
@@ -209,7 +212,9 @@ function CustomerDetailPage() {
 
       {/* The customer's accounts, apart, and the total below */}
       {(() => {
-        const regularSales = rows.filter((r: any) => r.status === "approved" && !r.contract_id).reduce((a, r) => a + (Number(r.total_amount) || 0), 0);
+        // challans from a booking or against last season's advance are in their own accounts
+        const regularSales = rows.filter((r: any) => r.status === "approved" && !r.contract_id && !r.opening_balance_id).reduce((a, r) => a + (Number(r.total_amount) || 0), 0);
+        const oldAdvance = (oldAdvanceQ.data ?? []).filter((d) => d.amount > 0);
         const regularPaid = collectionsTotalQ.data ?? 0;
         const regular = regularSales - regularPaid; // > 0 customer owes, < 0 advance money
         const bookings = bookingsQ.data ?? [];
@@ -248,13 +253,33 @@ function CustomerDetailPage() {
                   </div>
                 </div>
               )}
+              {oldAdvance.length > 0 && (
+                <div className="rounded-xl border p-3">
+                  <div className="mb-2 flex items-center justify-between text-sm font-bold">
+                    <span>গত বছরের অগ্রিম (ইট দেওয়া বাকি)</span>
+                    <Link to="/opening-balances" className="text-xs font-semibold text-primary">পূর্বের বকেয়া</Link>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    {oldAdvance.map((d) => (
+                      <div key={d.id} className="flex flex-wrap justify-between gap-1">
+                        <span>{bn(d.fiscal_year)} সাল{d.unit_rate ? ` · প্রতি পিস ৳${bn(d.unit_rate)}` : ""}</span>
+                        <b className="tabular-nums">
+                          {d.remaining_amount > 0.5
+                            ? `বাকি ${d.remaining_qty != null ? piecesLabel(d.remaining_qty) : ""} ৳ ${bn(Math.round(d.remaining_amount))}`
+                            : "✓ সব দেওয়া হয়েছে"}
+                        </b>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between rounded-xl bg-muted px-3 py-3">
                 <b>সব মিলিয়ে</b>
                 <b className={`tabular-nums ${net > 0.5 ? "text-warning" : "text-success"}`}>
                   {Math.abs(net) < 0.5 ? "সমান" : net > 0 ? `গ্রাহক দেবে ৳ ${bn(Math.round(net))}` : `আমরা দেব (ইট) ৳ ${bn(Math.round(-net))}`}
                 </b>
               </div>
-              <p className="text-xs text-muted-foreground">গত বছরের জের এখানে নেই, তা নিচের লেজারে আর "পূর্বের বকেয়া" পাতায়।</p>
+              <p className="text-xs text-muted-foreground">"সব মিলিয়ে"-তে গত বছরের জের নেই; তা উপরের ঘরে, নিচের লেজারে আর "পূর্বের বকেয়া" পাতায়।</p>
             </CardContent>
           </Card>
         );

@@ -17,6 +17,7 @@ import { sdb } from "@/lib/season-db";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { IncomeEntryDialog } from "@/components/income-entry";
+import { PIECES_PER_TRUCK, piecesLabel } from "@/lib/opening-adjust";
 import { ExpenseEntryDialog } from "@/components/expense-entry";
 import { toast } from "sonner";
 
@@ -63,6 +64,10 @@ type Row = {
   display_name: string | null;
   paid_amount: number;
   remaining_amount: number;
+  /** last season's brick advance: price per piece, and the money turned into pieces */
+  unit_rate: number | null;
+  total_qty: number | null;
+  remaining_qty: number | null;
 };
 
 type Form = {
@@ -77,7 +82,13 @@ type Form = {
   fiscal_year: string;
   as_of_date: string;
   note: string;
+  /** customer_brick_due only: bricks owed and the price of a truck (2000 bricks) agreed then */
+  pieces: string;
+  truck_price: string;
 };
+
+/** last season's advance price: ৳16,000 a truck of 2000 bricks */
+const DEFAULT_TRUCK_PRICE = "16000";
 
 const emptyForm = (kind: Kind): Form => ({
   kind,
@@ -90,6 +101,8 @@ const emptyForm = (kind: Kind): Form => ({
   fiscal_year: String(new Date().getFullYear() - 1),
   as_of_date: todayBD(),
   note: "",
+  pieces: "",
+  truck_price: DEFAULT_TRUCK_PRICE,
 });
 
 function OpeningBalancesPage() {
@@ -104,10 +117,11 @@ function OpeningBalancesPage() {
     form: emptyForm("customer_brick_due"),
   });
   const [cashEntry, setCashEntry] = useState<{ dir: "in" | "out"; id: string } | null>(null);
-  const [payDialog, setPayDialog] = useState<{ open: boolean; row: Row | null; amount: string; date: string; method: string; note: string }>({
+  const [payDialog, setPayDialog] = useState<{ open: boolean; row: Row | null; amount: string; pieces: string; date: string; method: string; note: string }>({
     open: false,
     row: null,
     amount: "",
+    pieces: "",
     date: todayBD(),
     method: "নগদ",
     note: "",
@@ -127,6 +141,9 @@ function OpeningBalancesPage() {
         amount: Number(r.amount || 0),
         paid_amount: Number(r.paid_amount || 0),
         remaining_amount: Number(r.remaining_amount || 0),
+        unit_rate: r.unit_rate == null ? null : Number(r.unit_rate),
+        total_qty: r.total_qty == null ? null : Number(r.total_qty),
+        remaining_qty: r.remaining_qty == null ? null : Number(r.remaining_qty),
       })) as Row[];
     },
   });
@@ -205,7 +222,12 @@ function OpeningBalancesPage() {
   const save = useMutation({
     mutationFn: async () => {
       const f = dialog.form;
-      const amt = Number(f.amount);
+      // last season's brick advance is entered as bricks × the truck price agreed then
+      const byBricks = f.kind === "customer_brick_due";
+      const rate = byBricks ? Number(f.truck_price) / PIECES_PER_TRUCK : null;
+      if (byBricks && !(Number(f.pieces) > 0)) throw new Error("কত ইট পাবে, লিখুন");
+      if (byBricks && !(rate! > 0)) throw new Error("প্রতি গাড়ির দাম লিখুন");
+      const amt = byBricks ? Math.round(Number(f.pieces) * rate! * 100) / 100 : Number(f.amount);
       if (!(amt > 0)) throw new Error("পরিমাণ লিখুন");
       if (isCust(f.kind) && !f.customer_id) throw new Error("গ্রাহক নির্বাচন করুন");
       if (f.kind === "sardar_payable" && !f.sardar_id && !f.worker_id && !f.party_name.trim())
@@ -220,6 +242,7 @@ function OpeningBalancesPage() {
         party_name: f.party_name.trim() || null,
         category: f.category || null,
         amount: amt,
+        unit_rate: byBricks ? rate : null,
         fiscal_year: Number(f.fiscal_year) || new Date().getFullYear() - 1,
         as_of_date: f.as_of_date,
         note: f.note || null,
@@ -243,8 +266,11 @@ function OpeningBalancesPage() {
   const addPayment = useMutation({
     mutationFn: async () => {
       const row = payDialog.row!;
-      const amt = Number(payDialog.amount);
-      if (!(amt > 0)) throw new Error("পরিমাণ লিখুন");
+      // bricks against last season's advance are counted in pieces at that season's price
+      const amt = row.kind === "customer_brick_due" && row.unit_rate
+        ? Math.round(Number(payDialog.pieces) * row.unit_rate * 100) / 100
+        : Number(payDialog.amount);
+      if (!(amt > 0)) throw new Error(row.kind === "customer_brick_due" && row.unit_rate ? "কত ইট, লিখুন" : "পরিমাণ লিখুন");
       if (amt > row.remaining_amount + 0.001) throw new Error(`বাকি আছে মাত্র ৳ ${bn(row.remaining_amount)}`);
       const { error } = await supabase.from("opening_payments").insert({
         opening_balance_id: row.id,
@@ -258,7 +284,7 @@ function OpeningBalancesPage() {
     },
     onSuccess: () => {
       toast.success("সংরক্ষিত — ক্যাশে প্রভাব পড়েছে, কিন্তু এ সিজনের লাভ-ক্ষতিতে যোগ হয়নি");
-      setPayDialog({ open: false, row: null, amount: "", date: todayBD(), method: "নগদ", note: "" });
+      setPayDialog({ open: false, row: null, amount: "", pieces: "", date: todayBD(), method: "নগদ", note: "" });
       qc.invalidateQueries();
       qc.invalidateQueries({ queryKey: ["opening-payments"] });
     },
@@ -307,6 +333,8 @@ function OpeningBalancesPage() {
         fiscal_year: String(r.fiscal_year),
         as_of_date: r.as_of_date,
         note: r.note ?? "",
+        pieces: r.unit_rate ? String(Math.round(r.amount / r.unit_rate)) : "",
+        truck_price: r.unit_rate ? String(Math.round(r.unit_rate * PIECES_PER_TRUCK * 100) / 100) : DEFAULT_TRUCK_PRICE,
       },
     });
 
@@ -319,6 +347,7 @@ function OpeningBalancesPage() {
       total: l.reduce((a, b) => a + b.amount, 0),
       paid: l.reduce((a, b) => a + b.paid_amount, 0),
       left: l.reduce((a, b) => a + b.remaining_amount, 0),
+      leftQty: l.reduce((a, b) => a + (b.remaining_qty ?? 0), 0),
     };
   };
   const pay = sum3("payable");
@@ -362,6 +391,7 @@ function OpeningBalancesPage() {
             <div className="flex flex-wrap justify-between gap-1 rounded-md bg-muted/50 p-2">
               <span className="font-medium">গ্রাহক ইট পাবে</span>
               <span>মোট ৳ {bn(adv.total)} • দেওয়া <span className="text-emerald-600">৳ {bn(adv.paid)}</span> • <b className="text-destructive">বাকি ৳ {bn(adv.left)}</b></span>
+              {adv.leftQty > 0 && <span className="w-full text-right text-xs font-semibold text-destructive">বাকি {piecesLabel(adv.leftQty)}</span>}
             </div>
           </CardContent>
         </Card>
@@ -416,10 +446,16 @@ function OpeningBalancesPage() {
                                 <Badge variant="secondary">{r.category || (r.kind === "sardar_payable" ? "সরদার" : "অন্যান্য")}</Badge>
                               )}
                             </TableCell>
-                            <TableCell className="text-right">৳ {bn(r.amount)}</TableCell>
+                            <TableCell className="text-right">
+                              ৳ {bn(r.amount)}
+                              {r.total_qty != null && <div className="text-[11px] text-muted-foreground">{piecesLabel(r.total_qty)}</div>}
+                            </TableCell>
                             <TableCell className="text-right text-emerald-600">৳ {bn(r.paid_amount)}</TableCell>
                             <TableCell className={`text-right font-semibold ${r.remaining_amount > 0 ? "text-destructive" : "text-emerald-600"}`}>
                               {r.remaining_amount > 0 ? `৳ ${bn(r.remaining_amount)}` : "✓ পরিশোধিত"}
+                              {r.remaining_amount > 0 && r.remaining_qty != null && (
+                                <div className="text-[11px] font-normal">{piecesLabel(r.remaining_qty)}</div>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
@@ -435,6 +471,7 @@ function OpeningBalancesPage() {
                                       open: true,
                                       row: r,
                                       amount: "",
+                                      pieces: "",
                                       date: todayBD(),
                                       method: "ইট সরবরাহ",
                                       note: "",
@@ -572,9 +609,36 @@ function OpeningBalancesPage() {
               </>
             )}
 
+            {f.kind === "customer_brick_due" && (() => {
+              const rate = Number(f.truck_price) / PIECES_PER_TRUCK;
+              const pcs = Number(f.pieces) || 0;
+              return (
+                <div className="space-y-2 rounded-lg border border-info/30 bg-info/5 p-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>কত ইট পাবে (পিস)</Label>
+                      <Input type="number" inputMode="numeric" value={f.pieces}
+                        onChange={(e) => setDialog((d) => ({ ...d, form: { ...d.form, pieces: e.target.value } }))} />
+                    </div>
+                    <div>
+                      <Label>প্রতি গাড়ির দাম (২০০০ ইট, ৳)</Label>
+                      <Input type="number" inputMode="decimal" value={f.truck_price}
+                        onChange={(e) => setDialog((d) => ({ ...d, form: { ...d.form, truck_price: e.target.value } }))} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {pcs > 0 && rate > 0
+                      ? <>{piecesLabel(pcs)} × প্রতি পিস ৳{bn(rate)} = <b className="text-foreground">৳ {bn(Math.round(pcs * rate))}</b>। এই গ্রাহকের চালান এই দামেই কাটবে।</>
+                      : "গত বছর যে দামে অগ্রিম নিয়েছিলেন সেই দাম দিন; এই গ্রাহকের চালান সেই দামেই কাটবে।"}
+                  </p>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-2 gap-3">
+              {f.kind !== "customer_brick_due" && (
               <div>
-                <Label>{f.kind === "customer_brick_due" ? "গত বছরের অগ্রিম জমা (৳)" : f.kind === "customer_receivable" ? "গ্রাহকের কাছে বাকি (৳)" : "পাওনা/দেনার পরিমাণ (৳)"}</Label>
+                <Label>{f.kind === "customer_receivable" ? "গ্রাহকের কাছে বাকি (৳)" : "পাওনা/দেনার পরিমাণ (৳)"}</Label>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -582,6 +646,7 @@ function OpeningBalancesPage() {
                   onChange={(e) => setDialog((d) => ({ ...d, form: { ...d.form, amount: e.target.value } }))}
                 />
               </div>
+              )}
               <div>
                 <Label>হিসাব বছর</Label>
                 <Input
@@ -621,12 +686,25 @@ function OpeningBalancesPage() {
           <div className="space-y-3">
             <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
               বাকি: ৳ {bn(payDialog.row?.remaining_amount ?? 0)}
-              {payDialog.row?.kind === "customer_receivable" ? " • ক্যাশে যোগ হবে, এ বছরের বিক্রিতে নয়" : payDialog.row?.kind !== "customer_brick_due" ? " • ক্যাশ থেকে কমবে, এ বছরের খরচে যোগ হবে না" : ""}
+              {payDialog.row?.remaining_qty != null && ` (${piecesLabel(payDialog.row.remaining_qty)})`}
+              {payDialog.row?.kind === "customer_receivable" ? " • ক্যাশে যোগ হবে, এ বছরের বিক্রিতে নয়" : payDialog.row?.kind !== "customer_brick_due" ? " • ক্যাশ থেকে কমবে, এ বছরের খরচে যোগ হবে না" : " • স্টক কমবে না: ভাটা থেকে ইট গেলে চালান কাটুন, এটা শুধু পুরোনো হিসাব মেলানোর জন্য"}
             </div>
-            <div>
-              <Label>পরিমাণ (৳)</Label>
-              <Input type="number" inputMode="decimal" value={payDialog.amount} onChange={(e) => setPayDialog((p) => ({ ...p, amount: e.target.value }))} />
-            </div>
+            {payDialog.row?.kind === "customer_brick_due" && payDialog.row.unit_rate ? (
+              <div>
+                <Label>কত ইট (পিস)</Label>
+                <Input type="number" inputMode="numeric" value={payDialog.pieces} onChange={(e) => setPayDialog((p) => ({ ...p, pieces: e.target.value }))} />
+                {Number(payDialog.pieces) > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    প্রতি পিস ৳{bn(payDialog.row.unit_rate)} = ৳ {bn(Math.round(Number(payDialog.pieces) * payDialog.row.unit_rate))}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <Label>পরিমাণ (৳)</Label>
+                <Input type="number" inputMode="decimal" value={payDialog.amount} onChange={(e) => setPayDialog((p) => ({ ...p, amount: e.target.value }))} />
+              </div>
+            )}
             <div>
               <Label>তারিখ</Label>
               <Input type="date" value={payDialog.date} onChange={(e) => setPayDialog((p) => ({ ...p, date: e.target.value }))} />
@@ -678,6 +756,11 @@ function OpeningBalancesPage() {
                   <div className="font-bold text-destructive">৳ {bn(detail.remaining_amount)}</div>
                 </div>
               </div>
+              {detail.total_qty != null && detail.remaining_qty != null && (
+                <div className="rounded-md bg-info/5 p-2 text-xs">
+                  মোট {piecesLabel(detail.total_qty)} • বাকি <b>{piecesLabel(detail.remaining_qty)}</b> • প্রতি পিস ৳{bn(detail.unit_rate)}
+                </div>
+              )}
               <div className="text-xs text-muted-foreground">
                 {KIND_LABEL[detail.kind]} • হিসাব বছর {bn(detail.fiscal_year)} • {bnDate(detail.as_of_date)}
                 {detail.category ? ` • ${detail.category}` : ""}
