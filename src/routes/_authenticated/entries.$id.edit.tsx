@@ -20,6 +20,7 @@ import { fetchActiveBrickTypes } from "@/lib/sales-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { isoDate, bn } from "@/lib/format";
 import { fetchBookings, isOpen } from "@/lib/bookings";
+import { PAY_MODES, PAY_MODE_LABEL, type PayMode, discountLabel, fetchCustomerBalance, fetchCustomerDiscount } from "@/lib/customer-account";
 import { fetchCustomerOpeningDues, OPENING_NONE, PIECES_PER_TRUCK, openingDueLabel, piecesLabel } from "@/lib/opening-adjust";
 import { toast } from "sonner";
 
@@ -96,6 +97,10 @@ function EditEntryPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [contractId, setContractId] = useState<string>("");
   const [openingId, setOpeningId] = useState<string>("");
+  // how a day's-price challan is paid, and the cash taken with it (only admins change these)
+  const [payMode, setPayMode] = useState<PayMode | "">("");
+  const [cashReceived, setCashReceived] = useState("");
+  const [priceTouched, setPriceTouched] = useState(false);
 
   // the customer's fixed-price bookings that hold this brick type (lib/bookings.ts)
   const customerId = entryQ.data?.customer_id;
@@ -146,6 +151,8 @@ function EditEntryPage() {
     setNotes(e.notes ?? "");
     setContractId(e.contract_id ?? CASH_VALUE);
     setOpeningId((e as any).opening_balance_id ?? "");
+    setPayMode(((e as any).pay_mode as PayMode | null) ?? "");
+    setCashReceived(Number((e as any).cash_received) > 0 ? String((e as any).cash_received) : "");
     setLoaded(true);
   }, [entryQ.data, loaded]);
 
@@ -160,6 +167,32 @@ function EditEntryPage() {
     if (!isAdmin || openRate == null) return;
     setUnitPrice(String(openRate));
   }, [openingId, openRate, isAdmin]);
+
+  // a day's-price challan says how it is paid
+  const needsPay = !selectedBooking && !hasOpening;
+  const balanceQ = useQuery({
+    queryKey: ["customer-balance", customerId],
+    enabled: !!customerId && isAdmin && entryQ.data?.status === "pending",
+    queryFn: () => fetchCustomerBalance(customerId!),
+  });
+  const discountQ = useQuery({
+    queryKey: ["customer-discount", customerId],
+    enabled: !!customerId && isAdmin,
+    queryFn: () => fetchCustomerDiscount(customerId!),
+  });
+  const advanceLeft = Math.max(0, -(balanceQ.data ?? 0));
+  const discount = discountQ.data ?? 0;
+
+  // a manager's pending challan has no price yet: start from the day's price, less the
+  // customer's discount when it is taken from this season's advance
+  useEffect(() => {
+    const e = entryQ.data;
+    if (!loaded || !isAdmin || !e || e.status !== "pending" || priceTouched || !needsPay) return;
+    if (Number(e.unit_price) > 0 && payMode === ((e as any).pay_mode ?? "")) return;
+    const day = Number(orderedBricks.find((b) => b.id === brickTypeId)?.default_unit_price) || 0;
+    if (day <= 0) return;
+    setUnitPrice(String(Math.max(0, Math.round((day - (payMode === "advance" ? discount : 0)) * 100) / 100)));
+  }, [loaded, isAdmin, entryQ.data, priceTouched, needsPay, payMode, discount, brickTypeId, orderedBricks]);
 
   const entry = entryQ.data;
   const selectedBrick = orderedBricks.find((b) => b.id === brickTypeId);
@@ -229,6 +262,7 @@ function EditEntryPage() {
         notes: notes || null,
         ...(isAdmin ? { contract_id: contractId && contractId !== CASH_VALUE ? contractId : null } : {}),
         ...(isAdmin ? { opening_balance_id: hasOpening ? openingId : null } : {}),
+        ...(isAdmin ? payFields() : {}),
       })
       .eq("id", entry.id);
     setBusy(false);
@@ -244,8 +278,21 @@ function EditEntryPage() {
   }
 
 
+  // pay mode and cash: only for a day's-price challan (a booking or last season's advance has none)
+  function payFields() {
+    return {
+      pay_mode: needsPay && payMode ? payMode : null,
+      cash_received: needsPay && payMode === "cash" ? Number(cashReceived) || 0 : 0,
+    };
+  }
+
   async function handleApprove() {
     if (!entry || !me || !isAdmin) return;
+    if (needsPay && payMode === "cash" && !(Number(cashReceived) > 0)) {
+      toast.error("কত টাকা নগদ পেলেন, লিখুন");
+      setConfirmApprove(false);
+      return;
+    }
     const qty = Number(quantity) || 1;
     const unit = Number(unitPrice) || 0;
     const amt = unit * qty;
@@ -275,6 +322,7 @@ function EditEntryPage() {
         total_amount: amt,
         contract_id: contractId && contractId !== CASH_VALUE ? contractId : null,
         opening_balance_id: hasOpening ? openingId : null,
+        ...payFields(),
       })
       .eq("id", entry.id);
     setBusy(false);
@@ -287,6 +335,8 @@ function EditEntryPage() {
     qc.invalidateQueries({ queryKey: ["opening-balances"] });
     qc.invalidateQueries({ queryKey: ["customer-opening-dues"] });
     qc.invalidateQueries({ queryKey: ["ledger"] });
+    qc.invalidateQueries({ queryKey: ["cash"] });
+    qc.invalidateQueries({ queryKey: ["customer-balance"] });
     navigate({ to: "/approvals" });
   }
 
@@ -525,6 +575,56 @@ function EditEntryPage() {
           </Card>
         )}
 
+        {needsPay && isAdmin && (() => {
+          const total = (Number(unitPrice) || 0) * (Number(quantity) || 0);
+          const cash = Number(cashReceived) || 0;
+          return (
+            <Card>
+              <CardHeader className="pb-3"><CardTitle className="text-base">টাকা কীভাবে?</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                <Select value={payMode || "none"} onValueChange={(v) => setPayMode(v === "none" ? "" : (v as PayMode))}>
+                  <SelectTrigger><SelectValue placeholder="বেছে নিন" /></SelectTrigger>
+                  <SelectContent>
+                    {!payMode && <SelectItem value="none">— বলা নেই (বাকি ধরা হবে) —</SelectItem>}
+                    {PAY_MODES.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>{m.label} — {m.hint}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {payMode === "cash" && (
+                  <div className="space-y-1.5">
+                    <Label>নগদ পেলাম (৳)</Label>
+                    <Input type="number" inputMode="decimal" min={0} value={cashReceived} onChange={(e) => setCashReceived(e.target.value)} />
+                    {cash > 0 && total > 0 && Math.abs(cash - total) > 0.5 && (
+                      <p className="text-xs text-warning">
+                        চালান ৳{bn(total)}, নগদ ৳{bn(cash)} — পার্থক্য ৳{bn(Math.abs(Math.round(total - cash)))} গ্রাহকের {cash < total ? "বাকিতে" : "অগ্রিমে"} যাবে।
+                      </p>
+                    )}
+                  </div>
+                )}
+                {payMode === "advance" && (
+                  <p className="text-xs text-muted-foreground">
+                    {entry.status === "pending" && `অগ্রিম জমা আছে ৳${bn(Math.round(advanceLeft))}। `}
+                    {discount > 0 ? `ছাড় ${discountLabel(discount)} — দাম আজকের দাম থেকে ছাড় বাদে।` : "এই গ্রাহকের কোনো ছাড় ঠিক করা নেই (গ্রাহকের পাতায় দেওয়া যায়)।"}
+                  </p>
+                )}
+                {payMode === "advance" && entry.status === "pending" && total > advanceLeft + 0.5 && (
+                  <p className="text-xs text-warning">
+                    অগ্রিমের চেয়ে ৳{bn(Math.round(total - advanceLeft))} বেশি — সেটা গ্রাহকের বাকিতে যাবে।
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
+
+        {needsPay && !isAdmin && (entry as any).pay_mode && (
+          <div className="rounded-lg border p-3 text-sm">
+            টাকা: <b>{PAY_MODE_LABEL[(entry as any).pay_mode as PayMode]}</b>
+            {(entry as any).pay_mode === "cash" && ` · নগদ ৳${bn(Number((entry as any).cash_received) || 0)}`}
+          </div>
+        )}
+
         {isAdmin && (
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">টাকার পরিমান</CardTitle></CardHeader>
@@ -539,7 +639,7 @@ function EditEntryPage() {
                     step="0.01"
                     value={unitPrice}
                     disabled={!!selectedBooking || openRate != null}
-                    onChange={(e) => setUnitPrice(e.target.value)}
+                    onChange={(e) => { setPriceTouched(true); setUnitPrice(e.target.value); }}
                     className="pl-9 font-semibold text-primary"
                     placeholder="০"
                   />

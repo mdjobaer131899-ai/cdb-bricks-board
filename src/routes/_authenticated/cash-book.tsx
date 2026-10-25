@@ -936,7 +936,9 @@ function RowDetail({ row, mark, lastPage, onSaveMark, onEdit, onDelete }: {
 
       {locked ? (
         <p className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">
-          এটা ইট দিয়ে সাপ্লায়ারের বাকি শোধের অংশ। বদলাতে বা মুছতে সংশ্লিষ্ট চালান থেকে করুন।
+          {row.detail.endsWith("(নগদ চালান)")
+            ? "এটা নগদ চালানের সাথে নেওয়া টাকা। বদলাতে বা মুছতে সংশ্লিষ্ট চালান থেকে করুন।"
+            : "এটা ইট দিয়ে সাপ্লায়ারের বাকি শোধের অংশ। বদলাতে বা মুছতে সংশ্লিষ্ট চালান থেকে করুন।"}
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2">

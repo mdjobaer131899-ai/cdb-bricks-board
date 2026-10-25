@@ -48,12 +48,14 @@ type CollectionRow = {
   note: string | null;
   customer: { id: string; name: string } | null;
   contract: { id: string; contract_no: string } | null;
+  /** money taken with a cash challan; it is changed or removed only through that challan */
+  cash_sale: boolean;
 };
 
 async function fetchCollections(): Promise<CollectionRow[]> {
   const { data, error } = await supabase
     .from("collections")
-    .select("id, amount, payment_date, method, note, customer:customers(id, name), contract:contracts(id, contract_no)")
+    .select("id, amount, payment_date, method, note, cash_sale, customer:customers(id, name), contract:contracts(id, contract_no)")
     .order("payment_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(500);
@@ -311,6 +313,8 @@ function CollectionsPage() {
                       <TableCell>
                         {r.contract ? (
                           <Badge variant="outline" className="font-mono text-[10px]">{r.contract.contract_no}</Badge>
+                        ) : r.cash_sale ? (
+                          <Badge variant="secondary" className="text-[10px]">নগদ চালান</Badge>
                         ) : (
                           <Badge variant="secondary" className="text-[10px]">সরাসরি ক্যাশ</Badge>
                         )}
@@ -320,7 +324,10 @@ function CollectionsPage() {
                       <TableCell className="hidden md:table-cell text-xs text-muted-foreground max-w-[220px] truncate">
                         {r.note ?? "—"}
                       </TableCell>
-                      {isAdmin && (
+                      {isAdmin && r.cash_sale && (
+                        <TableCell className="text-[10px] text-muted-foreground">চালান থেকে বদলান</TableCell>
+                      )}
+                      {isAdmin && !r.cash_sale && (
                         <TableCell>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>

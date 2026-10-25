@@ -1883,6 +1883,9 @@ export const saveAiActionToDatabase = async (
       requirePositive(rate, "ইটের দাম");
       const total = Math.round(qty * rate * 100) / 100;
       const paid = Math.min(num(d.paidAmount ?? d.paid_amount), total);
+      // fully paid on the spot = a cash challan: the database writes its collection itself
+      // (sync_cash_sale_collection); otherwise it is on credit and any part paid is a collection
+      const cashSale = paid > 0 && paid >= total - 0.5;
 
       const challanNo = await nextChallanNo(entryDate);
       const { data: sale, error } = await (supabase as any)
@@ -1901,13 +1904,15 @@ export const saveAiActionToDatabase = async (
           driver_name: d.driverName || d.driver_name || null,
           notes: "AI সহকারী থেকে",
           created_by: userId,
+          pay_mode: cashSale ? "cash" : "credit",
+          cash_received: cashSale ? paid : 0,
         })
         .select("id, challan_no")
         .single();
       if (error) throw new Error(error.message);
       const savedNo = String(sale?.challan_no ?? challanNo ?? "");
 
-      if (paid > 0) {
+      if (paid > 0 && !cashSale) {
         const { error: colError } = await supabase.from("collections").insert({
           customer_id: customer.id,
           amount: paid,

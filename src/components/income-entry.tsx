@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BalanceStrip, Chips, HeadTiles, Section, tk } from "@/components/money-form-parts";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchAllRows } from "@/lib/fetch-all";
+import { fetchCustomerBalance } from "@/lib/customer-account";
 import { bn, todayBD } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
 import { MONEY_HEADS, TONE_CLASS, moneyHead, type MoneyKey } from "@/lib/money-heads";
@@ -84,13 +84,7 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
   const custBalQ = useQuery({
     queryKey: ["income-form-customer", customer?.id],
     enabled: open && !!customer,
-    queryFn: async () => {
-      const [sales, cols] = await Promise.all([
-        fetchAllRows<{ total_amount: number }>(() => supabase.from("sales_entries").select("id, total_amount").eq("customer_id", customer!.id).eq("status", "approved").is("contract_id", null).is("opening_balance_id", null).order("id")),
-        fetchAllRows<{ amount: number }>(() => supabase.from("collections").select("id, amount").eq("customer_id", customer!.id).is("contract_id", null).order("id")),
-      ]);
-      return sales.reduce((a, r) => a + Number(r.total_amount || 0), 0) - cols.reduce((a, r) => a + Number(r.amount || 0), 0);
-    },
+    queryFn: () => fetchCustomerBalance(customer!.id),
   });
 
   const openingsQ = useQuery({

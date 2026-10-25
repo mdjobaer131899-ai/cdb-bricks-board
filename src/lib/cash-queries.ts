@@ -115,7 +115,8 @@ export async function fetchCashSummary(filter: DateFilter = {}) {
 /**
  * One cash book line. `key` is the head from money-heads.ts and `head` its label, so every
  * page shows the same name; `detail` is who or what (a person, a supplier, "চা"), `note`
- * the typed note. `locked` rows belong to a brick settlement and are changed from the challan.
+ * the typed note. `locked` rows belong to a brick settlement or a cash challan and are changed
+ * from the challan.
  */
 export type CashHistoryRow = {
   id: string; date: string; dir: "in" | "out"; key: MoneyKey; head: string; detail: string; note: string; amount: number; locked?: boolean;
@@ -124,7 +125,7 @@ export type CashHistoryRow = {
 /** মূল ক্যাশের সব আয়-ব্যয়ের হিস্টোরি — fetchCashSummary-র সব খাত থেকে */
 export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHistoryRow[]> {
   const [col, exp, sar, wrk, sup, own, loans, lpay, opay] = await Promise.all([
-    rowsOf("collections", "id, amount, payment_date, note, method, customer:customers(name), contract:contracts(contract_no)", "payment_date", filter),
+    rowsOf("collections", "id, amount, payment_date, note, method, cash_sale, customer:customers(name), contract:contracts(contract_no)", "payment_date", filter),
     rowsOf("expenses", "id, amount, expense_date, category, note", "expense_date", filter),
     rowsOf("sardar_payments", "id, amount, payment_date, note, sardar:sardars(name)", "payment_date", filter),
     rowsOf("worker_payments", "id, amount, payment_date, note, worker:workers(name, role)", "payment_date", filter),
@@ -140,8 +141,11 @@ export async function fetchCashHistory(filter: DateFilter = {}): Promise<CashHis
     ({ id, date, dir, key, head: moneyHead(key).label, detail: detail || "—", note: note ?? "", amount: Number(amount), locked });
   const out: CashHistoryRow[] = [
     // Bricks given against a supplier due: a brick sale (in) and the due paid (out) of the same amount, so hand cash is unchanged
+    // Money taken with a cash challan: written by the challan (trigger), changed only from it
     ...A(col).map((r) => r.method === BRICK_SETTLE_COLLECTION
       ? row(`c${r.id}`, r.payment_date, "in", "sale", `${r.customer?.name ?? "—"} (বাকির বদলে ইট)`, r.note, r.amount, true)
+      : r.cash_sale
+      ? row(`c${r.id}`, r.payment_date, "in", "sale", `${r.customer?.name ?? "—"} (নগদ চালান)`, r.note, r.amount, true)
       : row(`c${r.id}`, r.payment_date, "in", "sale", `${r.customer?.name ?? "—"}${r.contract?.contract_no ? ` (চুক্তি ${r.contract.contract_no})` : ""}`, r.note, r.amount)),
     ...A(exp).map((r) => {
       const h = expenseHead(r.category);

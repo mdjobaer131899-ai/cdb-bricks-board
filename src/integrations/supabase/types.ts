@@ -310,6 +310,7 @@ export type Database = {
       collections: {
         Row: {
           amount: number
+          cash_sale: boolean
           contract_id: string | null
           created_at: string
           created_by: string
@@ -324,6 +325,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          cash_sale?: boolean
           contract_id?: string | null
           created_at?: string
           created_by: string
@@ -338,6 +340,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          cash_sale?: boolean
           contract_id?: string | null
           created_at?: string
           created_by?: string
@@ -564,6 +567,38 @@ export type Database = {
             foreignKeyName: "contracts_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_price_terms: {
+        Row: {
+          customer_id: string
+          discount_per_piece: number
+          note: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          customer_id: string
+          discount_per_piece?: number
+          note?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          customer_id?: string
+          discount_per_piece?: number
+          note?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_price_terms_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: true
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
@@ -1921,6 +1956,7 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           brick_type_id: string
+          cash_received: number
           challan_no: string
           contract_id: string | null
           created_at: string
@@ -1932,6 +1968,7 @@ export type Database = {
           notes: string | null
           opening_balance_id: string | null
           order_id: string | null
+          pay_mode: string | null
           quantity: number
           sale_date: string
           sale_type: Database["public"]["Enums"]["sale_type"]
@@ -1946,6 +1983,7 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           brick_type_id: string
+          cash_received?: number
           challan_no: string
           contract_id?: string | null
           created_at?: string
@@ -1957,6 +1995,7 @@ export type Database = {
           notes?: string | null
           opening_balance_id?: string | null
           order_id?: string | null
+          pay_mode?: string | null
           quantity: number
           sale_date?: string
           sale_type?: Database["public"]["Enums"]["sale_type"]
@@ -1971,6 +2010,7 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           brick_type_id?: string
+          cash_received?: number
           challan_no?: string
           contract_id?: string | null
           created_at?: string
@@ -1982,6 +2022,7 @@ export type Database = {
           notes?: string | null
           opening_balance_id?: string | null
           order_id?: string | null
+          pay_mode?: string | null
           quantity?: number
           sale_date?: string
           sale_type?: Database["public"]["Enums"]["sale_type"]

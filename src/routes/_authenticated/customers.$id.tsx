@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Printer, Share2, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,9 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { CustomerLedger } from "@/components/customer-ledger";
 import { fetchBookings } from "@/lib/bookings";
-import { fetchCustomerOpeningDues, piecesLabel } from "@/lib/opening-adjust";
+import { PIECES_PER_TRUCK, fetchCustomerOpeningDues, piecesLabel } from "@/lib/opening-adjust";
+import { discountLabel, fetchCustomerDiscount } from "@/lib/customer-account";
+import { toast } from "sonner";
 import { InvoiceDocument, type InvoiceData } from "@/components/invoice-document";
 import { shareNodeAsImage, downloadNodeAsImage, printNode } from "@/lib/share-invoice";
 
@@ -47,6 +49,29 @@ function CustomerDetailPage() {
   const bookingsQ = useQuery({ queryKey: ["bookings", id], queryFn: () => fetchBookings({ customerId: id }) });
   // last season's brick advance: its own account, settled only by challans linked to it
   const oldAdvanceQ = useQuery({ queryKey: ["customer-opening-dues", id], queryFn: () => fetchCustomerOpeningDues(id) });
+
+  // discount on bricks taken from this season's advance money (customer_price_terms, admin only)
+  const qc = useQueryClient();
+  const discountQ = useQuery({ queryKey: ["customer-discount", id], queryFn: () => fetchCustomerDiscount(id) });
+  const [discountEdit, setDiscountEdit] = useState<string | null>(null); // ৳ less per truck
+  const saveDiscount = useMutation({
+    mutationFn: async () => {
+      const perTruck = Number(discountEdit);
+      if (!(perTruck >= 0) || discountEdit === "") throw new Error("গাড়িতে কত টাকা কম, লিখুন (না থাকলে ০)");
+      const { error } = await supabase.from("customer_price_terms").upsert({
+        customer_id: id,
+        discount_per_piece: Math.round((perTruck / PIECES_PER_TRUCK) * 10000) / 10000,
+        updated_by: me?.user.id ?? null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("ছাড় সংরক্ষিত হয়েছে");
+      setDiscountEdit(null);
+      qc.invalidateQueries({ queryKey: ["customer-discount", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const collectionsTotalQ = useQuery({
     queryKey: ["customer-collections-total", id],
@@ -231,6 +256,30 @@ function CustomerDetailPage() {
                   <Mini label="ইট নিয়েছে" value={`৳ ${bn(Math.round(regularSales))}`} />
                   <Mini label="টাকা দিয়েছে" value={`৳ ${bn(Math.round(regularPaid))}`} tone="success" />
                   <Mini label={regular >= 0 ? "বাকি" : "অগ্রিম জমা"} value={`৳ ${bn(Math.abs(Math.round(regular)))}`} tone={regular > 0.5 ? "warning" : "success"} />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 px-2 py-1.5 text-xs">
+                  {discountEdit === null ? (
+                    <>
+                      <span>
+                        অগ্রিম টাকা থেকে ইট নিলে ছাড়:{" "}
+                        <b>{(discountQ.data ?? 0) > 0 ? discountLabel(discountQ.data ?? 0) : "নেই"}</b>
+                      </span>
+                      <Button type="button" size="sm" variant="outline" className="h-7"
+                        onClick={() => setDiscountEdit(String(Math.round((discountQ.data ?? 0) * PIECES_PER_TRUCK * 100) / 100))}>
+                        বদলান
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span>আজকের দাম থেকে গাড়িতে (২০০০ ইট) কত টাকা কম?</span>
+                      <div className="flex items-center gap-1">
+                        <Input type="number" inputMode="decimal" min={0} className="h-8 w-28" value={discountEdit}
+                          onChange={(e) => setDiscountEdit(e.target.value)} />
+                        <Button type="button" size="sm" className="h-8" disabled={saveDiscount.isPending} onClick={() => saveDiscount.mutate()}>সংরক্ষণ</Button>
+                        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setDiscountEdit(null)}>বাতিল</Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
               {bookings.length > 0 && (

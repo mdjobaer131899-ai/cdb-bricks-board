@@ -20,6 +20,7 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { fetchCustomerOpeningDues, OPENING_NONE, PIECES_PER_TRUCK, openingDueLabel, piecesLabel } from "@/lib/opening-adjust";
 import { bn, isoDate } from "@/lib/format";
 import { fetchBookings, isOpen } from "@/lib/bookings";
+import { PAY_MODES, type PayMode, discountLabel, fetchCustomerBalance, fetchCustomerDiscount } from "@/lib/customer-account";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/entries/new")({
@@ -93,6 +94,10 @@ function NewEntryPage() {
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [addCustOpen, setAddCustOpen] = useState(false);
+  // how a challan at the day's price is paid, and the cash taken with it
+  const [payMode, setPayMode] = useState<PayMode | "">("");
+  const [cashReceived, setCashReceived] = useState("");
+  const [cashTouched, setCashTouched] = useState(false);
 
   // the customer's fixed-price bookings that still have bricks to give (lib/bookings.ts)
   const bookingsQ = useQuery({
@@ -102,7 +107,21 @@ function NewEntryPage() {
   });
 
   // Reset contract when customer changes
-  useEffect(() => { setContractId(""); setOpeningId(""); }, [customerId]);
+  useEffect(() => { setContractId(""); setOpeningId(""); setPayMode(""); }, [customerId]);
+
+  // the customer's current account (advance money left) and discount on bricks taken from it
+  const balanceQ = useQuery({
+    queryKey: ["customer-balance", customerId],
+    enabled: !!customerId,
+    queryFn: () => fetchCustomerBalance(customerId),
+  });
+  const discountQ = useQuery({
+    queryKey: ["customer-discount", customerId],
+    enabled: !!customerId,
+    queryFn: () => fetchCustomerDiscount(customerId),
+  });
+  const advanceLeft = Math.max(0, -(balanceQ.data ?? 0));
+  const discount = discountQ.data ?? 0;
 
   // গত বছরের বকেয়া (গ্রাহক অগ্রিম) — এই চালান দিয়ে সমন্বয় করা যাবে
   const openingQ = useQuery({
@@ -135,11 +154,14 @@ function NewEntryPage() {
   const isOthers = selectedBrick?.name === OTHERS_NAME;
   const quantityLabel = isAdla ? "মোট পরিমাণ (ফুট) / Total Quantity (Feet)" : "মোট ইট (পিস)";
 
+  // the day's price; bricks taken from this season's advance get the customer's discount
   useEffect(() => {
     if (isAdmin && selectedBrick && !isAdvance && !isOthers) {
-      setUnitPrice(String(selectedBrick.default_unit_price));
+      const day = Number(selectedBrick.default_unit_price) || 0;
+      const less = payMode === "advance" ? discount : 0;
+      setUnitPrice(day > 0 ? String(Math.max(0, Math.round((day - less) * 100) / 100)) : "");
     }
-  }, [brickTypeId, isAdmin, isAdvance, isOthers, selectedBrick]);
+  }, [brickTypeId, isAdmin, isAdvance, isOthers, selectedBrick, payMode, discount]);
 
   // a booking truck: its actual pieces at the booking price; last season's advance at its price
   const totalAmount = useMemo(() => {
@@ -147,6 +169,13 @@ function NewEntryPage() {
     return (Number(quantity) || 0) * (choice ? choice.rate : openRate ?? (Number(unitPrice) || 0));
   }, [quantity, unitPrice, isAdvance, choice, openRate]);
   const overOpening = !!selectedOpening && selectedOpening.remaining_qty != null && (Number(quantity) || 0) > selectedOpening.remaining_qty;
+
+  // a day's-price challan (not a booking truck, not last season's advance) says how it is paid
+  const needsPay = !!customerId && !choice && !selectedOpening;
+  // the admin sees the price, so the cash taken starts at the challan's total
+  useEffect(() => {
+    if (isAdmin && payMode === "cash" && !cashTouched) setCashReceived(totalAmount > 0 ? String(totalAmount) : "");
+  }, [isAdmin, payMode, cashTouched, totalAmount]);
 
   const selectedCustomer = customersQ.data?.find((c) => c.id === customerId);
 
@@ -171,6 +200,14 @@ function NewEntryPage() {
     }
     if (bookingChoices.length > 0 && !contractId) {
       toast.error("এই গাড়ি বুকিং থেকে কিনা, বেছে নিন");
+      return;
+    }
+    if (needsPay && !payMode) {
+      toast.error("টাকা কীভাবে — নগদ, অগ্রিম থেকে না বাকিতে, বেছে নিন");
+      return;
+    }
+    if (needsPay && payMode === "cash" && !(Number(cashReceived) > 0)) {
+      toast.error("কত টাকা নগদ পেলেন, লিখুন");
       return;
     }
     if (isAdmin && !isAdvance && !isOthers && !unitPrice && !choice && !openRate) {
@@ -202,6 +239,9 @@ function NewEntryPage() {
       vehicle_number: isAdmin ? (vehicleNumber || null) : null,
       notes: p.note ?? (notes || null),
       created_by: me.user.id,
+      // a booking truck or last season's advance has its own account and no pay mode
+      pay_mode: !p.contract && !openingId && payMode ? payMode : null,
+      cash_received: !p.contract && !openingId && payMode === "cash" ? Number(cashReceived) || 0 : 0,
     });
 
     const { error } = await sdb.from("sales_entries").insert(row(choice
@@ -212,13 +252,15 @@ function NewEntryPage() {
       toast.error(error.message);
       return;
     }
-    toast.success(`এন্ট্রি সংরক্ষিত হয়েছে — চালান নং ${targetChallanNo}${choice ? ` (বুকিং ${choice.no} থেকে)` : ""}`);
+    toast.success(`এন্ট্রি সংরক্ষিত হয়েছে — চালান নং ${targetChallanNo}${choice ? ` (বুকিং ${choice.no} থেকে)` : ""}${!choice && !openingId && payMode === "cash" ? ` · নগদ ৳${bn(Number(cashReceived) || 0)} ক্যাশে যোগ হয়েছে` : ""}`);
     qc.invalidateQueries({ queryKey: ["bookings"] });
     qc.invalidateQueries({ queryKey: ["sales"] });
     qc.invalidateQueries({ queryKey: ["customers-all"] });
     qc.invalidateQueries({ queryKey: ["opening-balances"] });
     qc.invalidateQueries({ queryKey: ["customer-opening-dues"] });
     qc.invalidateQueries({ queryKey: ["ledger"] });
+    qc.invalidateQueries({ queryKey: ["cash"] });
+    qc.invalidateQueries({ queryKey: ["customer-balance"] });
     navigate({ to: "/challans" });
   }
 
@@ -416,8 +458,43 @@ function NewEntryPage() {
               <button type="button" onClick={() => setContractId(NOT_BOOKING)}
                 className={`w-full rounded-xl border p-3 text-left text-sm ${contractId === NOT_BOOKING ? "border-primary bg-primary/5 ring-1 ring-primary" : ""}`}>
                 <b>না, আজকের দামে</b>
-                <span className="block text-xs text-muted-foreground">নগদ দিলে কালেকশনে লিখুন, না হলে অগ্রিম টাকা থাকলে সেখান থেকে কাটবে</span>
+                <span className="block text-xs text-muted-foreground">নিচে বেছে নিন টাকা কীভাবে: নগদ, অগ্রিম থেকে না বাকিতে</span>
               </button>
+            </CardContent>
+          </Card>
+        )}
+
+        {needsPay && (
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">টাকা কীভাবে?</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {PAY_MODES.filter((m) => m.value !== "advance" || advanceLeft > 0.5 || payMode === "advance").map((m) => (
+                <button key={m.value} type="button" onClick={() => setPayMode(m.value)}
+                  className={`w-full rounded-xl border p-3 text-left text-sm ${payMode === m.value ? "border-primary bg-primary/5 ring-1 ring-primary" : ""}`}>
+                  <b>{m.label}</b>
+                  <span className="block text-xs text-muted-foreground">
+                    {m.value === "advance" ? `অগ্রিম জমা আছে ৳${bn(Math.round(advanceLeft))}${discount > 0 ? ` · ছাড় ${discountLabel(discount)}` : ""}` : m.hint}
+                  </span>
+                </button>
+              ))}
+              {payMode === "cash" && (
+                <div className="space-y-1.5 pt-1">
+                  <Label>নগদ পেলাম (৳)</Label>
+                  <Input type="number" inputMode="decimal" min={0} value={cashReceived}
+                    onChange={(e) => { setCashTouched(true); setCashReceived(e.target.value); }} />
+                  {isAdmin && Number(cashReceived) > 0 && Math.abs(Number(cashReceived) - totalAmount) > 0.5 && (
+                    <p className="text-xs text-warning">
+                      চালান ৳{bn(totalAmount)}, নগদ ৳{bn(Number(cashReceived))} — পার্থক্য ৳{bn(Math.abs(Math.round(totalAmount - Number(cashReceived))))} গ্রাহকের {Number(cashReceived) < totalAmount ? "বাকিতে" : "অগ্রিমে"} যাবে।
+                    </p>
+                  )}
+                  {!isAdmin && <p className="text-xs text-muted-foreground">সেভ করার পর এই টাকা বদলাতে অ্যাডমিন লাগবে।</p>}
+                </div>
+              )}
+              {payMode === "advance" && isAdmin && totalAmount > advanceLeft + 0.5 && (
+                <p className="text-xs text-warning">
+                  অগ্রিম আছে ৳{bn(Math.round(advanceLeft))}; বাকি ৳{bn(Math.round(totalAmount - advanceLeft))} গ্রাহকের বাকিতে যাবে।
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -439,7 +516,7 @@ function NewEntryPage() {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <Label>একক মূল্য (৳)</Label>
+                    <Label>একক মূল্য (৳){payMode === "advance" && discount > 0 ? " — আজকের দাম থেকে ছাড় বাদে" : ""}</Label>
                     <Input
                       type="number"
                       min={0}
@@ -447,6 +524,11 @@ function NewEntryPage() {
                       value={unitPrice}
                       onChange={(e) => setUnitPrice(e.target.value)}
                     />
+                    {payMode === "advance" && discount > 0 && selectedBrick && Number(selectedBrick.default_unit_price) > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        আজকের দাম ৳{bn(selectedBrick.default_unit_price)} − ছাড় ৳{bn(discount)} = ৳{bn(Math.max(0, Math.round((Number(selectedBrick.default_unit_price) - discount) * 100) / 100))}
+                      </p>
+                    )}
                   </div>
                 )}
                 <div className="space-y-1.5">

@@ -10,6 +10,7 @@ import { InvoiceDocument, type InvoiceData } from "@/components/invoice-document
 import { shareNodeAsImage, downloadNodeAsImage, printNode } from "@/lib/share-invoice";
 import { openWhatsApp } from "@/lib/whatsapp";
 import { bn } from "@/lib/format";
+import { challanPayLabel } from "@/lib/customer-account";
 
 export const Route = createFileRoute("/_authenticated/challans/$id")({
   head: () => ({ meta: [{ title: "চালান ডিটেইলস — CDB Bricks" }] }),
@@ -32,7 +33,7 @@ function ChallanDetailPage() {
           id, challan_no, sale_date, quantity, unit_price, total_amount,
           status, sale_type, driver_name, vehicle_number, notes,
           custom_brick_name, approved_at, created_at, created_by, approved_by,
-          opening_balance_id,
+          opening_balance_id, contract_id, pay_mode, cash_received,
           customer:customers(id, name, phone, address),
           brick_type:brick_types(id, name)
         `)
@@ -74,7 +75,7 @@ function ChallanDetailPage() {
     date: entry.sale_date,
     customerRef: entry.customer?.phone ?? null,
     salesPerson: managerQ.data ?? "—",
-    paymentTerms: entry.sale_type === "advance" ? "অগ্রিম বিক্রয়" : "নিয়মিত বিক্রয়",
+    paymentTerms: challanPayLabel(entry as any) || (entry.sale_type === "advance" ? "অগ্রিম বিক্রয়" : "নিয়মিত বিক্রয়"),
     to: {
       name: entry.customer?.name ?? "—",
       lines: [
@@ -159,6 +160,12 @@ function ChallanDetailPage() {
       {(entry as any).opening_balance_id && (
         <div className="rounded-lg border border-info/40 bg-info/5 p-3 text-sm">
           এই চালানটি <span className="font-semibold">গত বছরের বকেয়া (গ্রাহক অগ্রিম)</span> থেকে সমন্বয় হয়েছে — এ বছরের নতুন পাওনা হিসেবে গণনা হবে না।
+        </div>
+      )}
+      {(entry as any).pay_mode && (
+        <div className="rounded-lg border p-3 text-sm">
+          টাকা: <span className="font-semibold">{challanPayLabel(entry as any)}</span>
+          {(entry as any).pay_mode === "cash" && ` · নগদ পাওয়া ৳${bn(Number((entry as any).cash_received) || 0)} (ক্যাশে যোগ হয়েছে)`}
         </div>
       )}
 
