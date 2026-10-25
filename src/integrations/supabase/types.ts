@@ -1048,6 +1048,7 @@ export type Database = {
           created_at: string
           created_by: string
           direction: string
+          due_date: string | null
           id: string
           loan_date: string
           note: string | null
@@ -1059,6 +1060,7 @@ export type Database = {
           created_at?: string
           created_by: string
           direction?: string
+          due_date?: string | null
           id?: string
           loan_date?: string
           note?: string | null
@@ -1070,6 +1072,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           direction?: string
+          due_date?: string | null
           id?: string
           loan_date?: string
           note?: string | null

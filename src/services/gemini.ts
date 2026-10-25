@@ -5,6 +5,7 @@ import { fetchAllRows } from "@/lib/fetch-all";
 import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
 import { payWorker } from "@/lib/worker-pay";
 import { fetchBookings } from "@/lib/bookings";
+import { loanDue } from "@/lib/loan-due";
 
 /* ============================================================================
  * CDB Bricks AI ব্রেন
@@ -163,8 +164,8 @@ export interface KilnSnapshot {
   expenses: Row[];
   kacha: Row[];
   opening: OpeningLine[];
-  loans: { party: string; amount: number; direction: string; date: string }[];
-  loanPaid: { party: string; amount: number; direction: string }[];
+  loans: { id: string; party: string; amount: number; direction: string; date: string; due: string | null }[];
+  loanPaid: { loanId: string; party: string; amount: number; direction: string }[];
   /** fixed-price bookings with bricks still owed (lib/bookings.ts), all time */
   bookings: { id: string; no: string; customerId: string; customer: string; owed: number; trucksLeft: number }[];
   cashSeason: CashSummary | null;
@@ -348,8 +349,8 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
     safeRows("পূর্বের জের", failed,
       db.from("opening_balance_summary").select("id,display_name,party_name,kind,amount,paid_amount,remaining_amount,remaining_qty,customer_id,sardar_id,worker_id")),
     // a loan runs across seasons, as on the loans page
-    safeRows("ঋণ", failed, db.from("loans").select("party_name,amount,direction,loan_date").limit(5000)),
-    safeRows("ঋণ পরিশোধ", failed, db.from("loan_payments").select("amount,loan:loans(direction,party_name)").limit(5000)),
+    safeRows("ঋণ", failed, db.from("loans").select("id,party_name,amount,direction,loan_date,due_date").limit(5000)),
+    safeRows("ঋণ পরিশোধ", failed, db.from("loan_payments").select("amount,loan_id,loan:loans(direction,party_name)").limit(5000)),
     safeRows("বেতনের হার", failed, db.from("pay_rates").select("worker_id,sardar_id,amount,effective_from")),
     safeRows("পূর্বের জের পরিশোধ", failed, allRows(() => db.from("opening_payments").select("id,opening_balance_id,amount,payment_date").order("id"))),
   ]);
@@ -510,12 +511,15 @@ async function loadSnapshot(): Promise<KilnSnapshot> {
         .sort((a, b) => a.date.localeCompare(b.date)),
     })),
     loans: loans.map((l) => ({
+      id: String(l.id ?? ""),
       party: String(l.party_name ?? ""),
       amount: num(l.amount),
       direction: String(l.direction ?? ""),
       date: String(l.loan_date ?? ""),
+      due: l.due_date ? String(l.due_date) : null,
     })),
     loanPaid: loanPay.map((p) => ({
+      loanId: String(p.loan_id ?? ""),
       party: String(p.loan?.party_name ?? ""),
       amount: num(p.amount),
       direction: String(p.loan?.direction ?? ""),
@@ -1103,6 +1107,18 @@ function loanBlock(s: KilnSnapshot): string {
   for (const [party, v] of parties) {
     if (v.taken) lines.push(`   • ${party} থেকে নেওয়া ${tk(v.taken)}, শোধ ${tk(v.paidBack)}, বাকি দেনা ${tk(v.taken - v.paidBack)}`);
     if (v.given) lines.push(`   • ${party}-কে দেওয়া ${tk(v.given)}, ফেরত ${tk(v.gotBack)}, বাকি পাওনা ${tk(v.given - v.gotBack)}`);
+  }
+  // due dates of loans that still have something left (loans.due_date)
+  const dated = s.loans
+    .map((l) => ({ l, left: l.amount - s.loanPaid.filter((p) => p.loanId === l.id).reduce((a, p) => a + p.amount, 0) }))
+    .filter((x) => x.l.due && x.left > 0.5)
+    .sort((a, b) => a.l.due!.localeCompare(b.l.due!));
+  if (dated.length) {
+    lines.push("📅 শেষ তারিখ:");
+    for (const { l, left } of dated) {
+      const due = loanDue(l.due, left, s.today);
+      lines.push(`   • ${l.party} — ${l.direction === "taken" ? "শোধ দিতে হবে" : "ফেরত পাওয়ার কথা"} ${tk(left)}: ${due?.text ?? l.due}`);
+    }
   }
   return lines.join("\n");
 }

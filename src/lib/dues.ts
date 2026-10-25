@@ -1,5 +1,6 @@
 import type { KilnSnapshot } from "@/services/gemini";
 import { bn } from "@/lib/format";
+import { loanDue } from "@/lib/loan-due";
 
 /**
  * পাওনা-দেনা: who owes the kiln and whom the kiln owes, built from the one snapshot
@@ -30,7 +31,16 @@ export function buildDues(s: KilnSnapshot): { receive: DueLine[]; pay: DueLine[]
     const m = new Map<string, number>();
     for (const l of s.loans) if (l.direction === dir) m.set(l.party, (m.get(l.party) ?? 0) + l.amount);
     for (const p of s.loanPaid) if (p.direction === dir) m.set(p.party, (m.get(p.party) ?? 0) - p.amount);
-    return [...m].map(([name, amount]) => ({ name, amount }));
+    // the nearest due date of a loan to that person that still has something left
+    const dueOf = (party: string) => {
+      const dated = s.loans
+        .filter((l) => l.direction === dir && l.party === party && l.due)
+        .map((l) => ({ l, left: l.amount - s.loanPaid.filter((p) => p.loanId === l.id).reduce((a, p) => a + p.amount, 0) }))
+        .filter((x) => x.left > 0.5)
+        .sort((a, b) => a.l.due!.localeCompare(b.l.due!));
+      return dated.length ? loanDue(dated[0].l.due, dated[0].left, s.today)?.text : undefined;
+    };
+    return [...m].map(([name, amount]) => ({ name, amount, sub: dueOf(name) }));
   };
   const supplierSub = (type: string) => CONTRACT_TYPE_LABEL[type] ?? (type || undefined);
 

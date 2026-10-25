@@ -31,8 +31,9 @@ const METHODS: Array<[string, string]> = [["cash", "নগদ"], ["bkash", "ব�
 const num = (s: string) => Number(s || 0) || 0;
 const nfc = (s: string) => s.normalize("NFC").trim();
 
-type Form = { personId: string; party: string; amount: string; method: string; date: string; note: string };
-const blank = (today: string): Form => ({ personId: "", party: "", amount: "", method: "cash", date: today, note: "" });
+/** dueDate: when a loan taken must be paid back (loans.due_date), optional */
+type Form = { personId: string; party: string; amount: string; method: string; date: string; note: string; dueDate: string };
+const blank = (today: string): Form => ({ personId: "", party: "", amount: "", method: "cash", date: today, note: "", dueDate: "" });
 
 export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId, lockHead, onDone }: {
   open: boolean;
@@ -181,7 +182,7 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
         if (error) throw error;
       } else if (head === "loanIn") {
         if (!f.party.trim()) throw new Error("কার কাছ থেকে ঋণ, নাম লিখুন");
-        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "taken", amount, loan_date: f.date, note, created_by: uid() });
+        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "taken", amount, loan_date: f.date, due_date: f.dueDate || null, note, created_by: uid() });
         if (error) throw error;
       } else {
         if (!loan) throw new Error("কে ফেরত দিল, বেছে নিন");
@@ -282,7 +283,12 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
                 <Label className="text-xs">তারিখ</Label>
                 <Input className="h-11" type="date" value={f.date} onChange={(e) => set({ date: e.target.value })} />
               </div>
-              <div />
+              {head === "loanIn" ? (
+                <div className="space-y-1">
+                  <Label className="text-xs">শোধের শেষ তারিখ (ঐচ্ছিক)</Label>
+                  <Input className="h-11" type="date" value={f.dueDate} min={f.date} onChange={(e) => set({ dueDate: e.target.value })} />
+                </div>
+              ) : <div />}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">নোট</Label>

@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { bn, bnDate, isoDate } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { printTable } from "@/lib/print-table";
+import { LOAN_DUE_CLASS, loanDue } from "@/lib/loan-due";
 import { IncomeEntryDialog } from "@/components/income-entry";
 import { ExpenseEntryDialog } from "@/components/expense-entry";
 import { toast } from "sonner";
@@ -47,12 +48,12 @@ function LoansPage() {
 
   // new loans and repayments: the two shared forms; lDlg / pDlg only edit saved rows
   const [entry, setEntry] = useState<{ dir: "in"; head: "loanIn" | "loanBack"; id?: string } | { dir: "out"; head: "loanGive" | "loanRepay"; id?: string } | null>(null);
-  const [lDlg, setLDlg] = useState<null | { id?: string; party_name: string; direction: string; amount: string; date: string; note: string }>(null);
+  const [lDlg, setLDlg] = useState<null | { id?: string; party_name: string; direction: string; amount: string; date: string; due_date: string; note: string }>(null);
   const saveL = useMutation({
     mutationFn: async () => {
       const f = lDlg!; const amount = Number(f.amount || 0);
       if (!f.party_name.trim() || !(amount > 0)) throw new Error("নাম ও টাকা দিন");
-      const p = { party_name: f.party_name.trim(), direction: f.direction, amount, loan_date: f.date, note: f.note || null };
+      const p = { party_name: f.party_name.trim(), direction: f.direction, amount, loan_date: f.date, due_date: f.due_date || null, note: f.note || null };
       const { error } = f.id ? await supabase.from("loans").update(p).eq("id", f.id) : await supabase.from("loans").insert({ ...p, created_by: me!.user.id });
       if (error) throw error;
     },
@@ -80,8 +81,8 @@ function LoansPage() {
 
   const print = () => printTable({
     title: "ঋণ দেওয়া-নেওয়ার হিসাব",
-    headers: ["তারিখ", "নাম", "ধরন", "ঋণ", "পরিশোধ", "বাকি"], rightCols: [3, 4, 5],
-    rows: (loansQ.data ?? []).map((l) => [bnDate(l.loan_date), l.party_name, l.direction === "taken" ? "নেওয়া" : "দেওয়া", `৳ ${bn(l.amount)}`, `৳ ${bn(paidOf(l.id))}`, `৳ ${bn(Number(l.amount) - paidOf(l.id))}`]),
+    headers: ["তারিখ", "নাম", "ধরন", "ঋণ", "পরিশোধ", "বাকি", "শেষ তারিখ"], rightCols: [3, 4, 5],
+    rows: (loansQ.data ?? []).map((l) => [bnDate(l.loan_date), l.party_name, l.direction === "taken" ? "নেওয়া" : "দেওয়া", `৳ ${bn(l.amount)}`, `৳ ${bn(paidOf(l.id))}`, `৳ ${bn(Number(l.amount) - paidOf(l.id))}`, l.due_date ? bnDate(l.due_date) : "—"]),
     totals: [["নেওয়া ঋণ বাকি (দেনা)", `৳ ${bn(sumDir("taken"))}`], ["দেওয়া ঋণ বাকি (পাওনা)", `৳ ${bn(sumDir("given"))}`]],
   });
 
@@ -112,14 +113,20 @@ function LoansPage() {
               {(loansQ.data ?? []).map((l) => (
                 <TableRow key={l.id}>
                   <TableCell>{bnDate(l.loan_date)}</TableCell>
-                  <TableCell><span className="font-medium">{l.party_name}</span> <Badge variant="outline">{l.direction === "taken" ? "নেওয়া" : "দেওয়া"}</Badge></TableCell>
+                  <TableCell>
+                    <span className="font-medium">{l.party_name}</span> <Badge variant="outline">{l.direction === "taken" ? "নেওয়া" : "দেওয়া"}</Badge>
+                    {(() => {
+                      const due = loanDue(l.due_date, Number(l.amount) - paidOf(l.id));
+                      return due && <div className={`text-xs font-semibold ${LOAN_DUE_CLASS[due.tone]}`}>{l.direction === "taken" ? "শোধ: " : "ফেরত: "}{due.text}</div>;
+                    })()}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">৳ {bn(l.amount)}</TableCell>
                   <TableCell className="text-right tabular-nums">৳ {bn(paidOf(l.id))}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">৳ {bn(Number(l.amount) - paidOf(l.id))}</TableCell>
                   <TableCell className="text-right whitespace-nowrap">
                     <Button size="sm" variant="outline" onClick={() => setEntry(l.direction === "taken" ? { dir: "out", head: "loanRepay", id: l.id } : { dir: "in", head: "loanBack", id: l.id })}>{l.direction === "taken" ? "শোধ দিলাম" : "ফেরত পেলাম"}</Button>
                     {isAdmin && <>
-                      <Button size="sm" variant="ghost" onClick={() => setLDlg({ id: l.id, party_name: l.party_name, direction: l.direction, amount: String(l.amount), date: l.loan_date, note: l.note ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => setLDlg({ id: l.id, party_name: l.party_name, direction: l.direction, amount: String(l.amount), date: l.loan_date, due_date: l.due_date ?? "", note: l.note ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" variant="ghost" onClick={() => confirm("মুছবেন?") && delL.mutate(l.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
                     </>}
                   </TableCell>
@@ -166,6 +173,7 @@ function LoansPage() {
               <div><Label>তারিখ</Label><Input type="date" value={lDlg.date} onChange={(e) => setLDlg({ ...lDlg, date: e.target.value })} /></div>
               <div><Label>টাকা (৳)</Label><Input type="number" value={lDlg.amount} onChange={(e) => setLDlg({ ...lDlg, amount: e.target.value })} /></div>
             </div>
+            <div><Label>{lDlg.direction === "taken" ? "শোধের শেষ তারিখ" : "ফেরতের শেষ তারিখ"} (ঐচ্ছিক)</Label><Input type="date" value={lDlg.due_date} min={lDlg.date} onChange={(e) => setLDlg({ ...lDlg, due_date: e.target.value })} /></div>
             <div><Label>নোট</Label><Input value={lDlg.note} onChange={(e) => setLDlg({ ...lDlg, note: e.target.value })} /></div>
           </div>}
           <DialogFooter><Button onClick={() => saveL.mutate()} disabled={saveL.isPending}>সংরক্ষণ</Button></DialogFooter>

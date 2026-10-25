@@ -93,11 +93,13 @@ type Form = {
   paidTouched: boolean;
   date: string;
   note: string;
+  /** loanGive: when the money is due back (loans.due_date), optional */
+  dueDate: string;
 };
 
 const blank = (today: string): Form => ({
   personId: "", party: "", kindId: "", vekuKind: "", work: "", what: "", qty: "", rate: "", total: "",
-  billKind: "rent", area: "", areaUnit: LAND_UNITS[0], driver: "", rateTouched: false, paid: "", paidTouched: false, date: today, note: "",
+  billKind: "rent", area: "", areaUnit: LAND_UNITS[0], driver: "", rateTouched: false, paid: "", paidTouched: false, date: today, note: "", dueDate: "",
 });
 
 export function ExpenseEntryDialog({
@@ -618,7 +620,7 @@ export function ExpenseEntryDialog({
       } else if (head === "loanGive") {
         if (!f.party.trim()) throw new Error("কাকে ঋণ দিলেন, নাম লিখুন");
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
-        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "given", amount: paid, loan_date: f.date, note: note || null, created_by: uid() });
+        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "given", amount: paid, loan_date: f.date, due_date: f.dueDate || null, note: note || null, created_by: uid() });
         if (error) throw error;
       } else if (isCash) {
         if (!(paid > 0)) throw new Error("টাকার পরিমাণ দিন");
@@ -953,6 +955,11 @@ export function ExpenseEntryDialog({
                   <Label className="text-xs">চালক</Label>
                   <Input className="h-11" list="expense-form-drivers" value={f.driver} onChange={(e) => set({ driver: e.target.value })} />
                   <datalist id="expense-form-drivers">{drivers.map((d) => <option key={d} value={d} />)}</datalist>
+                </div>
+              ) : head === "loanGive" ? (
+                <div className="space-y-1">
+                  <Label className="text-xs">ফেরতের শেষ তারিখ (ঐচ্ছিক)</Label>
+                  <Input className="h-11" type="date" value={f.dueDate} min={f.date} onChange={(e) => set({ dueDate: e.target.value })} />
                 </div>
               ) : <div />}
             </div>

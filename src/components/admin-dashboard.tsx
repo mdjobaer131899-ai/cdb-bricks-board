@@ -3,12 +3,13 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { WeatherSignalBanner } from "@/components/weather-signals";
-import { Banknote, ChevronRight, Cloud, CloudLightning, CloudRain, FilePlus2, Layers, Receipt, Sun } from "lucide-react";
+import { Banknote, CalendarClock, ChevronRight, Cloud, CloudLightning, CloudRain, FilePlus2, Layers, Receipt, Sun } from "lucide-react";
 import { toast } from "sonner";
 import { BrandLogo } from "@/components/brand-logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { bn, isoDate } from "@/lib/format";
 import { fetchCashHistory } from "@/lib/cash-queries";
+import { LOAN_DUE_CLASS, fetchLoansDueSoon } from "@/lib/loan-due";
 import {
   getKilnSnapshot,
   getKilnWeather,
@@ -257,6 +258,30 @@ function MoneyTiles({ s }: { s: KilnSnapshot }) {
   );
 }
 
+/* ---------- ঋণের শেষ তারিখ: পেরিয়ে গেছে বা ৭ দিনের মধ্যে (lib/loan-due.ts) ---------- */
+function LoanDueAlert() {
+  const q = useQuery({ queryKey: ["loans", "due-soon"], queryFn: fetchLoansDueSoon, refetchInterval: 15 * 60_000 });
+  const rows = q.data ?? [];
+  if (!rows.length) return null;
+  return (
+    <Link to="/loans" className="block rounded-2xl border border-warning/50 bg-warning/10 p-3.5 transition active:scale-[0.99]">
+      <div className="mb-1.5 flex items-center gap-2 text-sm font-bold">
+        <CalendarClock className="h-4 w-4 text-warning" /> ঋণের শেষ তারিখ
+      </div>
+      <ul className="space-y-1 text-sm">
+        {rows.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-x-2">
+            <span>
+              <b>{r.party}</b> — {r.direction === "taken" ? "শোধ দিতে হবে" : "ফেরত পাওয়ার কথা"} <span className="num font-semibold">{tk(r.remaining)}</span>
+            </span>
+            <span className={`text-xs font-semibold ${LOAN_DUE_CLASS[r.due.tone]}`}>{r.due.text}</span>
+          </li>
+        ))}
+      </ul>
+    </Link>
+  );
+}
+
 /* ---------- পাকা ইটের স্টক ---------- */
 const STOCK_COLORS = ["bg-primary", "bg-amber-500", "bg-stone-400", "bg-teal-600", "bg-sky-600", "bg-rose-400"];
 
@@ -385,6 +410,7 @@ export function AdminDashboard({ navGrid }: { navGrid?: ReactNode }) {
           <div className="space-y-3.5">
             <CashHero s={s} weather={weather} />
             <WeatherSignalBanner />
+            <LoanDueAlert />
             <QuickActions />
             <TodayStrip s={s} />
             <ProductionLine s={s} />
