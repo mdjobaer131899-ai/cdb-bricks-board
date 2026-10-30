@@ -42,7 +42,7 @@ export const MONEY_HEADS: MoneyHead[] = [
   { key: "openingIn", label: "গত বছরের পাওনা আদায়", group: "in", icon: History, tone: "amber" },
   { key: "ownerInvest", label: "মালিকের বিনিয়োগ", group: "in", icon: Crown, tone: "amber" },
   { key: "loanIn", label: "ঋণ নেওয়া", group: "in", icon: Landmark, tone: "blue" },
-  { key: "loanBack", label: "দেওয়া ঋণ ফেরত", group: "in", icon: Landmark, tone: "blue" },
+  { key: "loanBack", label: "দেওয়া ঋণ ফেরত পেলাম", group: "in", icon: Landmark, tone: "blue" },
 
   { key: "sardar", label: "সরদার", group: "labour", icon: Users2, tone: "red" },
   { key: "daily", label: "ডেলি শ্রমিক", group: "labour", icon: HardHat, tone: "red" },
@@ -63,7 +63,7 @@ export const MONEY_HEADS: MoneyHead[] = [
   { key: "asset", label: "সম্পদ কেনা", group: "move", icon: Warehouse, tone: "blue" },
   { key: "ownerWithdraw", label: "মালিকের উত্তোলন", group: "move", icon: Crown, tone: "amber" },
   { key: "loanGive", label: "ঋণ দেওয়া", group: "move", icon: Landmark, tone: "blue" },
-  { key: "loanRepay", label: "নেওয়া ঋণ পরিশোধ", group: "move", icon: Landmark, tone: "blue" },
+  { key: "loanRepay", label: "নেওয়া ঋণ শোধ দিলাম", group: "move", icon: Landmark, tone: "blue" },
   { key: "openingOut", label: "পূর্বের দেনা পরিশোধ", group: "move", icon: History, tone: "amber" },
 ];
 

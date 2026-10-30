@@ -778,6 +778,7 @@ function CashBookPage() {
         onOpenChange={(o) => { if (!o) setIncomeHead(null); }}
         head={incomeHead}
         onDone={invalidate}
+        onSwitchHead={(k) => { setIncomeHead(null); setExpenseHead(k as HeadKey); }}
       />
       <ExpenseEntryDialog
         open={expenseHead !== null}

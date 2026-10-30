@@ -835,7 +835,7 @@ function cashBlock(s: KilnSnapshot): string {
     sales: "ইট বিক্রির টাকা",
     ownerInvest: "মালিকের বিনিয়োগ",
     loanTaken: "ঋণ নেওয়া",
-    loanReturned: "দেওয়া ঋণ ফেরত",
+    loanReturned: "দেওয়া ঋণ ফেরত পেলাম",
     openingCollected: "গত বছরের পাওনা আদায়",
   };
   const outLabels: Record<string, string> = {
@@ -848,7 +848,7 @@ function cashBlock(s: KilnSnapshot): string {
     ownerSalary: "মালিকের বেতন",
     ownerWithdraw: "মালিকের উত্তোলন",
     loanGiven: "ঋণ দেওয়া",
-    loanRepaid: "নেওয়া ঋণ পরিশোধ",
+    loanRepaid: "নেওয়া ঋণ শোধ দিলাম",
     openingPaid: "পূর্বের দেনা পরিশোধ",
   };
   const lines = [`💰 হাতে নগদ (মূল ক্যাশ): ${tk(c.net)}`, "", `📥 মোট নগদ এসেছে: ${tk(c.income)}`];

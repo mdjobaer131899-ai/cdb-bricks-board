@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -35,7 +36,7 @@ const nfc = (s: string) => s.normalize("NFC").trim();
 type Form = { personId: string; party: string; amount: string; method: string; date: string; note: string; dueDate: string };
 const blank = (today: string): Form => ({ personId: "", party: "", amount: "", method: "cash", date: today, note: "", dueDate: "" });
 
-export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId, lockHead, onDone }: {
+export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId, lockHead, onDone, onSwitchHead }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   head?: IncomeKey | null;
@@ -43,6 +44,8 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
   partyId?: string | null;
   lockHead?: boolean;
   onDone?: () => void;
+  /** open a money-out head instead (e.g. someone who picked "loan given back" to repay a loan taken) */
+  onSwitchHead?: (k: MoneyKey) => void;
 }) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
@@ -133,6 +136,8 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
     },
   });
   const givenLoans = (loansQ.data ?? []).filter((l) => l.direction === "given" && l.remaining > 0.5);
+  // loans the kiln took and still owes: paying them back is money out, not this head
+  const takenLeft = (loansQ.data ?? []).filter((l) => l.direction === "taken" && l.remaining > 0.5);
   const loan = givenLoans.find((l) => l.id === f.personId);
 
   /* ---------- numbers and labels ---------- */
@@ -145,7 +150,8 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
   const partyLabel = head === "sale" ? "কোন গ্রাহক" : head === "openingIn" ? "কার কাছ থেকে (গত বছরের পাওনা)" : head === "ownerInvest" ? "কোন মালিক" : head === "loanIn" ? "কার কাছ থেকে ঋণ" : "কে ঋণ ফেরত দিল";
   const help: Partial<Record<IncomeKey, string>> = {
     ownerInvest: "মালিক ভাটায় টাকা দিলেন। হাতে নগদ বাড়বে, এটা বিক্রি নয়।",
-    loanIn: "কারো কাছ থেকে ধার নিলেন। শোধ করলে \"টাকা গেছে → নেওয়া ঋণ পরিশোধ\" থেকে লিখবেন।",
+    loanIn: "কারো কাছ থেকে ধার নিলেন। শোধ করলে \"টাকা গেছে → নেওয়া ঋণ শোধ দিলাম\" থেকে লিখবেন।",
+    loanBack: "কাউকে ধার দিয়েছিলেন, সে টাকা ফেরত দিল। আপনি কারো ঋণ শোধ করলে এটা নয়।",
     openingIn: "গত মৌসুমের বাকি আদায়। এই মৌসুমের বিক্রিতে ধরা হবে না।",
   };
   const pickList = useMemo(() => (
@@ -226,6 +232,24 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
             </div>
 
             {help[head] && <p className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{help[head]}</p>}
+
+            {head === "loanBack" && takenLeft.length > 0 && (
+              <div className="space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+                <p className="font-bold text-amber-900 dark:text-amber-200">নেওয়া ঋণ শোধ দিচ্ছেন?</p>
+                <p className="num text-xs text-amber-900 dark:text-amber-200">
+                  {takenLeft.map((l) => `${l.name} ${tk(l.remaining)}`).join(" · ")} — এগুলো আপনি নিয়েছেন। শোধ দিলে টাকা যায়, তাই সেটা "টাকা গেছে → নেওয়া ঋণ শোধ দিলাম"।
+                </p>
+                {onSwitchHead ? (
+                  <Button type="button" size="sm" className="w-full gap-1" onClick={() => onSwitchHead("loanRepay")}>
+                    নেওয়া ঋণ শোধ দিলাম <ArrowRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button type="button" size="sm" className="w-full gap-1" asChild>
+                    <Link to="/loans" onClick={() => onOpenChange(false)}>ঋণের পাতায় গিয়ে "শোধ দিলাম" চাপুন <ArrowRight className="h-4 w-4" /></Link>
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* 1. who */}
             <Section label={`${partyLabel} *`}>
