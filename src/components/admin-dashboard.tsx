@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowDownToLine, ArrowUpFromLine, Banknote, CheckCircle2, ChevronDown, ChevronRight, Cloud, CloudLightning, CloudRain,
-  FilePlus2, Layers, LayoutGrid, Receipt, Sun, X,
+  FilePlus2, Layers, LayoutGrid, NotebookPen, Receipt, Sun, X,
 } from "lucide-react";
 import { WeatherSignalBanner } from "@/components/weather-signals";
 import { BrandLogo } from "@/components/brand-logo";
@@ -20,6 +20,7 @@ import { fetchCashHistory, type CashHistoryRow } from "@/lib/cash-queries";
 import { buildDues } from "@/lib/dues";
 import { fetchLoansDueSoon, type LoanWithDue } from "@/lib/loan-due";
 import { moneyHead } from "@/lib/money-heads";
+import { useUnbooked } from "@/lib/book-marks";
 import { getKilnSnapshot, getKilnWeather, type KilnSnapshot, type WeatherInfo } from "@/services/gemini";
 
 /* =========================================================
@@ -559,6 +560,31 @@ function QuickActions() {
   );
 }
 
+/**
+ * Money out not yet written in the paper book (খাতায় তোলা বাকি): every new expense waits here
+ * until it is ticked in the cash book. One tap opens the cash book straight in tick mode.
+ */
+function PaperBookCard() {
+  const q = useUnbooked();
+  const d = q.data;
+  if (!d || d.n === 0) return null;
+  return (
+    <Link to="/cash-book" search={{ book: "1" } as never}
+      className="flex items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 transition active:scale-[0.99] dark:border-amber-800 dark:bg-amber-950/30">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+        <NotebookPen className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-bold text-amber-900 dark:text-amber-200">খাতায় তোলা বাকি {bn(d.n)}টি খরচ</span>
+        <span className="num block text-xs text-amber-800 dark:text-amber-300">
+          {tk(d.total)}{d.oldest ? ` · ${bnDate(d.oldest)} থেকে` : ""} · কাগজে লিখে টিক দিন
+        </span>
+      </span>
+      <span className="shrink-0 rounded-xl bg-amber-600 px-3 py-2 text-sm font-bold text-white">খাতায় তুলুন</span>
+    </Link>
+  );
+}
+
 /* ---------- মূল পাতা ---------- */
 export function AdminDashboard({ navGrid }: { navGrid?: ReactNode }) {
   // stays as it was when you come back from a page opened from this menu
@@ -613,6 +639,7 @@ export function AdminDashboard({ navGrid }: { navGrid?: ReactNode }) {
         <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
           <div className="space-y-4">
             <CashHero s={s} weather={weather} todayRows={todayRows} />
+            <PaperBookCard />
             <WeatherSignalBanner />
             <QuickActions />
             <TasksPanel s={s} rows={rows} loans={loans} />

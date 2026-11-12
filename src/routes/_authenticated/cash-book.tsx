@@ -24,6 +24,7 @@ import { billHead } from "@/lib/ledger";
 import { LedgerView } from "@/components/ledger-view";
 import { usePageAccess } from "@/lib/page-permissions";
 import { printTable } from "@/lib/print-table";
+import { fetchBookMarks } from "@/lib/book-marks";
 
 export const Route = createFileRoute("/_authenticated/cash-book")({
   head: () => ({
@@ -43,11 +44,13 @@ export const Route = createFileRoute("/_authenticated/cash-book")({
     ...(s.view === "heads" ? { view: "heads" as const } : {}),
     ...(typeof s.h === "string" && s.h ? { h: s.h } : {}),
     ...(typeof s.p === "string" && s.p ? { p: s.p } : {}),
+    ...(s.book === "1" || s.book === 1 ? { book: "1" as const } : {}),
   }),
   component: CashBookRoute,
 });
 
-type CashBookSearch = { row?: string; bill?: string; head?: string; view?: "heads"; h?: string; p?: string };
+/** book=1: open straight in "খাতায় তোলা" (tick what was written in the paper book), from the home card */
+type CashBookSearch = { row?: string; bill?: string; head?: string; view?: "heads"; h?: string; p?: string; book?: "1" };
 
 /** the cash book's two views: every line (default) or the expense ledger by head and name */
 function CashBookRoute() {
@@ -194,7 +197,7 @@ function CashBookPage() {
   const [bill, setBill] = useState<BillRow | null>(null);
   const [deleteBill, setDeleteBill] = useState<BillRow | null>(null);
   const navigate = useNavigate();
-  const { row: rowParam, bill: billParam } = Route.useSearch();
+  const { row: rowParam, bill: billParam, book: bookParam } = Route.useSearch();
   const clearParam = () => navigate({ to: "/cash-book", search: {}, replace: true });
 
   // heads kept behind the page that owns them (same rule as the phone's quick-entry sheet)
@@ -267,16 +270,7 @@ function CashBookPage() {
     }
   };
 
-  const marks = useQuery({
-    queryKey: ["book-marks"],
-    queryFn: async () => {
-      const { data, error } = await (supabase as any).from("book_marks").select("entry_key, page, checked");
-      if (error) throw error;
-      const m: Record<string, { page: number | null; checked: boolean }> = {};
-      for (const r of (data ?? []) as any[]) m[r.entry_key] = { page: r.page, checked: r.checked };
-      return m;
-    },
-  });
+  const marks = useQuery({ queryKey: ["book-marks"], queryFn: fetchBookMarks });
   const [lastPage, setLastPage] = useState<number | null>(null);
   useEffect(() => {
     try {
@@ -318,6 +312,13 @@ function CashBookPage() {
     setBookMode(true);
   };
   const stopBooking = () => { setBookMode(false); setBookTarget("unbooked"); setPicked(new Set()); setKind("all"); };
+  useEffect(() => {
+    if (!bookParam || handled.current === "book") return;
+    handled.current = "book";
+    startBooking();
+    clearParam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookParam]);
   const startPageFix = () => {
     setBookTarget("nopage");
     choosePreset("season");
@@ -496,42 +497,6 @@ function CashBookPage() {
         )}
       </section>
 
-      {/* One entry button */}
-      <Button className="h-14 w-full gap-2 rounded-2xl text-base font-bold shadow-sm" onClick={() => openQuickEntry()}>
-        <Plus className="h-5 w-5" /> নতুন এন্ট্রি
-      </Button>
-
-      {/* count the drawer at the end of the day */}
-      <DayCloseCard />
-
-      {/* Period chips */}
-      <div className="overflow-x-auto [scrollbar-width:none]">
-        <div className="flex w-max gap-2">
-          {PRESETS.map(([p, label]) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => choosePreset(p)}
-              className={`h-10 rounded-full px-4 text-sm font-bold transition active:scale-95 ${
-                preset === p ? "bg-ink text-ink-foreground" : "border bg-card text-foreground"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setDateSheet(true)}
-            className={`flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-bold transition active:scale-95 ${
-              preset === "custom" ? "bg-ink text-ink-foreground" : "border bg-card text-foreground"
-            }`}
-          >
-            <CalendarRange className="h-4 w-4" />
-            {preset === "custom" ? rangeText : "তারিখ বাছুন"}
-          </button>
-        </div>
-      </div>
-
       {/* paper book: what is still to be written, one tap to start */}
       {!bookMode && unbookedAll.length > 0 && marks.isSuccess && (
         <button type="button" onClick={startBooking}
@@ -569,6 +534,44 @@ function CashBookPage() {
           )}
         </div>
       )}
+
+      {/* One entry button */}
+      {!bookMode && (
+        <Button className="h-14 w-full gap-2 rounded-2xl text-base font-bold shadow-sm" onClick={() => openQuickEntry()}>
+          <Plus className="h-5 w-5" /> নতুন এন্ট্রি
+        </Button>
+      )}
+
+      {/* count the drawer at the end of the day */}
+      {!bookMode && <DayCloseCard />}
+
+      {/* Period chips */}
+      <div className={`overflow-x-auto [scrollbar-width:none] ${bookMode ? "hidden" : ""}`}>
+        <div className="flex w-max gap-2">
+          {PRESETS.map(([p, label]) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => choosePreset(p)}
+              className={`h-10 rounded-full px-4 text-sm font-bold transition active:scale-95 ${
+                preset === p ? "bg-ink text-ink-foreground" : "border bg-card text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setDateSheet(true)}
+            className={`flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-bold transition active:scale-95 ${
+              preset === "custom" ? "bg-ink text-ink-foreground" : "border bg-card text-foreground"
+            }`}
+          >
+            <CalendarRange className="h-4 w-4" />
+            {preset === "custom" ? rangeText : "তারিখ বাছুন"}
+          </button>
+        </div>
+      </div>
 
       {/* List */}
       <section className="overflow-hidden rounded-[20px] border bg-card">
