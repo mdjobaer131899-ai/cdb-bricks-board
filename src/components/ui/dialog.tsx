@@ -5,8 +5,23 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useBackToClose } from "@/lib/back-close";
 
-const Dialog = DialogPrimitive.Root;
+/** controlled inside, so the phone's back button can close it (lib/back-close.ts) */
+function Dialog({ open: openProp, defaultOpen, onOpenChange, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  const [inner, setInner] = React.useState(defaultOpen ?? false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? !!openProp : inner;
+  const change = React.useCallback(
+    (o: boolean) => {
+      if (!controlled) setInner(o);
+      onOpenChange?.(o);
+    },
+    [controlled, onOpenChange],
+  );
+  useBackToClose(open, () => change(false));
+  return <DialogPrimitive.Root open={open} onOpenChange={change} {...props} />;
+}
 
 const DialogTrigger = DialogPrimitive.Trigger;
 

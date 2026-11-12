@@ -561,7 +561,15 @@ function QuickActions() {
 
 /* ---------- মূল পাতা ---------- */
 export function AdminDashboard({ navGrid }: { navGrid?: ReactNode }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  // stays as it was when you come back from a page opened from this menu
+  const [menuOpen, setMenuOpenState] = useState(() => {
+    try { return sessionStorage.getItem("cdb-home-menu") === "1"; } catch { return false; }
+  });
+  const setMenuOpen = (f: (o: boolean) => boolean) => setMenuOpenState((o) => {
+    const n = f(o);
+    try { sessionStorage.setItem("cdb-home-menu", n ? "1" : "0"); } catch { /* storage off */ }
+    return n;
+  });
   const snapQ = useQuery({
     queryKey: ["kiln-snapshot"],
     queryFn: () => getKilnSnapshot(true),

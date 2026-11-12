@@ -6,8 +6,23 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useBackToClose } from "@/lib/back-close";
 
-const Sheet = SheetPrimitive.Root;
+/** controlled inside, so the phone's back button can close it (lib/back-close.ts) */
+function Sheet({ open: openProp, defaultOpen, onOpenChange, ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
+  const [inner, setInner] = React.useState(defaultOpen ?? false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? !!openProp : inner;
+  const change = React.useCallback(
+    (o: boolean) => {
+      if (!controlled) setInner(o);
+      onOpenChange?.(o);
+    },
+    [controlled, onOpenChange],
+  );
+  useBackToClose(open, () => change(false));
+  return <SheetPrimitive.Root open={open} onOpenChange={change} {...props} />;
+}
 
 const SheetTrigger = SheetPrimitive.Trigger;
 

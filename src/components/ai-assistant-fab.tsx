@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { processBrickFieldCommand, saveAiActionToDatabase, startAttendanceCheck, AIAttachment } from "../services/gemini";
+import { useBackToClose } from "@/lib/back-close";
 import { toast } from "sonner";
 import { bn, bnDate } from "@/lib/format";
 
@@ -33,6 +34,8 @@ interface Message {
 export function AiAssistantFab() {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
+  // the phone's back button closes the chat, not the page under it
+  useBackToClose(isOpen, () => setIsOpen(false));
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [savingIdx, setSavingIdx] = useState<number | null>(null);

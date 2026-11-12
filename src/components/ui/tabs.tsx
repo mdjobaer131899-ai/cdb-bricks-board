@@ -3,7 +3,62 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 
 import { cn } from "@/lib/utils";
 
-const Tabs = TabsPrimitive.Root;
+/**
+ * Remembers the open tab of a page for this visit (sessionStorage, per address), so coming
+ * back to the page with the back button shows the same tab, not the first one again.
+ * A tab chosen by the page itself (value) is left alone.
+ */
+const Tabs = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>(({ value, defaultValue, onValueChange, ...props }, ref) => {
+  const key = React.useMemo(
+    () => (typeof window !== "undefined" && value === undefined && defaultValue !== undefined ? `cdb-tab:${window.location.pathname}${window.location.search}:${defaultValue}` : null),
+    // the key belongs to the page the tabs were first shown on
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const [inner, setInner] = React.useState<string | undefined>(() => {
+    if (!key) return defaultValue;
+    try {
+      return sessionStorage.getItem(key) ?? defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+  const root = React.useRef<HTMLDivElement | null>(null);
+  // a remembered tab that is not there any more (e.g. shown to another role): back to the first
+  React.useEffect(() => {
+    if (!key || inner === defaultValue) return;
+    const el = root.current;
+    if (el && !el.querySelector('[role="tab"][data-state="active"]')) setInner(defaultValue);
+  }, [key, inner, defaultValue]);
+  const setRefs = (el: HTMLDivElement | null) => {
+    root.current = el;
+    if (typeof ref === "function") ref(el);
+    else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = el;
+  };
+  if (value !== undefined) return <TabsPrimitive.Root ref={setRefs} value={value} onValueChange={onValueChange} {...props} />;
+  return (
+    <TabsPrimitive.Root
+      ref={setRefs}
+      value={inner}
+      onValueChange={(v) => {
+        setInner(v);
+        if (key) {
+          try {
+            sessionStorage.setItem(key, v);
+          } catch {
+            /* storage off: the first tab shows next time */
+          }
+        }
+        onValueChange?.(v);
+      }}
+      {...props}
+    />
+  );
+});
+Tabs.displayName = TabsPrimitive.Root.displayName;
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { useBackToClose } from "@/lib/back-close";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownLeft, ArrowDownToLine, ArrowLeft, ArrowUpFromLine, ArrowUpRight, FilePlus2, Layers, Lock, Search, Sparkles,
@@ -55,6 +56,8 @@ export function QuickEntrySheet() {
   const [income, setIncome] = useState<{ head: IncomeKey; partyId: string | null } | null>(null);
   const [expense, setExpense] = useState<{ head: HeadKey; partyId: string | null } | null>(null);
   const [dayClose, setDayClose] = useState(false);
+  // back from "টাকা দিলাম"/"টাকা পেলাম" returns to the six tiles; the sheet itself closes on the next back
+  useBackToClose(open && step !== "start", () => { setStep("start"); setQuery(""); });
 
   useEffect(() => {
     const onOpen = (e: Event) => {
