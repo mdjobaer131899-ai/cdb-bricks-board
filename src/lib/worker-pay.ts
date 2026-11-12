@@ -41,18 +41,22 @@ export function splitWorkerPay(amount: number, old: WorkerOldDue[]) {
 export async function payWorker(p: { workerId: string; amount: number; date: string; note: string | null; createdBy: string; method?: string }) {
   const old = await fetchWorkerOldDues(p.workerId);
   const split = splitWorkerPay(p.amount, old);
+  // the rows written, so the AI assistant can undo its own entry
+  const refs: Array<{ table: string; id: string }> = [];
   for (const o of split.toOld) {
-    const { error } = await supabase.from("opening_payments").insert({
+    const { data, error } = await supabase.from("opening_payments").insert({
       opening_balance_id: o.id, amount: o.amount, payment_date: p.date, method: PAY_METHOD_BN[p.method ?? "cash"] ?? "নগদ",
       note: p.note ? `${p.note} (গত বছরের বকেয়া)` : "গত বছরের বকেয়া", created_by: p.createdBy,
-    } as any);
+    } as any).select("id").single();
     if (error) throw error;
+    if (data) refs.push({ table: "opening_payments", id: (data as any).id });
   }
   if (split.toNow > 0.001) {
-    const { error } = await supabase.from("worker_payments").insert({
+    const { data, error } = await supabase.from("worker_payments").insert({
       worker_id: p.workerId, amount: split.toNow, payment_date: p.date, payment_type: "payment", method: p.method ?? "cash", note: p.note, created_by: p.createdBy,
-    } as any);
+    } as any).select("id").single();
     if (error) throw error;
+    if (data) refs.push({ table: "worker_payments", id: (data as any).id });
   }
-  return split;
+  return { ...split, refs };
 }

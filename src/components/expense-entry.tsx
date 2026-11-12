@@ -107,8 +107,14 @@ const blank = (today: string): Form => ({
   method: "cash",
 });
 
+/** what to fill in when the form opens (the AI assistant's card opens the form this way) */
+export type ExpenseInitial = {
+  party?: string; paid?: number; qty?: number; rate?: number; total?: number; what?: string; kindName?: string;
+  vekuKind?: string; driver?: string; method?: string; date?: string; note?: string; dueDate?: string | null;
+};
+
 export function ExpenseEntryDialog({
-  open, onOpenChange, head: headProp, heads, partyId, focus, startPrev, lockHead, edit, onDone,
+  open, onOpenChange, head: headProp, heads, partyId, initial, focus, startPrev, lockHead, edit, onDone,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -118,6 +124,7 @@ export function ExpenseEntryDialog({
   heads?: HeadKey[];
   /** person / seller to preselect (suppliers, sardars or workers id) */
   partyId?: string | null;
+  initial?: ExpenseInitial | null;
   /** "pay": start with the bill folded (paying a due); "bill": start with the bill open */
   focus?: "bill" | "pay";
   /** contract heads: start on a previous-season due */
@@ -142,6 +149,8 @@ export function ExpenseEntryDialog({
   const set = (p: Partial<Form>) => setF((s) => ({ ...s, ...p }));
   // a preselected / edited seller is shown by name once the list is in
   const pendingParty = useRef<string | null>(null);
+  // a catalog item given by name (the AI card) is picked once the catalog is in
+  const pendingKind = useRef<string | null>(null);
   // "সেভ, আরেকটা": keep the head and date after saving and start the next entry
   const again = useRef(false);
   // names picked recently for this head (this phone only)
@@ -173,6 +182,27 @@ export function ExpenseEntryDialog({
       if (headProp && partyId && PICK_HEADS.has(headProp)) base.personId = partyId;
       else if (partyId) pendingParty.current = partyId;
       startHead(headProp ?? null, base);
+      if (initial) {
+        const i = initial;
+        const s = (n?: number) => (n && n > 0 ? String(n) : "");
+        pendingKind.current = i.kindName ?? null;
+        setF((o) => ({
+          ...o,
+          ...(i.party && !partyId ? { party: i.party } : {}),
+          ...(i.paid && i.paid > 0 ? { paid: String(i.paid), paidTouched: true } : {}),
+          ...(i.qty ? { qty: s(i.qty) } : {}),
+          ...(i.rate ? { rate: s(i.rate), rateTouched: true } : {}),
+          ...(i.total ? { total: s(i.total) } : {}),
+          ...(i.what ? { what: i.what } : {}),
+          ...(i.vekuKind ? { vekuKind: i.vekuKind } : {}),
+          ...(i.driver ? { driver: i.driver } : {}),
+          ...(i.method ? { method: i.method } : {}),
+          ...(i.date ? { date: i.date } : {}),
+          ...(i.note ? { note: i.note } : {}),
+          ...(i.dueDate ? { dueDate: i.dueDate } : {}),
+        }));
+        if (i.total || i.qty) setBillOpen(true);
+      }
       return;
     }
     // edit: fill from the saved row
@@ -286,6 +316,14 @@ export function ExpenseEntryDialog({
   const items = itemsQ.data ?? [];
   const kindItems = items.filter((i) => i.pay_mode === "credit" && (head === "raw" ? i.item_group === "raw" : i.item_group !== "raw"));
   const kindItem = items.find((i) => i.id === f.kindId);
+  useEffect(() => {
+    const name = pendingKind.current;
+    if (!name || !kindItems.length) return;
+    const it = kindItems.find((i) => nfc(i.name) === nfc(name));
+    pendingKind.current = null;
+    if (it) set({ kindId: it.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kindItems.length]);
 
   // who can be picked for this head
   const sellers = useMemo(() => {

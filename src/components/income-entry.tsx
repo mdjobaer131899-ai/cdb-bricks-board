@@ -40,12 +40,16 @@ const nfc = (s: string) => s.normalize("NFC").trim();
 type Form = { personId: string; party: string; amount: string; method: string; date: string; note: string; dueDate: string };
 const blank = (today: string): Form => ({ personId: "", party: "", amount: "", method: "cash", date: today, note: "", dueDate: "" });
 
-export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId, lockHead, onDone, onSwitchHead }: {
+/** what to fill in when the form opens (the AI assistant's card opens the form this way) */
+export type IncomeInitial = { party?: string; amount?: number; method?: string; date?: string; note?: string; dueDate?: string | null };
+
+export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId, initial, lockHead, onDone, onSwitchHead }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   head?: IncomeKey | null;
   /** customer, owner or loan id to preselect */
   partyId?: string | null;
+  initial?: IncomeInitial | null;
   lockHead?: boolean;
   onDone?: () => void;
   /** open a money-out head instead (e.g. someone who picked "loan given back" to repay a loan taken) */
@@ -69,7 +73,16 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
   useEffect(() => {
     if (!open) return;
     setHead(headProp ?? null);
-    setF({ ...blank(today), personId: partyId ?? "" });
+    const i = initial ?? {};
+    setF({
+      ...blank(today), personId: partyId ?? "",
+      ...(i.party ? { party: i.party } : {}),
+      ...(i.amount && i.amount > 0 ? { amount: String(i.amount) } : {}),
+      ...(i.method ? { method: i.method } : {}),
+      ...(i.date ? { date: i.date } : {}),
+      ...(i.note ? { note: i.note } : {}),
+      ...(i.dueDate ? { dueDate: i.dueDate } : {}),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 

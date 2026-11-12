@@ -92,6 +92,36 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_reminders: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string
+          done_at: string | null
+          id: string
+          remind_at: string
+          sent_at: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string
+          done_at?: string | null
+          id?: string
+          remind_at: string
+          sent_at?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string
+          done_at?: string | null
+          id?: string
+          remind_at?: string
+          sent_at?: string | null
+        }
+        Relationships: []
+      }
       agent_routines: {
         Row: {
           at_time: string

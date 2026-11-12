@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { Check, Loader2, Tractor } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,14 +8,12 @@ import { Input } from "@/components/ui/input";
 import { NameCombo } from "@/components/ui/name-combo";
 import { Label } from "@/components/ui/label";
 import { Chips, Field, Section, tk } from "@/components/money-form-parts";
-import { supabase } from "@/integrations/supabase/client";
-import { createExpense } from "@/lib/expenses.functions";
+import { saveVekuDay } from "@/lib/veku-save";
 import { PAY_METHODS } from "@/lib/cash-queries";
-import { bn, todayBD } from "@/lib/format";
+import { todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import {
-  HOUR, VEKU_AUTO_TK, VEKU_DIESEL_CREDIT, VEKU_DIESEL_OLD, VEKU_ITEM, VEKU_KHORAKI, VEKU_KHORAKI_TK, VEKU_RATE, VEKU_SEP,
-  makeVekuNote, parseVekuNote,
+  HOUR, VEKU_AUTO_TK, VEKU_KHORAKI_TK, VEKU_RATE, parseVekuNote,
 } from "@/components/contract-config";
 
 /**
@@ -66,7 +63,6 @@ export function VekuDayDialog({ open, onOpenChange, vekus, history, defaultVeku,
 }) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
-  const createExp = useServerFn(createExpense);
   const today = todayBD();
   const [f, setF] = useState<F>(() => blank(defaultVeku ?? vekus[0]?.id ?? "", today));
   const [busy, setBusy] = useState(false);
@@ -122,59 +118,13 @@ export function VekuDayDialog({ open, onOpenChange, vekus, history, defaultVeku,
       const uid = me?.user.id;
       if (!uid) throw new Error("আবার লগইন করুন");
       if (!veku) throw new Error("কোন ভেকু, বেছে নিন");
-      if (!f.date) throw new Error("তারিখ দিন");
-      if (hours > 0 && !(rate > 0)) throw new Error("ঘণ্টায় কত টাকা, লিখুন");
-      if (litres > 0 && !(price > 0)) throw new Error("ডিজেলের দাম লিখুন");
-      if (price > 0 && !(paid > 0) && !(hours > 0)) throw new Error("ডিজেল বাকিতে নিলে সেদিনের ঘণ্টাও লিখুন। পাম্পে টাকা দিলে তখন \"পাম্পে দিলেন\" লিখবেন।");
-      if (!(hours > 0) && !(paid > 0) && !(driverPay > 0) && !(auto > 0) && !(khoraki > 0)) throw new Error("ঘণ্টা বা কোনো টাকা লিখুন");
       if (f.auto && !(auto > 0)) throw new Error("অটো ভাড়া কত, লিখুন");
       if (f.khoraki && !(khoraki > 0)) throw new Error("খোরাকি কত, লিখুন");
-
-      const note = f.note.trim();
-      let noteUsed = false;
-      const takeNote = () => { if (noteUsed || !note) return ""; noteUsed = true; return note; };
-      const dieselText = [litres > 0 ? `${bn(litres)} লিটার` : "", price > 0 ? `দাম ${tk(price)}` : ""].filter(Boolean).join(VEKU_SEP);
-      const saved: string[] = [];
-
-      // 1. hours (and diesel taken on credit that day)
-      if (hours > 0) {
-        const credit = price > 0 && !(paid > 0) ? `${VEKU_DIESEL_CREDIT}: ${dieselText}` : "";
-        const { error } = await supabase.from("purchases").insert({
-          supplier_id: veku.id, purchase_date: f.date, item_name: VEKU_ITEM, material_id: null,
-          quantity: round2(hours), unit: HOUR, unit_price: rate, total_amount: rent,
-          note: makeVekuNote("", f.driver, [takeNote(), credit].filter(Boolean).join(VEKU_SEP)), created_by: uid,
-        } as never);
-        if (error) throw error;
-        saved.push("ঘণ্টা");
-      }
-
-      // 2. money off the veku account, in one insert
-      const pays: Array<Record<string, unknown>> = [];
-      const pay = (kind: string, amount: number, rest: string) => pays.push({
-        supplier_id: veku.id, amount: round2(amount), payment_date: f.date, method: f.method, created_by: uid,
-        note: makeVekuNote(kind, f.driver, [rest, takeNote()].filter(Boolean).join(VEKU_SEP)),
-      });
-      if (paid > 0) pay("ডিজেল", paid, price > 0 ? dieselText : VEKU_DIESEL_OLD);
-      if (driverPay > 0) pay("চালকের বেতন", driverPay, "");
-      if (auto > 0) pay("অটো ভাড়া", auto, "ডিজেল আনা");
-      if (pays.length) {
-        const { error } = await supabase.from("supplier_payments").insert(pays as never);
-        if (error) throw new Error(saved.length ? `ঘণ্টা সেভ হয়েছে, কিন্তু টাকাগুলো হয়নি। শুধু টাকাগুলো আবার লিখুন। (${error.message})` : error.message);
-        saved.push("টাকা");
-      }
-
-      // 3. khoraki: the kiln's own cost
-      if (khoraki > 0) {
-        try {
-          await createExp({ data: {
-            category: VEKU_KHORAKI, amount: khoraki, expense_date: f.date, method: f.method as "cash",
-            note: [veku.name, f.driver.trim() ? `চালক: ${f.driver.trim()}` : "", takeNote()].filter(Boolean).join(VEKU_SEP),
-          } });
-        } catch (e) {
-          throw new Error(saved.length ? `বাকিগুলো সেভ হয়েছে, কিন্তু খোরাকি হয়নি। শুধু খোরাকি আবার লিখুন। (${(e as Error).message})` : (e as Error).message);
-        }
-      }
-
+      // the same writer as the AI assistant (lib/veku-save.ts)
+      await saveVekuDay({
+        vekuId: veku.id, vekuName: veku.name, date: f.date, driver: f.driver, hours, rate, litres, price, paid,
+        driverPay, auto, khoraki, method: f.method, note: f.note,
+      }, uid);
       qc.invalidateQueries();
       toast.success(`${veku.name}: ${f.date === today ? "আজকের" : "দিনের"} হিসাব সেভ হয়েছে`);
       onOpenChange(false);

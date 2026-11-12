@@ -2,7 +2,10 @@
 // pg_cron calls this every 30 minutes with action "check" (and the x-cron-secret header).
 // Each routine in agent_routines has a time; from that time until 22:00 Dhaka, if the day's
 // work is not done yet, the admins' phones get one reminder (attendance and day close get a
-// second one two hours later). Tapping it opens the right place in the app.
+// second one two hours later). Tapping it opens the assistant on that routine (/?ask=<kind>),
+// where the answer can be given by voice. The morning routine is a summary, sent once a day.
+// Reminders the user asked for (agent_reminders) go to the writer's phone when their time
+// comes, day or night, and are marked sent.
 // The app calls "test" (admin only, with the user's login) to send today's attendance reminder now.
 // Push keys are the ones weather-alerts made (app_secrets vapid_public / vapid_private).
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -106,7 +109,7 @@ const ROUTINES: Record<string, { maxPerDay: number; build: Builder }> = {
         title: "🧱 আজকের কাঁচা ইট লেখা হয়নি",
         body: "কোন মিলে কত হাজার ইট হলো, এখনই লিখে রাখুন।",
         tag: `kacha-${today}`,
-        url: "/production-steps/kacha",
+        url: "/?ask=kacha",
         level: "info",
       };
     },
@@ -121,7 +124,7 @@ const ROUTINES: Record<string, { maxPerDay: number; build: Builder }> = {
         title: "🔒 আজকের দিন বন্ধ করা হয়নি",
         body: "ড্রয়ারের টাকা গুনে অ্যাপের হিসাবের সাথে মিলিয়ে নিন।",
         tag: `day-close-${today}`,
-        url: "/cash-book",
+        url: "/?ask=day_close",
         level: "info",
       };
     },
@@ -146,20 +149,72 @@ const ROUTINES: Record<string, { maxPerDay: number; build: Builder }> = {
         title: "📅 ঋণের তারিখ এসেছে",
         body: lines.join("\n") + (left.length > 3 ? `\nআরও ${bn(left.length - 3)}টি` : ""),
         tag: `loans-${today}`,
-        url: "/loans",
+        url: "/?ask=loans",
+        level: "info",
+      };
+    },
+  },
+  // the morning summary: the app builds the figures when it opens, the push says what waits
+  morning: {
+    maxPerDay: 1,
+    build: async (today) => {
+      const yesterday = addDays(today, -1);
+      const [closed, pending, loans, rem] = await Promise.all([
+        db.from("cash_day_closes").select("id").eq("close_date", yesterday).maybeSingle(),
+        db.from("sales_entries").select("id", { count: "exact", head: true }).eq("status", "pending"),
+        db.from("loans").select("id, amount, due_date").not("due_date", "is", null).lte("due_date", addDays(today, 7)),
+        db.from("agent_reminders").select("id", { count: "exact", head: true }).is("done_at", null)
+          .gte("remind_at", `${today}T00:00:00+06:00`).lte("remind_at", `${today}T23:59:59+06:00`),
+      ]);
+      const parts: string[] = [];
+      if (!closed.data) parts.push("গতকালের দিন বন্ধ হয়নি");
+      if ((pending.count ?? 0) > 0) parts.push(`অনুমোদন বাকি ${bn(pending.count ?? 0)}টা চালান`);
+      let dueLoans = 0;
+      if (loans.data?.length) {
+        const { data: pays } = await db.from("loan_payments").select("loan_id, amount").in("loan_id", loans.data.map((l) => l.id));
+        dueLoans = loans.data.filter((l) => Number(l.amount) - (pays ?? []).filter((p) => p.loan_id === l.id).reduce((a, p) => a + Number(p.amount), 0) > 0.5).length;
+      }
+      if (dueLoans) parts.push(`এই সপ্তাহে ঋণের তারিখ ${bn(dueLoans)}টা`);
+      if ((rem.count ?? 0) > 0) parts.push(`আজ মনে করানোর কথা ${bn(rem.count ?? 0)}টা`);
+      return {
+        title: "☀️ সকালের হিসাব",
+        body: (parts.length ? parts.join(" · ") + "। " : "") + "চাপলে গতকালের টাকা, হাতে নগদ আর আজকের কাজ দেখাবে।",
+        tag: `morning-${today}`,
+        url: "/?ask=morning",
         level: "info",
       };
     },
   },
 };
 
+/** reminders whose time has come: to the writer's phone (or every admin phone if it has none) */
+async function sendReminders(now: Date, subs: Sub[]) {
+  const { data: due } = await db.from("agent_reminders").select("id, body, created_by")
+    .is("sent_at", null).is("done_at", null).lte("remind_at", now.toISOString()).limit(20);
+  const out: string[] = [];
+  for (const r of due ?? []) {
+    const own = await allSubs(r.created_by);
+    const res = await sendTo(own.length ? own : subs, {
+      title: "⏰ মনে করিয়ে দিচ্ছি",
+      body: String(r.body),
+      tag: `reminder-${r.id}`,
+      url: "/?ask=reminders",
+      level: "info",
+    });
+    await db.from("agent_reminders").update({ sent_at: now.toISOString() }).eq("id", r.id);
+    out.push(`reminder:${res.sent}`);
+  }
+  return out;
+}
+
 async function check(now = new Date()) {
   const subs = await allSubs();
   if (subs.length === 0) return { subs: 0, sent: [] };
+  // a reminder comes at its time, also at night
+  const out: string[] = await sendReminders(now, subs);
   const { today, hm } = dhakaNow(now);
-  if (hm < "06:00" || hm >= "22:00") return { subs: subs.length, quiet: true };
+  if (hm < "06:00" || hm >= "22:00") return { subs: subs.length, quiet: true, sent: out };
   const { data: routines } = await db.from("agent_routines").select("kind, enabled, at_time");
-  const out: string[] = [];
   for (const r of routines ?? []) {
     const spec = ROUTINES[r.kind];
     if (!spec || !r.enabled || hm < String(r.at_time).slice(0, 5)) continue;
