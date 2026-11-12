@@ -18,6 +18,7 @@ import { INCOME_HEADS, IncomeEntryDialog, type IncomeKey } from "@/components/in
 import { HeadTiles } from "@/components/money-form-parts";
 import { PurseStrip } from "@/components/cash-purses";
 import { DayCloseCard } from "@/components/day-close";
+import { openQuickEntry } from "@/components/quick-entry";
 import { RAW_TYPES, TONE_CLASS, isIncome, moneyHead, moneyHeadAllowed, supplierHead, type MoneyKey } from "@/lib/money-heads";
 import { billHead } from "@/lib/ledger";
 import { usePageAccess } from "@/lib/page-permissions";
@@ -450,7 +451,7 @@ function CashBookPage() {
       </section>
 
       {/* One entry button */}
-      <Button className="h-14 w-full gap-2 rounded-2xl text-base font-bold shadow-sm" onClick={() => setEntrySheet(true)}>
+      <Button className="h-14 w-full gap-2 rounded-2xl text-base font-bold shadow-sm" onClick={() => openQuickEntry()}>
         <Plus className="h-5 w-5" /> নতুন এন্ট্রি
       </Button>
 

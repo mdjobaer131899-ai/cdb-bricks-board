@@ -11,6 +11,7 @@ import { bn, isoDate } from "@/lib/format";
 import { fetchCashHistory } from "@/lib/cash-queries";
 import { LOAN_DUE_CLASS, fetchLoansDueSoon } from "@/lib/loan-due";
 import { PurseStrip } from "@/components/cash-purses";
+import { openQuickEntry } from "@/components/quick-entry";
 import {
   getKilnSnapshot,
   getKilnWeather,
@@ -138,28 +139,34 @@ function CashHero({ s, weather }: { s: KilnSnapshot; weather: WeatherInfo | null
 
 /* ---------- দ্রুত কাজের বাটন ---------- */
 function QuickActions() {
-  const items = [
-    { to: "/entries/new", label: "নতুন চালান", icon: FilePlus2, primary: true, chip: "bg-white/15", color: "text-white" },
-    { to: "/collections", label: "জমা নিন", icon: Banknote, chip: "bg-emerald-50 dark:bg-emerald-950/50", color: "text-emerald-700 dark:text-emerald-300" },
-    { to: "/cash-book", label: "ক্যাশ বই", icon: Receipt, chip: "bg-red-50 dark:bg-red-950/50", color: "text-red-700 dark:text-red-300" },
-    { to: "/production-steps/kacha", label: "কাঁচা ইট", icon: Layers, chip: "bg-stone-100 dark:bg-stone-800", color: "text-stone-700 dark:text-stone-200" },
+  // money in / out open the "+" sheet straight on its "কাকে?" box
+  const items: Array<{ key: string; to?: string; step?: "in" | "out"; label: string; icon: typeof FilePlus2; primary?: boolean; chip: string; color: string }> = [
+    { key: "challan", to: "/entries/new", label: "নতুন চালান", icon: FilePlus2, primary: true, chip: "bg-white/15", color: "text-white" },
+    { key: "in", step: "in", label: "টাকা পেলাম", icon: Banknote, chip: "bg-emerald-50 dark:bg-emerald-950/50", color: "text-emerald-700 dark:text-emerald-300" },
+    { key: "out", step: "out", label: "টাকা দিলাম", icon: Receipt, chip: "bg-red-50 dark:bg-red-950/50", color: "text-red-700 dark:text-red-300" },
+    { key: "kacha", to: "/production-steps/kacha", label: "কাঁচা ইট", icon: Layers, chip: "bg-stone-100 dark:bg-stone-800", color: "text-stone-700 dark:text-stone-200" },
   ];
+  const cls = (primary?: boolean) =>
+    `flex min-h-[84px] flex-col items-center justify-center gap-1.5 rounded-2xl px-1 py-2.5 text-center transition active:scale-95 ${
+      primary ? "bg-primary text-primary-foreground" : "border bg-card text-foreground"
+    }`;
   return (
     <section className="grid grid-cols-4 gap-2">
-      {items.map((it) => (
-        <Link
-          key={it.to}
-          to={it.to as never}
-          className={`flex min-h-[84px] flex-col items-center justify-center gap-1.5 rounded-2xl px-1 py-2.5 text-center transition active:scale-95 ${
-            it.primary ? "bg-primary text-primary-foreground" : "border bg-card text-foreground"
-          }`}
-        >
-          <span className={`grid h-9 w-9 place-items-center rounded-[11px] ${it.chip}`}>
-            <it.icon className={`h-5 w-5 ${it.color}`} aria-hidden="true" />
-          </span>
-          <span className="text-[13px] font-bold leading-tight">{it.label}</span>
-        </Link>
-      ))}
+      {items.map((it) => {
+        const body = (
+          <>
+            <span className={`grid h-9 w-9 place-items-center rounded-[11px] ${it.chip}`}>
+              <it.icon className={`h-5 w-5 ${it.color}`} aria-hidden="true" />
+            </span>
+            <span className="text-[13px] font-bold leading-tight">{it.label}</span>
+          </>
+        );
+        return it.to ? (
+          <Link key={it.key} to={it.to as never} className={cls(it.primary)}>{body}</Link>
+        ) : (
+          <button key={it.key} type="button" onClick={() => openQuickEntry(it.step)} className={cls(it.primary)}>{body}</button>
+        );
+      })}
     </section>
   );
 }
