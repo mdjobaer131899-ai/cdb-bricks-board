@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { REPORT_KEYS, ReportsPanel, type ReportKey } from "@/components/reports-panel";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarRange, ChevronRight, Printer, TrendingDown, TrendingUp } from "lucide-react";
@@ -21,7 +22,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/income-expense")({
   head: () => ({
     meta: [
-      { title: "লাভ-ক্ষতি — CDB Bricks" },
+      { title: "লাভ-ক্ষতি ও রিপোর্ট — CDB Bricks" },
       { name: "description", content: "ইট বিক্রি থেকে সব খরচ বাদে আসল লাভ বা ক্ষতি, খাত অনুযায়ী।" },
       { property: "og:title", content: "লাভ-ক্ষতি — CDB Bricks" },
       { property: "og:description", content: "খাত অনুযায়ী লাভ-ক্ষতি।" },
@@ -29,8 +30,45 @@ export const Route = createFileRoute("/_authenticated/income-expense")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: ProfitPage,
+  // ?tab=reports shows the reports (the old /reports page), ?r=<report> opens one
+  validateSearch: (s: Record<string, unknown>): { tab?: "reports"; r?: ReportKey } => ({
+    ...(s.tab === "reports" || REPORT_KEYS.includes(s.r as ReportKey) ? { tab: "reports" as const } : {}),
+    ...(REPORT_KEYS.includes(s.r as ReportKey) ? { r: s.r as ReportKey } : {}),
+  }),
+  component: ProfitRoute,
 });
+
+/** লাভ-ক্ষতি ও রিপোর্ট: the profit figure and the sales/production reports, two tabs of one page */
+function ProfitRoute() {
+  const { tab, r } = Route.useSearch();
+  const navigate = useNavigate();
+  const reports = tab === "reports";
+  return (
+    <div className="space-y-4">
+      {!r && (
+        <div className="mx-auto grid max-w-3xl grid-cols-2 gap-1 rounded-2xl border bg-muted/60 p-1" role="tablist" aria-label="লাভ-ক্ষতি ও রিপোর্ট">
+          {([[false, "লাভ-ক্ষতি"], [true, "রিপোর্ট"]] as const).map(([v, label]) => (
+            <button
+              key={label}
+              type="button"
+              role="tab"
+              aria-selected={reports === v}
+              onClick={() => navigate({ to: "/income-expense", search: v ? { tab: "reports" } : {} })}
+              className={`h-10 rounded-xl text-sm font-bold transition ${reports === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {reports ? (
+        <ReportsPanel open={r} onOpen={(k) => navigate({ to: "/income-expense", search: k ? { tab: "reports", r: k } : { tab: "reports" }, replace: !k })} />
+      ) : (
+        <ProfitPage />
+      )}
+    </div>
+  );
+}
 
 const tk = (n: number) => `৳${bn(Math.round(n))}`;
 

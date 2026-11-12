@@ -45,12 +45,12 @@ export function buildDues(s: KilnSnapshot): { receive: DueLine[]; pay: DueLine[]
   const supplierSub = (type: string) => CONTRACT_TYPE_LABEL[type] ?? (type || undefined);
 
   const receive = [
-    line("customer-due", "গ্রাহকের বাকি", s.customers.map((c) => ({ name: c.name, amount: c.balance, to: "/customers/$id", params: { id: c.id } })), "/collections"),
+    line("customer-due", "গ্রাহকের বাকি", s.customers.map((c) => ({ name: c.name, amount: c.balance, to: "/customers/$id", params: { id: c.id } })), "/customers"),
     line("old-receivable", "গত বছরের পাওনা", open("customer_receivable"), "/opening-balances"),
     line("sardar-advance", "সরদারের কাছে দাদন", s.sardars.map((x) => ({ name: x.name, amount: -x.due, sub: x.kindLabel })), "/sardars"),
     line("staff-advance", "স্টাফ ও শ্রমিকের কাছে অগ্রিম", s.workers.map((w) => ({ name: w.name, amount: -w.due, sub: w.isDaily ? "ডেলি" : "মেস্তুরি / ম্যানেজার" })), "/salaries"),
     line("supplier-advance", "সাপ্লায়ারকে আগাম দেওয়া", s.suppliers.map((x) => ({ name: x.name, amount: -x.due, sub: supplierSub(x.material) })), "/purchases"),
-    line("loan-given", "দেওয়া ঋণ", loansBy("given"), "/loans"),
+    line("loan-given", "দেওয়া ঋণ", loansBy("given"), "/owners", { tab: "loans" }),
   ].filter((l) => l.total > 0.5);
 
   const pay = [
@@ -61,7 +61,7 @@ export function buildDues(s: KilnSnapshot): { receive: DueLine[]; pay: DueLine[]
     line("customer-advance", "গ্রাহকের অগ্রিম (ইট দেওয়া বাকি)", s.customers.map((c) => ({ name: c.name, amount: -c.balance, to: "/customers/$id", params: { id: c.id } })), "/advance-sales"),
     line("old-brick-due", "গত বছরের অগ্রিম (ইট দেওয়া বাকি)", open("customer_brick_due"), "/opening-balances"),
     line("old-payable", "পূর্বের দেনা", [...open("sardar_payable"), ...open("other_payable")], "/opening-balances"),
-    line("loan-taken", "নেওয়া ঋণ", loansBy("taken"), "/loans"),
+    line("loan-taken", "নেওয়া ঋণ", loansBy("taken"), "/owners", { tab: "loans" }),
   ].filter((l) => l.total > 0.5);
 
   return { receive, pay };

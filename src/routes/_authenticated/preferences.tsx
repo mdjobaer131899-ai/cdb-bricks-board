@@ -4,13 +4,10 @@ import type { ReactNode } from "react";
 import {
   CalendarRange,
   ChevronRight,
-  Database,
-  Landmark,
   LogOut,
   Moon,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
   UserCog,
   Users,
   History,
@@ -23,6 +20,7 @@ import { SeasonSwitcher } from "@/components/season-switcher";
 import { GlobalSearch } from "@/components/global-search";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RoutinesCard } from "@/components/assistant-routines";
+import { SystemSettings } from "@/components/system-settings";
 
 export const Route = createFileRoute("/_authenticated/preferences")({
   head: () => ({ meta: [{ title: "সেটিংস — CDB Bricks" }] }),
@@ -136,12 +134,16 @@ function PreferencesPage() {
 
       {isAdmin && (
         <Group title="অ্যাডমিন">
-          <LinkRow to="/settings" icon={SlidersHorizontal} label="সিস্টেম ও ব্যাকআপ" hint="অ্যাকাউন্ট তথ্য, ডেটা এক্সপোর্ট" chip="bg-accent text-accent-foreground" />
           <LinkRow to="/users" icon={Users} label="ইউজার ও অনুমতি" hint="ম্যানেজার যোগ, কোন পাতা দেখবে" chip="bg-accent text-accent-foreground" />
           <LinkRow to="/seasons" icon={History} label="মৌসুম ব্যবস্থাপনা" hint="নতুন মৌসুম, মৌসুম বন্ধ" chip="bg-accent text-accent-foreground" />
-          <LinkRow to="/opening-balances" icon={Database} label="পূর্বের বকেয়া ও জের" chip="bg-accent text-accent-foreground" />
-          <LinkRow to="/owners" icon={Landmark} label="মালিক ও ঋণ" chip="bg-accent text-accent-foreground" />
         </Group>
+      )}
+
+      {isAdmin && (
+        <section className="space-y-2">
+          <h2 className="section-label px-1">দাম ও ব্যাকআপ</h2>
+          <SystemSettings />
+        </section>
       )}
 
       <section className="space-y-2">

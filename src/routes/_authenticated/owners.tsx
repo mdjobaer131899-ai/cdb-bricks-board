@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BadgeDollarSign, Crown, Pencil, Plus, Printer, Trash2 } from "lucide-react";
@@ -16,11 +16,12 @@ import { rateAt, salaryEarned, type PayRate } from "@/lib/salary-accrual";
 import { IncomeEntryDialog } from "@/components/income-entry";
 import { ExpenseEntryDialog } from "@/components/expense-entry";
 import { toast } from "sonner";
+import { LoansPanel } from "@/components/loans-panel";
 
 export const Route = createFileRoute("/_authenticated/owners")({
   head: () => ({
     meta: [
-      { title: "মালিকের বিনিয়োগ — CDB Bricks" },
+      { title: "মালিক ও ঋণ — CDB Bricks" },
       { name: "description", content: "কোন মালিক কত টাকা বিনিয়োগ করেছেন, তুলেছেন, আর মালিকদের বেতনের হিসাব।" },
       { property: "og:title", content: "মালিকের বিনিয়োগ — CDB Bricks" },
       { property: "og:description", content: "মালিকদের বিনিয়োগ, উত্তোলন ও বেতন।" },
@@ -28,8 +29,36 @@ export const Route = createFileRoute("/_authenticated/owners")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: OwnersPage,
+  // ?tab=loans opens the loans tab (the old /loans page)
+  validateSearch: (s: Record<string, unknown>): { tab?: "loans" } => (s.tab === "loans" ? { tab: "loans" } : {}),
+  component: OwnersRoute,
 });
+
+/** মালিক ও ঋণ: the owners' money and the loans, two tabs of one page */
+function OwnersRoute() {
+  const { tab } = Route.useSearch();
+  const navigate = useNavigate();
+  const loans = tab === "loans";
+  return (
+    <div className="space-y-4">
+      <div className="grid max-w-md grid-cols-2 gap-1 rounded-2xl border bg-muted/60 p-1" role="tablist" aria-label="মালিক ও ঋণ">
+        {([[false, "মালিক"], [true, "ঋণ দেওয়া-নেওয়া"]] as const).map(([v, label]) => (
+          <button
+            key={label}
+            type="button"
+            role="tab"
+            aria-selected={loans === v}
+            onClick={() => navigate({ to: "/owners", search: v ? { tab: "loans" } : {} })}
+            className={`h-10 rounded-xl text-sm font-bold transition ${loans === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {loans ? <LoansPanel /> : <OwnersPage />}
+    </div>
+  );
+}
 
 /**
  * Owners: investment and withdrawal are the owner's capital (all-time, not season-scoped).
@@ -182,11 +211,10 @@ function OwnersPage() {
     <div className="space-y-5 pb-24 md:pb-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold md:text-2xl"><Crown className="h-6 w-6 text-primary" /> মালিকের বিনিয়োগ</h1>
+          <h2 className="flex items-center gap-2 text-lg font-bold md:text-xl"><Crown className="h-5 w-5 text-primary" /> মালিকের বিনিয়োগ</h2>
           <p className="text-sm text-muted-foreground">কোন মালিক কত টাকা দিয়েছেন, তুলেছেন{salaryOn ? ", আর বেতন" : ""}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="secondary"><Link to="/loans">ঋণ দেওয়া-নেওয়া</Link></Button>
           <Button variant="outline" onClick={print}><Printer className="mr-1 h-4 w-4" /> প্রিন্ট</Button>
           {isAdmin && <Button variant="secondary" onClick={() => setODlg({ name: "", phone: "" })}><Plus className="mr-1 h-4 w-4" /> মালিক</Button>}
         </div>

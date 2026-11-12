@@ -69,7 +69,7 @@ export function QuickEntrySheet() {
 
   /* ---------- who may write what (the same rule as the cash book) ---------- */
   const allowed = (k: MoneyKey) =>
-    (can("/cash-book") || (k === "sale" && can("/collections"))) && moneyHeadAllowed(k, can);
+    can("/cash-book") && moneyHeadAllowed(k, can);
   const expenseHeads = EXPENSE_HEADS.filter((h) => allowed(h.key)).map((h) => h.key);
   const incomeHeads = INCOME_HEADS.filter(allowed);
   const makeLinks = MAKE_LINKS.filter((w) => can(w.to));

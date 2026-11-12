@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownUp, CalendarRange, Check, ChevronRight, ListFilter, Lock, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,8 +19,9 @@ import { HeadTiles } from "@/components/money-form-parts";
 import { PurseTiles } from "@/components/cash-purses";
 import { DayCloseCard } from "@/components/day-close";
 import { openQuickEntry } from "@/components/quick-entry";
-import { RAW_TYPES, TONE_CLASS, isIncome, moneyHead, moneyHeadAllowed, supplierHead, type MoneyKey } from "@/lib/money-heads";
+import { MONEY_HEADS, RAW_TYPES, TONE_CLASS, isIncome, moneyHead, moneyHeadAllowed, supplierHead, type MoneyKey } from "@/lib/money-heads";
 import { billHead } from "@/lib/ledger";
+import { LedgerView } from "@/components/ledger-view";
 import { usePageAccess } from "@/lib/page-permissions";
 import { printTable } from "@/lib/print-table";
 
@@ -32,15 +33,54 @@ export const Route = createFileRoute("/_authenticated/cash-book")({
     ],
     links: [{ rel: "canonical", href: "/cash-book" }],
   }),
-  // ?row=<cash line key> or ?bill=<purchase id> opens that entry (links from খরচের খাতা)
-  validateSearch: (s: Record<string, unknown>): { row?: string; bill?: string } => ({
+  // ?row=<cash line key> or ?bill=<purchase id> opens that entry (links from the ledger view);
+  // ?head=<money head> opens the list on that head (e.g. sale = customer money, the old কালেকশন);
+  // ?view=heads shows the expense ledger by head (খাত অনুযায়ী), with h = head and p = person
+  validateSearch: (s: Record<string, unknown>): CashBookSearch => ({
     ...(typeof s.row === "string" && s.row ? { row: s.row } : {}),
     ...(typeof s.bill === "string" && s.bill ? { bill: s.bill } : {}),
+    ...(typeof s.head === "string" && s.head ? { head: s.head } : {}),
+    ...(s.view === "heads" ? { view: "heads" as const } : {}),
+    ...(typeof s.h === "string" && s.h ? { h: s.h } : {}),
+    ...(typeof s.p === "string" && s.p ? { p: s.p } : {}),
   }),
-  component: CashBookPage,
+  component: CashBookRoute,
 });
 
+type CashBookSearch = { row?: string; bill?: string; head?: string; view?: "heads"; h?: string; p?: string };
+
+/** the cash book's two views: every line (default) or the expense ledger by head and name */
+function CashBookRoute() {
+  const { view, h, p } = Route.useSearch();
+  const navigate = useNavigate();
+  const heads = view === "heads";
+  return (
+    <div className="space-y-4">
+      <div className="mx-auto grid max-w-3xl grid-cols-2 gap-1 rounded-2xl border bg-muted/60 p-1" role="tablist" aria-label="ক্যাশ বই দেখার ধরন">
+        {([[false, "সব লেনদেন"], [true, "খাত ও নাম অনুযায়ী"]] as const).map(([v, label]) => (
+          <button
+            key={label}
+            type="button"
+            role="tab"
+            aria-selected={heads === v}
+            onClick={() => navigate({ to: "/cash-book", search: v ? { view: "heads" } : {} })}
+            className={`h-10 rounded-xl text-sm font-bold transition ${heads === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {heads ? (
+        <LedgerView h={h} p={p} onGo={(s) => navigate({ to: "/cash-book", search: { view: "heads", ...s } })} />
+      ) : (
+        <CashBookPage />
+      )}
+    </div>
+  );
+}
+
 const tk = (n: number) => `৳${bn(Math.round(n))}`;
+const isMoneyKey = (k: string): k is MoneyKey => MONEY_HEADS.some((h) => h.key === k);
 
 
 type Range = { from: string; to: string };
@@ -132,10 +172,13 @@ function CashBookPage() {
   const qc = useQueryClient();
   const { can } = usePageAccess();
 
-  const [preset, setPreset] = useState<Preset>("month");
-  const [range, setRange] = useState<Range>(() => presetRange("month"));
+  // opened on a head (?head=sale from the old কালেকশন page): that head for the whole season
+  const headParam = Route.useSearch().head;
+  const startHead = headParam && isMoneyKey(headParam) ? headParam : null;
+  const [preset, setPreset] = useState<Preset>(startHead ? "season" : "month");
+  const [range, setRange] = useState<Range>(() => presetRange(startHead ? "season" : "month"));
   const [kind, setKind] = useState<Kind>("all");
-  const [head, setHead] = useState<string | null>(null);
+  const [head, setHead] = useState<string | null>(startHead);
   const [newestFirst, setNewestFirst] = useState(true);
 
   const [dateSheet, setDateSheet] = useState(false);
@@ -576,6 +619,12 @@ function CashBookPage() {
               <b className="num text-sm">{listIn - listOut < 0 ? "−" : ""}{tk(Math.abs(listIn - listOut))}</b>
             </div>
           </div>
+          {head === "sale" && !bookMode && (
+            <Link to="/dues" className="flex items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs font-semibold">
+              কোন গ্রাহকের কত বাকি বা অগ্রিম, পাওনা-দেনায় দেখুন
+              <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            </Link>
+          )}
         </div>
 
         {history.isLoading ? (

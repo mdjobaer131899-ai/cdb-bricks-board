@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 const actions = [
   { to: "/advance-sales" as const, label: "অগ্রিম বিক্রয়", icon: FileText, tone: "from-primary/15 to-primary/5 text-primary" },
   { to: "/entries/new" as const, label: "নগদ বিক্রি", icon: Banknote, tone: "from-accent/15 to-accent/5 text-accent-foreground" },
-  { to: "/collections" as const, label: "নতুন কালেকশন", icon: HandCoins, tone: "from-success/15 to-success/5 text-success" },
+  { to: "/cash-book" as const, label: "গ্রাহকের টাকা", icon: HandCoins, tone: "from-success/15 to-success/5 text-success", search: { head: "sale" } },
   { to: "/cash-book" as const, label: "আয়-ব্যায়", icon: Receipt, tone: "from-destructive/15 to-destructive/5 text-destructive" },
   { to: "/customers" as const, label: "নতুন গ্রাহক", icon: UserPlus, tone: "from-info/15 to-info/5 text-info" },
   { to: "/production-steps/kacha" as const, label: "কাঁচা ইট", icon: Boxes, tone: "from-warning/15 to-warning/5 text-warning" },
@@ -29,6 +29,7 @@ export function QuickActions() {
             <Link
               key={a.label}
               to={a.to}
+              search={("search" in a ? a.search : undefined) as never}
               className={`group flex shrink-0 flex-col items-center gap-2 transition-all hover:-translate-y-0.5`}
             >
               <div

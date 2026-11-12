@@ -160,7 +160,7 @@ function CashHero({ s, weather, todayRows }: { s: KilnSnapshot; weather: Weather
 }
 
 /* ---------- আজকের কাজ: অ্যাপ নিজে তালিকা বানায়, একবারে সর্বোচ্চ ৩টা ---------- */
-type Task = { id: string; tone: "red" | "amber"; text: string; sub?: string; to?: string; run?: () => void; once?: boolean };
+type Task = { id: string; tone: "red" | "amber"; text: string; sub?: string; to?: string; search?: Record<string, string>; run?: () => void; once?: boolean };
 
 const dismissKey = (t: Task, today: string) => `cdb-dash-dismiss:${t.id}${t.once ? "" : `:${today}`}`;
 function isDismissed(key: string) {
@@ -211,7 +211,8 @@ function TasksPanel({ s, rows, loans }: { s: KilnSnapshot; rows: CashHistoryRow[
       tone: l.due.tone === "overdue" ? "red" : "amber",
       text: `${l.party}: ${l.direction === "taken" ? "ঋণ শোধ" : "ঋণ ফেরত পাওয়া"} ${tk(l.remaining)}`,
       sub: l.due.text,
-      to: "/loans",
+      to: "/owners",
+      search: { tab: "loans" },
     });
   }
   if (attRoutine?.enabled && dhakaHM() >= hm(attRoutine.at_time) && dailyToday > 0 && !attDone) {
@@ -257,7 +258,7 @@ function TasksPanel({ s, rows, loans }: { s: KilnSnapshot; rows: CashHistoryRow[
             return (
               <li key={t.id} className="flex items-center gap-1">
                 {t.to ? (
-                  <Link to={t.to as never} className="flex min-w-0 flex-1 items-start gap-3 px-1 py-2.5">{body}</Link>
+                  <Link to={t.to as never} search={t.search as never} className="flex min-w-0 flex-1 items-start gap-3 px-1 py-2.5">{body}</Link>
                 ) : (
                   <button type="button" onClick={t.run} className="flex min-w-0 flex-1 items-start gap-3 px-1 py-2.5 text-left">{body}</button>
                 )}
@@ -417,7 +418,7 @@ function MonthSpend({ s, rows }: { s: KilnSnapshot; rows: CashHistoryRow[] }) {
   const change = total - before;
 
   return (
-    <Panel title="এই মাসে খরচ কোথায়" action={<MoreLink to="/ledger">খরচের খাতা</MoreLink>}>
+    <Panel title="এই মাসে খরচ কোথায়" action={<MoreLink to="/cash-book" search={{ view: "heads" }}>খাত অনুযায়ী</MoreLink>}>
       {total < 0.5 ? (
         <p className="text-sm text-muted-foreground">এই মাসে এখনো কোনো খরচ লেখা হয়নি।</p>
       ) : (

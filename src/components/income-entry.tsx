@@ -271,7 +271,7 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
                   </Button>
                 ) : (
                   <Button type="button" size="sm" className="w-full gap-1" asChild>
-                    <Link to="/loans" onClick={() => onOpenChange(false)}>ঋণের পাতায় গিয়ে "শোধ দিলাম" চাপুন <ArrowRight className="h-4 w-4" /></Link>
+                    <Link to="/owners" search={{ tab: "loans" } as never} onClick={() => onOpenChange(false)}>ঋণের পাতায় গিয়ে "শোধ দিলাম" চাপুন <ArrowRight className="h-4 w-4" /></Link>
                   </Button>
                 )}
               </div>

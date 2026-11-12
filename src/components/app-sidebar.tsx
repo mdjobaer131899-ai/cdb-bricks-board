@@ -10,21 +10,26 @@ import { BrandLogo } from "@/components/brand-logo";
 export type NavItem = { title: string; url: string; icon: any; adminOnly?: boolean };
 export type NavGroup = { label: string; items: NavItem[] };
 
+/**
+ * One menu, each page once. Merged pages live inside another: খরচের খাতা = ক্যাশ বই's
+ * "খাত ও নাম অনুযায়ী" view, কালেকশন = ক্যাশ বই on ইট বিক্রির টাকা, ঋণ = a tab of মালিক ও ঋণ,
+ * রিপোর্ট = a tab of লাভ-ক্ষতি, সিস্টেম ও ব্যাকআপ = part of সেটিংস. Home sits above the groups.
+ */
+export const HOME_ITEM: NavItem = { title: "হোম", url: "/", icon: LayoutDashboard };
+
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "বিক্রয় ও চালান",
+    label: "বিক্রি",
     items: [
-      { title: "ড্যাশবোর্ড", url: "/", icon: LayoutDashboard },
       { title: "নতুন চালান", url: "/entries/new", icon: FilePlus2 },
       { title: "চালান তালিকা", url: "/challans", icon: FileText },
       { title: "অনুমোদন", url: "/approvals", icon: ClipboardCheck, adminOnly: true },
       { title: "গ্রাহক", url: "/customers", icon: Users },
-      { title: "কালেকশন", url: "/collections", icon: Wallet },
       { title: "অগ্রিম বিক্রি", url: "/advance-sales", icon: PackageCheck },
     ],
   },
   {
-    label: "উৎপাদন ও শ্রমিক",
+    label: "উৎপাদন ও লোকজন",
     items: [
       { title: "কাঁচা ইট (মিল)", url: "/production-steps/kacha", icon: Boxes },
       { title: "ভাটায় ঢোকানো", url: "/production-steps/load", icon: ArrowDownToLine },
@@ -36,24 +41,22 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "ভাটার হিসাব",
+    label: "হিসাব",
     items: [
       { title: "ক্যাশ বই", url: "/cash-book", icon: Receipt },
-      { title: "খরচের খাতা", url: "/ledger", icon: FolderOpen },
-      { title: "লাভ-ক্ষতি", url: "/income-expense", icon: Scale },
       { title: "পাওনা-দেনা", url: "/dues", icon: HandCoins },
-      { title: "মালামাল ক্রয় ও খরচ", url: "/purchases", icon: ShoppingCart },
+      { title: "লাভ-ক্ষতি ও রিপোর্ট", url: "/income-expense", icon: Scale },
+      { title: "মালামাল ক্রয়", url: "/purchases", icon: ShoppingCart },
       { title: "মালিক ও ঋণ", url: "/owners", icon: Crown },
       { title: "পূর্বের বকেয়া ও জের", url: "/opening-balances", icon: History },
     ],
   },
   {
-    label: "রিপোর্ট ও সেটিংস",
+    label: "সেটিংস",
     items: [
-      { title: "রিপোর্ট", url: "/reports", icon: BarChart3 },
       { title: "মৌসুম", url: "/seasons", icon: CalendarRange },
       { title: "ইউজার ও অনুমতি", url: "/users", icon: UserCog, adminOnly: true },
-      { title: "সেটিংস", url: "/settings", icon: Settings, adminOnly: true },
+      { title: "সেটিংস", url: "/preferences", icon: Settings },
     ],
   },
 ];
@@ -84,12 +87,12 @@ export function AppSidebar() {
         {!role ? (
           <div className="p-3 text-xs text-sidebar-foreground/60 text-center group-data-[collapsible=icon]:hidden">ভূমিকা অপেক্ষমাণ</div>
         ) : (
-          NAV_GROUPS.map((g) => {
-            const items = g.items.filter((i) => (i.adminOnly ? isAdmin : can(i.url)));
+          [{ label: "", items: [HOME_ITEM] } as NavGroup, ...NAV_GROUPS].map((g) => {
+            const items = g.items.filter((i) => (i.adminOnly ? isAdmin : i.url === "/preferences" || can(i.url)));
             if (items.length === 0) return null;
             return (
-              <SidebarGroup key={g.label}>
-                <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
+              <SidebarGroup key={g.label || "home"}>
+                {g.label && <SidebarGroupLabel>{g.label}</SidebarGroupLabel>}
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {items.map((it) => (

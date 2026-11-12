@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
-import { NAV_GROUPS } from "@/components/app-sidebar";
+import { HOME_ITEM, NAV_GROUPS } from "@/components/app-sidebar";
 import { usePageAccess } from "@/lib/page-permissions";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -9,8 +9,11 @@ export function TopMenubar() {
   const { can, isAdmin } = usePageAccess();
   return (
     <nav className="hidden items-center gap-1 border-b bg-card px-4 py-1.5 lg:flex">
+      <Link to={HOME_ITEM.url} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium hover:bg-muted">
+        <HOME_ITEM.icon className="h-4 w-4" /> {HOME_ITEM.title}
+      </Link>
       {NAV_GROUPS.map((g) => {
-        const items = g.items.filter((i) => (i.adminOnly ? isAdmin : can(i.url)));
+        const items = g.items.filter((i) => (i.adminOnly ? isAdmin : i.url === "/preferences" || can(i.url)));
         if (!items.length) return null;
         return (
           <DropdownMenu key={g.label}>

@@ -90,7 +90,7 @@ export const isCost = (k: MoneyKey) => COST_GROUPS.includes(moneyHead(k).group);
 export const moneyHeadAllowed = (k: MoneyKey, can: (path: string) => boolean) =>
   ["veku", "vehicle", "land", "clean"].includes(k) ? can("/purchases")
   : ["ownerInvest", "ownerSalary", "ownerWithdraw"].includes(k) ? can("/owners")
-  : ["loanIn", "loanBack", "loanGive", "loanRepay"].includes(k) ? can("/loans")
+  : ["loanIn", "loanBack", "loanGive", "loanRepay"].includes(k) ? can("/owners")
   : ["openingIn", "openingOut"].includes(k) ? can("/opening-balances")
   : true;
 
@@ -153,8 +153,8 @@ export function headLink(k: MoneyKey): { to: string; search?: Record<string, str
     case "vehicle": return { to: "/purchases", search: { f: "vehicle" }, label: "গাড়ি ভাড়ার খাতা" };
     case "land": return { to: "/purchases", search: { f: "land" }, label: "জমি ভাড়ার খাতা" };
     case "clean": return { to: "/purchases", search: { f: "clean" }, label: "পরিচ্ছন্ন কর্মীর খাতা" };
-    case "sale": return { to: "/collections", label: "কালেকশন" };
-    case "loanIn": case "loanBack": case "loanGive": case "loanRepay": return { to: "/loans", label: "ঋণের খাতা" };
+    case "sale": return { to: "/cash-book", search: { head: "sale" }, label: "ক্যাশ বই: ইট বিক্রির টাকা" };
+    case "loanIn": case "loanBack": case "loanGive": case "loanRepay": return { to: "/owners", search: { tab: "loans" }, label: "ঋণের খাতা" };
     case "openingIn": case "openingOut": return { to: "/opening-balances", label: "পূর্বের বকেয়া" };
     default: return { to: "/cash-book", label: "ক্যাশ বই" };
   }

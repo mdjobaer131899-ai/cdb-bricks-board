@@ -7,13 +7,13 @@ import { usePageAccess } from "@/lib/page-permissions";
  * যাতে বিভাগ চেনা যায় কিন্তু পাতা রঙিন না হয়।
  */
 const GROUP_THEME = [
-  // ১. বিক্রয় ও চালান: ইটের লাল
+  // ১. বিক্রি: ইটের লাল
   { dot: "bg-primary", chip: "bg-accent text-accent-foreground" },
-  // ২. উৎপাদন ও শ্রমিক: অ্যাম্বার
+  // ২. উৎপাদন ও লোকজন: অ্যাম্বার
   { dot: "bg-amber-500", chip: "bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300" },
-  // ৩. ভাটার হিসাব: সবুজ
+  // ৩. হিসাব: সবুজ
   { dot: "bg-emerald-600", chip: "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300" },
-  // ৪. রিপোর্ট ও সেটিংস: নীল-ধূসর
+  // ৪. সেটিংস: নীল-ধূসর
   { dot: "bg-slate-500", chip: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
 ];
 
@@ -24,7 +24,7 @@ export function NavGrid() {
   return (
     <div className="space-y-5 pb-4 lg:hidden">
       {NAV_GROUPS.map((g, idx) => {
-        const items = g.items.filter((i) => i.url !== "/" && (i.adminOnly ? isAdmin : can(i.url)));
+        const items = g.items.filter((i) => i.url !== "/" && (i.adminOnly ? isAdmin : i.url === "/preferences" || can(i.url)));
         if (!items.length) return null;
         const theme = GROUP_THEME[Math.min(idx, GROUP_THEME.length - 1)];
 

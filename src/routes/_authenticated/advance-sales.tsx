@@ -18,6 +18,7 @@ import { fetchActiveBrickTypes, fetchAllCustomers } from "@/lib/sales-queries";
 import { bn, bnDate, todayBD } from "@/lib/format";
 import { printTable } from "@/lib/print-table";
 import { useCurrentUser } from "@/lib/use-current-user";
+import { IncomeEntryDialog } from "@/components/income-entry";
 
 /**
  * অগ্রিম বিক্রি — two different things, side by side:
@@ -295,6 +296,7 @@ function CancelDialog({ b, onClose }: { b: Booking; onClose: () => void }) {
 
 /* ================= advance money: the normal customer account ================= */
 function MoneyTab() {
+  const [take, setTake] = useState(false);
   const q = useQuery({
     queryKey: ["advance-money"],
     queryFn: async () => {
@@ -338,7 +340,7 @@ function MoneyTab() {
         </div>
       </div>
       <div className="flex gap-2">
-        <Button asChild className="h-12 flex-1 gap-2 rounded-2xl text-base font-bold"><Link to="/collections"><Wallet className="h-5 w-5" /> অগ্রিম টাকা নিন</Link></Button>
+        <Button className="h-12 flex-1 gap-2 rounded-2xl text-base font-bold" onClick={() => setTake(true)}><Wallet className="h-5 w-5" /> অগ্রিম টাকা নিন</Button>
         <Button variant="outline" className="h-12 rounded-2xl" onClick={print} aria-label="প্রিন্ট"><Printer className="h-5 w-5" /></Button>
       </div>
       {q.isLoading ? <Skeleton className="h-40 rounded-[20px]" /> : (
@@ -355,7 +357,8 @@ function MoneyTab() {
           ))}
         </section>
       )}
-      <p className="px-1 text-xs text-muted-foreground">টাকা নিন "কালেকশন" পাতায়, ইট দিন "নতুন চালান"-এ (বুকিং না বেছে)। দাম ধরা হয় চালানের দিনের দামে। গত বছরের জের এখানে নেই, তা "পূর্বের বকেয়া" পাতায়।</p>
+      <p className="px-1 text-xs text-muted-foreground">টাকা নিন উপরের বোতামে (ক্যাশ বইয়ে "ইট বিক্রির টাকা" হিসেবে ওঠে), ইট দিন "নতুন চালান"-এ (বুকিং না বেছে)। দাম ধরা হয় চালানের দিনের দামে। গত বছরের জের এখানে নেই, তা "পূর্বের বকেয়া" পাতায়।</p>
+      <IncomeEntryDialog open={take} onOpenChange={setTake} head="sale" lockHead />
     </div>
   );
 }
