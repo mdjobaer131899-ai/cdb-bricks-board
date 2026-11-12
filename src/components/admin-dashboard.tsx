@@ -121,6 +121,9 @@ function CashHero({ s, weather, todayRows }: { s: KilnSnapshot; weather: Weather
         </button>
       )}
       <TransferDialog open={transfer} onOpenChange={setTransfer} />
+      {net < -0.5 && (
+        <p className="mt-2 text-xs font-semibold text-red-200">হাতে নগদ ঋণাত্মক: কোনো টাকা আসা লেখা বাকি থাকতে পারে।</p>
+      )}
 
       <button
         type="button"
@@ -202,6 +205,12 @@ function TasksPanel({ s, rows, loans }: { s: KilnSnapshot; rows: CashHistoryRow[
   const kachaToday = s.kacha.some((k) => k.entry_type === "production" && k.entry_date === s.today);
 
   const tasks: Task[] = [];
+  if ((s.cashSeason?.net ?? 0) < -0.5) {
+    tasks.push({
+      id: "cash-negative", tone: "red", text: "হাতে নগদ ঋণাত্মক দেখাচ্ছে",
+      sub: "মালিকের টাকা, ঋণ বা মৌসুম শুরুর ক্যাশ লেখা বাকি কিনা দেখুন", run: () => openQuickEntry("in"),
+    });
+  }
   if (closesQ.isSuccess && hadLines(s.yesterday) && !closed.has(s.yesterday)) {
     tasks.push({ id: "close-yesterday", tone: "red", text: "গতকালের দিন বন্ধ হয়নি", sub: "ড্রয়ার গুনে হিসাব মিলিয়ে নিন", run: () => setCloseDate(s.yesterday) });
   }
