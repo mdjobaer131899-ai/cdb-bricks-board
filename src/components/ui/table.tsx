@@ -2,12 +2,54 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
-      <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
-    </div>
-  ),
+const useIsoLayoutEffect = typeof window !== "undefined" ? React.useLayoutEffect : React.useEffect;
+
+/**
+ * Copies each column's heading onto its cells (data-label), so on a phone the stylesheet
+ * (.table-stack in styles.css) can show every row as a card: heading on the left, value on
+ * the right, no sideways scrolling. Rows added later are labelled too.
+ */
+function labelCells(table: HTMLTableElement) {
+  const heads = Array.from(table.querySelectorAll(":scope > thead > tr:last-child > th")).map((th) => th.textContent?.trim() ?? "");
+  for (const tr of Array.from(table.querySelectorAll(":scope > tbody > tr, :scope > tfoot > tr"))) {
+    let i = 0;
+    for (const cell of Array.from(tr.children)) {
+      const span = Number(cell.getAttribute("colspan") || 1);
+      const label = span > 1 ? "" : heads[i] ?? "";
+      if (cell.getAttribute("data-label") !== label) cell.setAttribute("data-label", label);
+      i += span;
+    }
+  }
+}
+
+type TableProps = React.HTMLAttributes<HTMLTableElement> & {
+  /** false keeps the plain table on phones too (a small table that already fits) */
+  stack?: boolean;
+};
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+  ({ className, stack = true, ...props }, ref) => {
+    const inner = React.useRef<HTMLTableElement | null>(null);
+    const setRef = (el: HTMLTableElement | null) => {
+      inner.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) (ref as React.MutableRefObject<HTMLTableElement | null>).current = el;
+    };
+    useIsoLayoutEffect(() => {
+      const t = inner.current;
+      if (!stack || !t) return;
+      labelCells(t);
+      // attribute changes are not watched, so labelling never triggers itself
+      const mo = new MutationObserver(() => labelCells(t));
+      mo.observe(t, { childList: true, subtree: true, characterData: true });
+      return () => mo.disconnect();
+    }, [stack]);
+    return (
+      <div className={cn("relative w-full overflow-auto", stack && "table-stack")}>
+        <table ref={setRef} className={cn("w-full caption-bottom text-sm", className)} {...props} />
+      </div>
+    );
+  },
 );
 Table.displayName = "Table";
 

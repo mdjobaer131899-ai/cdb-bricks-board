@@ -281,8 +281,8 @@ function SardarsPage() {
         <TabsContent value="list">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2">
-              <CardTitle className="text-base">সরদার</CardTitle>
-              <div className="relative w-full max-w-xs">
+              <CardTitle className="hidden text-base sm:block">সরদার</CardTitle>
+              <div className="relative w-full sm:max-w-xs">
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input className="h-9 pl-8" placeholder="খুঁজুন..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
@@ -293,6 +293,49 @@ function SardarsPage() {
               ) : filtered.length === 0 ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">কোনো সরদার নেই</div>
               ) : (
+                <>
+                {/* phone: one card per sardar */}
+                <ul className="divide-y border-t md:hidden">
+                  {filtered.map((s: any) => {
+                    const t = stats.get(s.id) ?? { qty: 0, kacha: 0, work: 0, earned: 0, paid: 0, due: 0 };
+                    const dueTone = t.due > 0.5 ? "text-warning" : t.due < -0.5 ? "text-info" : "text-success";
+                    return (
+                      <li key={s.id} className={`px-4 py-3 ${s.is_active ? "" : "opacity-60"}`}>
+                        <div className="flex items-start gap-3">
+                          <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setDetail(s)}>
+                            <span className="block break-words text-[15.5px] font-bold leading-snug text-primary">{s.name}</span>
+                            <span className="mt-1 inline-block rounded-full border px-2 py-0.5 text-[11.5px] font-semibold text-foreground/80">
+                              {KINDS[s.kind] ?? s.kind}{millsOf(s.id) ? ` · ${millsOf(s.id)}` : ""}
+                            </span>
+                          </button>
+                          <span className="shrink-0 text-right">
+                            <span className={`block text-[11px] font-semibold ${t.due < -0.5 ? "text-info" : "text-muted-foreground"}`}>{t.due < -0.5 ? "দাদন" : t.due > 0.5 ? "পাবে" : "বাকি নেই"}</span>
+                            <b className={`num block text-[17px] ${dueTone}`}>৳{bn(Math.round(Math.abs(t.due)))}</b>
+                          </span>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="num min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+                            {s.kind === "burn" ? <>মাসিক <b className="text-foreground">৳{bn(rateAt(sardarRates(s.id), s.monthly_salary, todayBD()))}</b></> : <>কাঁচা ইট <b className="text-foreground">{bn(t.qty)}</b></>}
+                            {" · "}মজুরি <b className="text-foreground">৳{bn(Math.round(t.earned))}</b>{" · "}নিয়েছে <b className="text-destructive">৳{bn(Math.round(t.paid))}</b>
+                          </span>
+                          <Button size="sm" variant="outline" className="h-9 shrink-0" onClick={() => setPayFor(s.id)}>টাকা দিন</Button>
+                        </div>
+                        {isAdmin && (
+                          <div className="mt-1 flex justify-end gap-1">
+                            <Button size="sm" variant="ghost" className="h-8" aria-label="সম্পাদনা" onClick={() => setDlg({
+                              open: true, mode: "edit",
+                              form: { id: s.id, name: s.name, phone: s.phone ?? "", address: s.address ?? "", group_id: s.group_id ?? NO_GROUP, note: s.note ?? "", is_active: s.is_active, kind: s.kind ?? "mill", mill_name: s.mill_name ?? "", monthly_salary: String(rateAt(sardarRates(s.id), s.monthly_salary, todayBD())), origSalary: String(rateAt(sardarRates(s.id), s.monthly_salary, todayBD())), salaryFrom: todayBD(), join_date: s.join_date ?? todayBD(), leave_date: s.leave_date ?? "" },
+                            })}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button size="sm" variant="ghost" className="h-8" aria-label="মুছুন" onClick={() => { if (confirm(`"${s.name}" মুছে ফেলবেন?`)) delSardar.mutate(s.id); }}>
+                              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                            </Button>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="hidden md:block">
                 <Table>
                   <TableHeader><TableRow>
                     <TableHead>নাম</TableHead>
@@ -342,7 +385,8 @@ function SardarsPage() {
                     })}
                   </TableBody>
                 </Table>
-
+                </div>
+                </>
               )}
             </CardContent>
           </Card>

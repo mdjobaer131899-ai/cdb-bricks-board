@@ -217,6 +217,71 @@ th {
   font-size: 13px;
 }
 
+/* ---------- ফোনে টেবিল: প্রতিটি সারি একটি কার্ড, বাঁয়ে কলামের নাম, ডানে মান ----------
+   ui/table.tsx copies each heading onto its cells as data-label; no sideways scrolling */
+@media (max-width: 767px) {
+  .table-stack {
+    overflow: visible;
+  }
+  .table-stack > table,
+  .table-stack > table > tbody,
+  .table-stack > table > tfoot {
+    display: block;
+    width: 100%;
+  }
+  .table-stack > table > thead {
+    display: none;
+  }
+  .table-stack > table > tbody > tr,
+  .table-stack > table > tfoot > tr {
+    display: block;
+    padding: 10px 14px;
+  }
+  .table-stack > table > tbody > tr > td,
+  .table-stack > table > tfoot > tr > td {
+    display: flow-root;
+    padding: 3px 0;
+    text-align: right;
+    white-space: normal;
+    font-size: 14px;
+  }
+  .table-stack > table > tbody > tr > td::before,
+  .table-stack > table > tfoot > tr > td::before {
+    content: attr(data-label);
+    float: left;
+    max-width: 48%;
+    margin-right: 12px;
+    text-align: left;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-muted-foreground);
+  }
+  .table-stack > table > tbody > tr > td[data-label=""]::before,
+  .table-stack > table > tfoot > tr > td[data-label=""]::before,
+  .table-stack > table > tbody > tr > td:not([data-label])::before {
+    content: none;
+  }
+  /* the first cell names the row */
+  .table-stack > table > tbody > tr > td:first-child {
+    text-align: left;
+    font-size: 15px;
+    font-weight: 700;
+    padding-bottom: 5px;
+  }
+  .table-stack > table > tbody > tr > td:first-child::before {
+    content: none;
+  }
+  .table-stack > table > tbody > tr > td[colspan],
+  .table-stack > table > tfoot > tr > td[colspan] {
+    text-align: center;
+  }
+  .table-stack > table > tbody > tr > td.hidden,
+  .table-stack > table > tfoot > tr > td.hidden,
+  .table-stack > table > tbody > tr > td:empty {
+    display: none;
+  }
+}
+
 /* ---------- ডায়ালগ ও ড্রপডাউন যেন কখনো স্বচ্ছ না হয় ---------- */
 [role="dialog"],
 [data-radix-popper-content-wrapper] > div {

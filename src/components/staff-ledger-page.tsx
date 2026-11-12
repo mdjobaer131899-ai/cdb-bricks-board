@@ -323,7 +323,16 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      {/* phone: the three totals side by side in one card */}
+      <div className="grid grid-cols-3 divide-x overflow-hidden rounded-2xl border bg-card md:hidden">
+        {([["মোট পাওনা", tot.earned, ""], ["দেওয়া হয়েছে", tot.paid, "text-success"], ["বাকি", tot.due, "text-warning"]] as const).map(([label, v, tone]) => (
+          <div key={label} className="min-w-0 px-2.5 py-3">
+            <div className="truncate text-[11.5px] font-semibold text-muted-foreground">{label}</div>
+            <div className={`num truncate text-[16px] font-bold ${tone}`}>৳{bn(Math.round(v))}</div>
+          </div>
+        ))}
+      </div>
+      <div className="hidden grid-cols-3 gap-2 md:grid">
         <StatCard label="মোট পাওনা" value={`৳ ${bn(tot.earned)}`} icon={Wallet} tone="primary" />
         <StatCard label="মোট পরিশোধ" value={`৳ ${bn(tot.paid)}`} icon={Wallet} tone="success" />
         <StatCard label="মোট বাকি" value={`৳ ${bn(tot.due)}`} icon={Wallet} tone="warning" />
@@ -338,6 +347,59 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
       <Card>
         <CardHeader><CardTitle className="text-base">তালিকা</CardTitle></CardHeader>
         <CardContent className="p-0">
+          {/* phone: one card per person, everything in view */}
+          <ul className="divide-y border-t md:hidden">
+            {(workersQ.data ?? []).length === 0 && <li className="px-4 py-8 text-center text-sm text-muted-foreground">কেউ যোগ করা হয়নি</li>}
+            {(workersQ.data ?? []).map((w) => {
+              const s = stats.get(w.id) ?? { days: 0, halves: 0, absent: 0, earned: 0, paid: 0, due: 0 };
+              const onToday = activeOn(today).some((x) => x.id === w.id);
+              const mk = markOn(w.id, today);
+              const inToday = onToday && (mk?.present !== false || !!mk?.is_half_day);
+              const old = oldDueOf(w.id);
+              return (
+                <li key={w.id} className="px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    {mode === "daily" && onToday && (
+                      <label className="flex shrink-0 flex-col items-center gap-0.5 pt-0.5">
+                        <Checkbox aria-label={`${w.name} আজ উপস্থিত`} className="h-7 w-7" checked={inToday} disabled={toggleToday.isPending}
+                          onCheckedChange={(c) => toggleToday.mutate({ id: w.id, present: !!c })} />
+                        <span className={`text-[10.5px] font-bold ${inToday ? "text-success" : "text-destructive"}`}>{inToday ? (mk?.is_half_day ? "হাফ" : "আজ আছে") : "আজ নেই"}</span>
+                      </label>
+                    )}
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setDetail(w)}>
+                      <span className="block break-words text-[15.5px] font-bold leading-snug text-primary">{w.name}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {mode === "daily" ? `দৈনিক ৳${bn(wageOf(w))} · ${fmtDays(s)}` : `${ROLE_LABEL[w.role] ?? w.role} · মাসিক ৳${bn(wageOf(w))} · ${bn(s.days)} দিন${s.absent > 0 ? ` (অনুপস্থিত ${bn(s.absent)})` : ""}`}
+                        {(w as any).leave_date ? ` · কাজ ছেড়েছে ${bnDate((w as any).leave_date)}` : ""}
+                        {mode === "daily" && !w.join_date ? " · যোগদানের তারিখ নেই" : ""}
+                      </span>
+                    </button>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[11px] font-semibold text-muted-foreground">বাকি</span>
+                      <b className="num block text-[17px] text-warning">৳{bn(Math.round(s.due))}</b>
+                      {old > 0.5 && <span className="block text-[11px] text-amber-700 dark:text-amber-300">+ গত বছরের ৳{bn(old)}</span>}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="num min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                      পাওনা <b className="text-foreground">৳{bn(Math.round(s.earned))}</b> · দেওয়া <b className="text-success">৳{bn(Math.round(s.paid))}</b>
+                    </span>
+                    <Button size="sm" variant="outline" className="h-9 shrink-0" onClick={() => setPayFor(w.id)}>টাকা দিন</Button>
+                  </div>
+                  {(mode === "salary" || isAdmin) && (
+                    <div className="mt-1.5 flex items-center justify-end gap-1">
+                      {mode === "salary" && <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setAbsDlg({ worker_id: w.id, date: today, half: false, note: "" })}>ছুটি/অনুপস্থিত</Button>}
+                      {isAdmin && <>
+                        <Button size="sm" variant="ghost" className="h-8" aria-label="সম্পাদনা" onClick={() => setWDlg({ id: w.id, name: w.name, phone: w.phone ?? "", role: w.role, wage: String(wageOf(w)), origWage: String(wageOf(w)), wageFrom: today, join_date: w.join_date ?? today, leave_date: (w as any).leave_date ?? "" })}><Pencil className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="ghost" className="h-8" aria-label="মুছুন" onClick={() => confirm(`"${w.name}" মুছবেন?`) && delW.mutate(w.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                      </>}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden md:block">
           <Table>
             <TableHeader><TableRow>
               {mode === "daily" && <TableHead className="w-12 text-center">আজ</TableHead>}
@@ -388,6 +450,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
