@@ -13,6 +13,7 @@ import { fetchAllRows } from "@/lib/fetch-all";
 import { ASSET_PREFIX } from "@/lib/cash-queries";
 import { ExpenseEntryDialog, type ExpenseEdit, type HeadKey } from "@/components/expense-entry";
 import { VekuDayDialog, type VekuHistory } from "@/components/veku-day";
+import { VekuPendingCard, useVekuPending } from "@/components/veku-pending";
 import {
   HOUR, VEKU_DAY_KINDS, VEKU_ITEM, VEKU_KHORAKI, VEKU_TYPE, khorakiVeku, parseVekuNote as parseNote, vekuCreditPart, vekuDiesel,
 } from "@/components/contract-config";
@@ -108,6 +109,9 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
     },
   });
 
+  // lines that do not match the paper ledger yet: outside every total until settled
+  const pendingQ = useVekuPending();
+
   const vekus = vekusQ.data ?? [];
   const nameOf = (id: string | null) => vekus.find((v) => v.id === id)?.name ?? "—";
   const [filter, setFilter] = useState<string>("all");
@@ -200,7 +204,7 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
   }, [bills, pays, foods, filter, vekus]);
 
   const invalidate = () => {
-    for (const key of [["veku-list"], ["veku-bills"], ["veku-payments"], ["veku-khoraki"], ["suppliers"], ["purchases"], ["supplier-payments"], ["cash"], ["cash-book"], ["profit-loss"]]) {
+    for (const key of [["veku-list"], ["veku-bills"], ["veku-payments"], ["veku-khoraki"], ["veku-pending"], ["suppliers"], ["purchases"], ["supplier-payments"], ["cash"], ["cash-book"], ["profit-loss"]]) {
       qc.invalidateQueries({ queryKey: key });
     }
   };
@@ -385,6 +389,8 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
           <Wrench className="h-5 w-5" /> মেরামত / অন্যান্য
         </Button>
       </div>
+
+      <VekuPendingCard rows={pendingQ.data ?? []} vekus={vekus} pays={pays} filter={filter} onDone={invalidate} />
 
       <Tabs defaultValue="daily">
         <TabsList className="grid h-11 w-full grid-cols-3">

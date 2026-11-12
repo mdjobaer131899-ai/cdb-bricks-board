@@ -2788,6 +2788,72 @@ export type Database = {
         }
         Relationships: []
       }
+      veku_pending: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          item_date: string
+          kind: string
+          label: string
+          note: string | null
+          payment_id: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          side: string
+          status: string
+          supplier_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_date: string
+          kind: string
+          label: string
+          note?: string | null
+          payment_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          side: string
+          status?: string
+          supplier_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_date?: string
+          kind?: string
+          label?: string
+          note?: string | null
+          payment_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          side?: string
+          status?: string
+          supplier_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "veku_pending_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "veku_pending_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vehicle_expenses: {
         Row: {
           amount: number
