@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { History, Plus, Loader2, Pencil, Trash2, HandCoins, Users, Users2, Building2, Wallet, FileText } from "lucide-react";
+import { History, Plus, Loader2, Pencil, Trash2, HandCoins, Users, Users2, Building2, Wallet, FileText, Search, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -127,6 +127,9 @@ function OpeningBalancesPage() {
     note: "",
   });
   const [detail, setDetail] = useState<Row | null>(null);
+  // phone list: search by name, and a second tap to confirm a delete (confirm() fails in the app's WebView)
+  const [query, setQuery] = useState("");
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
 
   const rowsQ = useQuery({
     queryKey: ["opening-balances"],
@@ -357,7 +360,7 @@ function OpeningBalancesPage() {
   const f = dialog.form;
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <History className="h-5 w-5 text-primary" />
@@ -368,34 +371,48 @@ function OpeningBalancesPage() {
         </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <Card className="border-destructive/40">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base"><FileText className="h-4 w-4 text-destructive" /> ভাটার মোট দেনা ও ঋণ (ভাটা দেবে)</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-2 text-center">
-            <div><div className="text-xs text-muted-foreground">মোট দেনা</div><div className="text-lg font-bold">৳ {bn(pay.total)}</div></div>
-            <div><div className="text-xs text-muted-foreground">পরিশোধ হয়েছে</div><div className="text-lg font-bold text-emerald-600">৳ {bn(pay.paid)}</div></div>
-            <div><div className="text-xs text-muted-foreground">এখনও বাকি</div><div className="text-xl font-extrabold text-destructive">৳ {bn(pay.left)}</div></div>
-          </CardContent>
-        </Card>
-        <Card className="border-emerald-500/40">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base"><Wallet className="h-4 w-4 text-emerald-600" /> ভাটার পাওনা ও গ্রাহকের অগ্রিম</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex flex-wrap justify-between gap-1 rounded-md bg-muted/50 p-2">
-              <span className="font-medium">নগদ পাওনা</span>
-              <span>মোট ৳ {bn(recv.total)} • আদায় <span className="text-emerald-600">৳ {bn(recv.paid)}</span> • <b className="text-destructive">বাকি ৳ {bn(recv.left)}</b></span>
-            </div>
-            <div className="flex flex-wrap justify-between gap-1 rounded-md bg-muted/50 p-2">
-              <span className="font-medium">গ্রাহক ইট পাবে</span>
-              <span>মোট ৳ {bn(adv.total)} • দেওয়া <span className="text-emerald-600">৳ {bn(adv.paid)}</span> • <b className="text-destructive">বাকি ৳ {bn(adv.left)}</b></span>
-              {adv.leftQty > 0 && <span className="w-full text-right text-xs font-semibold text-destructive">বাকি {piecesLabel(adv.leftQty)}</span>}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* one look: what the kiln owes, is owed, and the bricks it owes, each a full-width row */}
+      <section className="divide-y rounded-2xl border bg-card">
+        {([
+          { k: "payable" as const, title: "ভাটা দেবে", sub: "সরদার, শ্রমিক ও অন্যান্য দেনা", t: pay, doneWord: "শোধ", tone: "text-destructive", bar: "bg-destructive" },
+          { k: "customer_receivable" as const, title: "ভাটা পাবে", sub: "গ্রাহকের পুরনো নগদ বাকি", t: recv, doneWord: "আদায়", tone: "text-success", bar: "bg-success" },
+          { k: "customer_brick_due" as const, title: "গ্রাহক ইট পাবে", sub: "গত বছরের অগ্রিমের ইট", t: adv, doneWord: "দেওয়া", tone: "text-primary", bar: "bg-primary" },
+        ]).map((x) => {
+          const pct = x.t.total > 0 ? Math.min(100, (x.t.paid / x.t.total) * 100) : 0;
+          return (
+            <button key={x.k} type="button" onClick={() => setTab(x.k === "payable" ? "sardar_payable" : x.k)}
+              className={`block w-full px-4 py-3.5 text-left ${tabKey === x.k ? "bg-muted/50" : ""}`}>
+              <span className="flex items-start justify-between gap-3">
+                <span className="min-w-0">
+                  <span className="block font-bold">{x.title}</span>
+                  <span className="block text-xs text-muted-foreground">{x.sub}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className={`block whitespace-nowrap font-display num text-xl font-extrabold ${x.t.left > 0.5 ? x.tone : "text-success"}`}>
+                    {x.k === "customer_brick_due" && x.t.leftQty > 0
+                      ? `${bn(Math.round((x.t.leftQty / PIECES_PER_TRUCK) * 10) / 10)} গাড়ি`
+                      : `৳${bn(Math.round(x.t.left))}`}
+                  </span>
+                  <span className="block whitespace-nowrap text-[11px] text-muted-foreground">
+                    {x.k === "customer_brick_due" && x.t.leftQty > 0 ? `${bn(Math.round(x.t.leftQty))} ইট, ৳${bn(Math.round(x.t.left))}` : "বাকি"}
+                  </span>
+                </span>
+              </span>
+              {x.t.total > 0.5 && (
+                <>
+                  <span className="mt-2 block h-1.5 rounded-full bg-muted">
+                    <span className={`block h-1.5 rounded-full ${x.bar}`} style={{ width: `${pct}%` }} />
+                  </span>
+                  <span className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                    <span className="num whitespace-nowrap">মোট ৳{bn(Math.round(x.t.total))}</span>
+                    <span className="num whitespace-nowrap">{x.doneWord} ৳{bn(Math.round(x.t.paid))} ({bn(Math.round(pct))}%)</span>
+                  </span>
+                </>
+              )}
+            </button>
+          );
+        })}
+      </section>
 
       <p className="text-xs text-muted-foreground">
         পুরোনো দেনা দিলে ক্যাশ কমবে, পাওনা আদায়ে ক্যাশ বাড়বে — কিন্তু এ সিজনের লাভ-ক্ষতিতে যোগ হবে না।
@@ -410,9 +427,97 @@ function OpeningBalancesPage() {
 
         {(["payable", "customer_receivable", "customer_brick_due"] as TabKey[]).map((k) => {
           const list = rows.filter((r) => inTab(r, k));
+          // what is still due first, settled ones last
+          const q = query.normalize("NFC").trim().toLowerCase();
+          const shown = [...list]
+            .filter((r) => !q || (r.display_name || "").normalize("NFC").toLowerCase().includes(q) || (r.category || "").normalize("NFC").toLowerCase().includes(q))
+            .sort((a, b) => b.remaining_amount - a.remaining_amount);
+          const actionLabel = k === "customer_brick_due" ? "ইট সমন্বয়" : k === "customer_receivable" ? "টাকা আদায়" : "পরিশোধ";
+          const runAction = (r: Row) =>
+            // cash in or out goes through the two shared forms; bricks against
+            // last year's advance are not cash and keep their own dialog
+            r.kind === "customer_receivable" ? setCashEntry({ dir: "in", id: r.id })
+            : r.kind === "customer_brick_due" ? setPayDialog({ open: true, row: r, amount: "", pieces: "", date: todayBD(), method: "ইট সরবরাহ", note: "" })
+            : setCashEntry({ dir: "out", id: r.id });
           return (
           <TabsContent key={k} value={k}>
-            <Card>
+            {/* phone: one row per person, no sideways scrolling */}
+            <div className="space-y-2 md:hidden">
+              {list.length > 6 && (
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                  <Input className="h-11 pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="নাম খুঁজুন" />
+                </div>
+              )}
+              {rowsQ.isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : shown.length === 0 ? (
+                <p className="rounded-2xl border bg-card p-4 text-center text-sm text-muted-foreground">{q ? "এই নামে কেউ নেই" : "কোনো এন্ট্রি নেই"}</p>
+              ) : (
+                <ul className="divide-y rounded-2xl border bg-card">
+                  {shown.map((r) => {
+                    const done = r.remaining_amount <= 0.5;
+                    const pct = r.amount > 0 ? Math.min(100, (r.paid_amount / r.amount) * 100) : 0;
+                    return (
+                      <li key={r.id} className="px-3.5 py-3">
+                        <button type="button" onClick={() => setDetail(r)} className="flex w-full items-start justify-between gap-3 text-left">
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1 font-bold text-primary">
+                              <span className="truncate">{r.display_name || "—"}</span>
+                              <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {k === "payable" ? (r.category || (r.kind === "sardar_payable" ? "সরদার" : "অন্যান্য")) : `${bn(r.fiscal_year)} সাল`}
+                              {r.note ? `, ${r.note}` : ""}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-right">
+                            <span className={`block whitespace-nowrap num text-[17px] font-bold ${done ? "text-success" : "text-destructive"}`}>
+                              {done ? "শোধ হয়েছে" : `৳${bn(Math.round(r.remaining_amount))}`}
+                            </span>
+                            {!done && r.remaining_qty != null && (
+                              <span className="block whitespace-nowrap text-[11px] text-muted-foreground">{piecesLabel(r.remaining_qty)}</span>
+                            )}
+                          </span>
+                        </button>
+                        <span className="mt-2 block h-1.5 rounded-full bg-muted">
+                          <span className={`block h-1.5 rounded-full ${done ? "bg-success" : "bg-primary/70"}`} style={{ width: `${pct}%` }} />
+                        </span>
+                        <span className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                          <span className="num whitespace-nowrap">মোট ৳{bn(Math.round(r.amount))}</span>
+                          <span className="num whitespace-nowrap">{k === "customer_brick_due" ? "দেওয়া" : k === "customer_receivable" ? "আদায়" : "শোধ"} ৳{bn(Math.round(r.paid_amount))}</span>
+                        </span>
+                        <div className="mt-2 flex items-center gap-1.5">
+                          {!done && (
+                            <Button size="sm" className="h-9 flex-1" onClick={() => runAction(r)}>{actionLabel}</Button>
+                          )}
+                          {isAdmin && (
+                            <>
+                              <Button size="sm" variant="outline" className="h-9" onClick={() => openEdit(r)} aria-label="সংশোধন">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              {confirmDel === r.id ? (
+                                <Button size="sm" variant="destructive" className="h-9" disabled={removeRow.isPending}
+                                  onClick={() => { removeRow.mutate(r.id); setConfirmDel(null); }}>
+                                  সব পরিশোধসহ মুছবেন?
+                                </Button>
+                              ) : (
+                                <Button size="sm" variant="outline" className="h-9" onClick={() => setConfirmDel(r.id)} aria-label="মুছুন">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {/* computer: the full table */}
+            <Card className="hidden md:block">
               <CardContent className="pt-4">
                 {rowsQ.isLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
