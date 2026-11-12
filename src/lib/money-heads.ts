@@ -82,6 +82,18 @@ export const moneyHead = (k: MoneyKey) => BY_KEY.get(k)!;
 export const isIncome = (k: MoneyKey) => moneyHead(k).group === "in";
 export const isCost = (k: MoneyKey) => COST_GROUPS.includes(moneyHead(k).group);
 
+/**
+ * Which money heads a user may open from a new-entry picker: a head stays behind the page
+ * that owns it (a manager needs that page's permission). `can` is usePageAccess().can.
+ * Used by the cash book and the phone's quick-entry sheet so both offer the same heads.
+ */
+export const moneyHeadAllowed = (k: MoneyKey, can: (path: string) => boolean) =>
+  ["veku", "vehicle", "land", "clean"].includes(k) ? can("/purchases")
+  : ["ownerInvest", "ownerSalary", "ownerWithdraw"].includes(k) ? can("/owners")
+  : ["loanIn", "loanBack", "loanGive", "loanRepay"].includes(k) ? can("/loans")
+  : ["openingIn", "openingOut"].includes(k) ? can("/opening-balances")
+  : true;
+
 export const TONE_CLASS: Record<Tone, string> = {
   green: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
   red: "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300",

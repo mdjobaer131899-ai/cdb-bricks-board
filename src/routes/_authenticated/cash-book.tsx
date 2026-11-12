@@ -16,7 +16,7 @@ import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/c
 import { EXPENSE_HEADS, ExpenseEntryDialog, type ExpenseEdit, type HeadKey } from "@/components/expense-entry";
 import { INCOME_HEADS, IncomeEntryDialog, type IncomeKey } from "@/components/income-entry";
 import { HeadTiles } from "@/components/money-form-parts";
-import { RAW_TYPES, TONE_CLASS, isIncome, moneyHead, supplierHead, type MoneyKey } from "@/lib/money-heads";
+import { RAW_TYPES, TONE_CLASS, isIncome, moneyHead, moneyHeadAllowed, supplierHead, type MoneyKey } from "@/lib/money-heads";
 import { billHead } from "@/lib/ledger";
 import { usePageAccess } from "@/lib/page-permissions";
 import { printTable } from "@/lib/print-table";
@@ -151,13 +151,8 @@ function CashBookPage() {
   const { row: rowParam, bill: billParam } = Route.useSearch();
   const clearParam = () => navigate({ to: "/cash-book", search: {}, replace: true });
 
-  // heads kept behind the page that owns them, as before
-  const allowed = (k: MoneyKey) =>
-    ["veku", "vehicle", "land", "clean"].includes(k) ? can("/purchases")
-    : ["ownerInvest", "ownerSalary", "ownerWithdraw"].includes(k) ? can("/owners")
-    : ["loanIn", "loanBack", "loanGive", "loanRepay"].includes(k) ? can("/loans")
-    : ["openingIn", "openingOut"].includes(k) ? can("/opening-balances")
-    : true;
+  // heads kept behind the page that owns them (same rule as the phone's quick-entry sheet)
+  const allowed = (k: MoneyKey) => moneyHeadAllowed(k, can);
   const expenseHeads = EXPENSE_HEADS.filter((h) => allowed(h.key));
   const incomeHeads = INCOME_HEADS.filter(allowed);
 
