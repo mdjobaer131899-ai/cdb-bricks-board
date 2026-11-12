@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { BalanceStrip, Chips, Field, HeadTiles, Section, tk } from "@/components/money-form-parts";
+import { BalanceStrip, Chips, Field, HeadTiles, RecentChips, Section, tk } from "@/components/money-form-parts";
+import { pushRecent, readRecent } from "@/lib/recent-picks";
 import { MONEY_HEADS, TONE_CLASS, moneyHead, type MoneyHead, type MoneyKey } from "@/lib/money-heads";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -137,6 +138,13 @@ export function ExpenseEntryDialog({
   const set = (p: Partial<Form>) => setF((s) => ({ ...s, ...p }));
   // a preselected / edited seller is shown by name once the list is in
   const pendingParty = useRef<string | null>(null);
+  // "সেভ, আরেকটা": keep the head and date after saving and start the next entry
+  const again = useRef(false);
+  // names picked recently for this head (this phone only)
+  const [recent, setRecent] = useState<string[]>([]);
+  useEffect(() => {
+    if (open && head) setRecent(readRecent(`out:${head}`));
+  }, [open, head]);
 
   const cfg = head ? contractByKey(head) : undefined;
   const isSupplierHead = !!head && SUPPLIER_HEADS.has(head);
@@ -708,6 +716,17 @@ export function ExpenseEntryDialog({
   function done(msg: string) {
     qc.invalidateQueries();
     toast.success(msg);
+    if (!edit && head) {
+      const pick = PICK_HEADS.has(head) ? f.personId : CASH_HEADS.has(head) ? f.what.trim() : seller?.name ?? f.party.trim();
+      if (pick) pushRecent(`out:${head}`, pick);
+    }
+    if (again.current && !edit && head) {
+      again.current = false;
+      startHead(head, { ...blank(today), date: f.date });
+      setRecent(readRecent(`out:${head}`));
+      onDone?.();
+      return;
+    }
     onOpenChange(false);
     onDone?.();
   }
@@ -741,6 +760,14 @@ export function ExpenseEntryDialog({
   };
   const def = head ? headDef(head) : null;
   const title = edit ? "এন্ট্রি সংশোধন" : "খরচ লিখুন";
+  // recent picks: ids for heads picked from a list, names/items for the rest
+  const pickPool: Array<{ id: string; name: string }> = head === "veku" ? sellers : people;
+  const recentIds: Array<[string, string]> = edit || !head || !PICK_HEADS.has(head) ? [] : recent
+    .map((id) => pickPool.find((p) => p.id === id))
+    .filter((p): p is { id: string; name: string } => !!p)
+    .slice(0, 4)
+    .map((p) => [p.id, p.name]);
+  const recentNames: Array<[string, string]> = edit || !head || PICK_HEADS.has(head) ? [] : recent.slice(0, 4).map((n) => [n, n]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -770,6 +797,7 @@ export function ExpenseEntryDialog({
               <Section label={`${partyLabel}${head === "parts" ? (partsNeedShop ? " *" : " (ঐচ্ছিক)") : " *"}`}>
                 {head !== "veku" && PICK_HEADS.has(head) ? (
                   <>
+                    <RecentChips value={f.personId} onPick={(v) => set({ personId: v })} options={recentIds} />
                     <Select value={f.personId} onValueChange={(v) => set({ personId: v })}>
                       <SelectTrigger className="h-11"><SelectValue placeholder="নাম বেছে নিন" /></SelectTrigger>
                       <SelectContent>{people.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
@@ -789,6 +817,7 @@ export function ExpenseEntryDialog({
                   <Chips value={f.personId} onChange={(v) => set({ personId: v, ...(f.rateTouched ? {} : { rate: "" }) })} options={sellers.map((s) => [s.id, s.name])} icon={Tractor} />
                 ) : (
                   <>
+                    <RecentChips value={f.party} onPick={(v) => set({ party: v })} options={recentNames} />
                     <Input className="h-11" list="expense-form-sellers" value={f.party} placeholder="নাম লিখুন বা বেছে নিন"
                       onChange={(e) => set({ party: e.target.value })} />
                     <datalist id="expense-form-sellers">
@@ -857,6 +886,7 @@ export function ExpenseEntryDialog({
             )}
             {(head === "misc" || head === "asset") && (
               <Section label={head === "asset" ? "কী কেনা হলো *" : "খরচের নাম *"}>
+                <RecentChips value={f.what} onPick={(v) => set({ what: v })} options={recentNames} />
                 <Input className="h-11" value={f.what} onChange={(e) => set({ what: e.target.value })} placeholder={head === "asset" ? "যেমন: ট্রান্সফরমার, ভেকুর অংশ" : "যেমন: চা-নাস্তা, যাতায়াত"} />
                 {head === "asset" && <p className="text-xs text-muted-foreground">অনেক বছর কাজে লাগবে এমন জিনিস। হাতে নগদ থেকে কমবে, কিন্তু এই মৌসুমের লাভ-ক্ষতিতে খরচ ধরা হবে না।</p>}
               </Section>
@@ -973,8 +1003,13 @@ export function ExpenseEntryDialog({
 
         <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>বাতিল</Button>
+          {head && !edit && (
+            <Button type="button" variant="outline" onClick={() => { again.current = true; void save(); }} disabled={busy}>
+              সেভ, আরেকটা
+            </Button>
+          )}
           {head && (
-            <Button type="button" onClick={save} disabled={busy}>
+            <Button type="button" onClick={() => { again.current = false; void save(); }} disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}সংরক্ষণ
             </Button>
           )}

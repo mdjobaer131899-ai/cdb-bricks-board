@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BalanceStrip, Chips, HeadTiles, Section, tk } from "@/components/money-form-parts";
+import { BalanceStrip, Chips, HeadTiles, RecentChips, Section, tk } from "@/components/money-form-parts";
+import { pushRecent, readRecent } from "@/lib/recent-picks";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchCustomerBalance } from "@/lib/customer-account";
 import { bn, todayBD } from "@/lib/format";
@@ -54,6 +55,13 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
   const [f, setF] = useState<Form>(() => blank(today));
   const [busy, setBusy] = useState(false);
   const set = (p: Partial<Form>) => setF((s) => ({ ...s, ...p }));
+  // "সেভ, আরেকটা": keep the head, date and how-paid after saving and start the next entry
+  const again = useRef(false);
+  // names picked recently for this head (this phone only)
+  const [recent, setRecent] = useState<string[]>([]);
+  useEffect(() => {
+    if (open && head) setRecent(readRecent(`in:${head}`));
+  }, [open, head]);
 
   useEffect(() => {
     if (!open) return;
@@ -198,6 +206,15 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
       }
       qc.invalidateQueries();
       toast.success("সংরক্ষিত — ক্যাশ বই ও হিসাবে উঠেছে");
+      const pick = head === "sale" ? customer?.name ?? "" : head === "loanIn" ? f.party.trim() : f.personId;
+      if (pick) pushRecent(`in:${head}`, pick);
+      if (again.current) {
+        again.current = false;
+        setF({ ...blank(today), date: f.date, method: f.method });
+        setRecent(readRecent(`in:${head}`));
+        onDone?.();
+        return;
+      }
       onOpenChange(false);
       onDone?.();
     } catch (err) {
@@ -209,6 +226,13 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
 
   /* ---------- view ---------- */
   const def = head ? moneyHead(head) : null;
+  const byName = head === "sale" || head === "loanIn";
+  const recentNames: Array<[string, string]> = byName ? recent.slice(0, 4).map((n) => [n, n]) : [];
+  const recentIds: Array<[string, string]> = byName ? [] : recent
+    .map((id) => pickList.find((p) => p.id === id))
+    .filter((p): p is { id: string; name: string } => !!p)
+    .slice(0, 4)
+    .map((p) => [p.id, p.name]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92dvh] max-w-md overflow-y-auto">
@@ -255,6 +279,7 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
             <Section label={`${partyLabel} *`}>
               {head === "sale" ? (
                 <>
+                  <RecentChips value={f.party} onPick={(v) => set({ party: v })} options={recentNames} />
                   <Input className="h-11" list="income-form-customers" value={f.party} placeholder="নাম লিখুন বা বেছে নিন" onChange={(e) => set({ party: e.target.value })} />
                   <datalist id="income-form-customers">{customers.map((c) => <option key={c.id} value={c.name}>{c.phone ?? ""}</option>)}</datalist>
                   {f.party.trim() && !customer && customersQ.isSuccess && (
@@ -263,11 +288,13 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
                 </>
               ) : head === "loanIn" ? (
                 <>
+                  <RecentChips value={f.party} onPick={(v) => set({ party: v })} options={recentNames} />
                   <Input className="h-11" list="income-form-loan-names" value={f.party} placeholder="নাম লিখুন" onChange={(e) => set({ party: e.target.value })} />
                   <datalist id="income-form-loan-names">{[...new Set((loansQ.data ?? []).map((l) => l.name))].map((n) => <option key={n} value={n} />)}</datalist>
                 </>
               ) : (
                 <>
+                  <RecentChips value={f.personId} onPick={(v) => set({ personId: v })} options={recentIds} />
                   <Select value={f.personId} onValueChange={(v) => set({ personId: v })}>
                     <SelectTrigger className="h-11"><SelectValue placeholder="নাম বেছে নিন" /></SelectTrigger>
                     <SelectContent>{pickList.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
@@ -324,7 +351,12 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
         <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>বাতিল</Button>
           {head && (
-            <Button type="button" onClick={save} disabled={busy}>
+            <Button type="button" variant="outline" onClick={() => { again.current = true; void save(); }} disabled={busy}>
+              সেভ, আরেকটা
+            </Button>
+          )}
+          {head && (
+            <Button type="button" onClick={() => { again.current = false; void save(); }} disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}সংরক্ষণ
             </Button>
           )}

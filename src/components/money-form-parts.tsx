@@ -44,6 +44,19 @@ export function Chips({ value, onChange, options, small, icon: Icon }: {
   );
 }
 
+/** Recently used names in this form (this phone only): one tap picks the same person again. */
+export function RecentChips({ value, onPick, options }: {
+  value: string; onPick: (v: string) => void; options: Array<[string, string]>;
+}) {
+  if (!options.length) return null;
+  return (
+    <div className="space-y-1">
+      <div className="text-[11px] font-bold text-muted-foreground">সম্প্রতি</div>
+      <Chips value={value} onChange={onPick} options={options} small />
+    </div>
+  );
+}
+
 /**
  * The account in one line: আগে + বিল − দিলেন = পরে.
  * `owe` is what the kiln owes before (negative = an advance given); for money coming in,
