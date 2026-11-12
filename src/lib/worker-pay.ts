@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { PAY_METHOD_BN } from "@/lib/cash-queries";
 
 /**
  * Paying a daily worker or staff member: last season's unpaid wage (opening_balances
@@ -36,19 +37,20 @@ export function splitWorkerPay(amount: number, old: WorkerOldDue[]) {
 }
 
 /** reads the old due fresh at save time, so a payment never goes past what is left */
-export async function payWorker(p: { workerId: string; amount: number; date: string; note: string | null; createdBy: string }) {
+/** method: how it was paid (cash, bkash, nagad, bank); left out = cash */
+export async function payWorker(p: { workerId: string; amount: number; date: string; note: string | null; createdBy: string; method?: string }) {
   const old = await fetchWorkerOldDues(p.workerId);
   const split = splitWorkerPay(p.amount, old);
   for (const o of split.toOld) {
     const { error } = await supabase.from("opening_payments").insert({
-      opening_balance_id: o.id, amount: o.amount, payment_date: p.date, method: "নগদ",
+      opening_balance_id: o.id, amount: o.amount, payment_date: p.date, method: PAY_METHOD_BN[p.method ?? "cash"] ?? "নগদ",
       note: p.note ? `${p.note} (গত বছরের বকেয়া)` : "গত বছরের বকেয়া", created_by: p.createdBy,
     } as any);
     if (error) throw error;
   }
   if (split.toNow > 0.001) {
     const { error } = await supabase.from("worker_payments").insert({
-      worker_id: p.workerId, amount: split.toNow, payment_date: p.date, payment_type: "payment", note: p.note, created_by: p.createdBy,
+      worker_id: p.workerId, amount: split.toNow, payment_date: p.date, payment_type: "payment", method: p.method ?? "cash", note: p.note, created_by: p.createdBy,
     } as any);
     if (error) throw error;
   }

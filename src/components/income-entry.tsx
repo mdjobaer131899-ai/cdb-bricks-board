@@ -13,6 +13,7 @@ import { BalanceStrip, Chips, HeadTiles, RecentChips, Section, tk } from "@/comp
 import { pushRecent, readRecent } from "@/lib/recent-picks";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchCustomerBalance } from "@/lib/customer-account";
+import { PAY_METHODS, PAY_METHOD_BN } from "@/lib/cash-queries";
 import { bn, todayBD } from "@/lib/format";
 import { createCollection } from "@/lib/collections.functions";
 import { MONEY_HEADS, TONE_CLASS, moneyHead, type MoneyKey } from "@/lib/money-heads";
@@ -29,7 +30,8 @@ import { useCurrentUser } from "@/lib/use-current-user";
 export type IncomeKey = Extract<MoneyKey, "sale" | "openingIn" | "ownerInvest" | "loanIn" | "loanBack">;
 export const INCOME_HEADS = MONEY_HEADS.filter((h) => h.group === "in").map((h) => h.key as IncomeKey);
 
-const METHODS: Array<[string, string]> = [["cash", "নগদ"], ["bkash", "বিকাশ"], ["nagad", "নগদ (মোবাইল)"], ["bank", "ব্যাংক"]];
+// how the money came: cash (drawer), bkash, nagad, bank — the purses of hand cash (cash-queries.ts)
+const METHODS = PAY_METHODS;
 const num = (s: string) => Number(s || 0) || 0;
 const nfc = (s: string) => s.normalize("NFC").trim();
 
@@ -187,21 +189,21 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
       } else if (head === "openingIn") {
         if (!opening) throw new Error("কার কাছ থেকে, বেছে নিন");
         if (amount > opening.remaining + 0.001) throw new Error(`গত বছরের বাকি আছে মাত্র ৳ ${bn(opening.remaining)}`);
-        const methodLabel = METHODS.find(([k]) => k === f.method)?.[1] ?? "নগদ";
+        const methodLabel = PAY_METHOD_BN[f.method] ?? "নগদ";
         const { error } = await supabase.from("opening_payments").insert({ opening_balance_id: opening.id, amount, payment_date: f.date, method: methodLabel, note, created_by: uid() });
         if (error) throw error;
       } else if (head === "ownerInvest") {
         if (!owner) throw new Error("কোন মালিক, বেছে নিন");
-        const { error } = await supabase.from("owner_transactions").insert({ owner_id: owner.id, txn_type: "invest", amount, txn_date: f.date, note, created_by: uid() });
+        const { error } = await supabase.from("owner_transactions").insert({ owner_id: owner.id, txn_type: "invest", amount, txn_date: f.date, method: f.method, note, created_by: uid() });
         if (error) throw error;
       } else if (head === "loanIn") {
         if (!f.party.trim()) throw new Error("কার কাছ থেকে ঋণ, নাম লিখুন");
-        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "taken", amount, loan_date: f.date, due_date: f.dueDate || null, note, created_by: uid() });
+        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "taken", amount, loan_date: f.date, due_date: f.dueDate || null, method: f.method, note, created_by: uid() });
         if (error) throw error;
       } else {
         if (!loan) throw new Error("কে ফেরত দিল, বেছে নিন");
         if (amount > loan.remaining + 0.5) throw new Error(`এই ঋণের বাকি আছে মাত্র ৳ ${bn(loan.remaining)}`);
-        const { error } = await supabase.from("loan_payments").insert({ loan_id: loan.id, amount, payment_date: f.date, note, created_by: uid() });
+        const { error } = await supabase.from("loan_payments").insert({ loan_id: loan.id, amount, payment_date: f.date, method: f.method, note, created_by: uid() });
         if (error) throw error;
       }
       qc.invalidateQueries();
@@ -317,12 +319,8 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
             {/* 2. amount */}
             <Section label="কত টাকা পেলেন *">
               <Input className="h-11" type="number" min="0" step="0.01" inputMode="decimal" value={f.amount} placeholder="০" onChange={(e) => set({ amount: e.target.value })} />
-              {(head === "sale" || head === "openingIn") && (
-                <>
-                  <div className="text-xs font-bold text-muted-foreground">কীভাবে পেলেন</div>
-                  <Chips value={f.method} onChange={(v) => set({ method: v })} options={METHODS} small />
-                </>
-              )}
+              <div className="text-xs font-bold text-muted-foreground">কীভাবে পেলেন</div>
+              <Chips value={f.method} onChange={(v) => set({ method: v })} options={METHODS} small />
             </Section>
 
             {/* 3. the account */}

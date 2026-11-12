@@ -19,7 +19,7 @@ import { createExpense } from "@/lib/expenses.functions";
 import { createSardarPayment } from "@/lib/sardars.functions";
 import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
 import { fetchWorkerOldDues, payWorker, splitWorkerPay } from "@/lib/worker-pay";
-import { ASSET_PREFIX } from "@/lib/cash-queries";
+import { ASSET_PREFIX, PAY_METHODS, PAY_METHOD_BN } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import {
   CONTRACT_TYPES, HOUR, LAND_UNITS, PARTS_PREFIX, POWER_BILL, PREV_NOTE, TRIP, TRIP_WORK, VEKU_ITEM,
@@ -96,11 +96,14 @@ type Form = {
   note: string;
   /** loanGive: when the money is due back (loans.due_date), optional */
   dueDate: string;
+  /** how the money was paid: cash (drawer), bkash, nagad, bank */
+  method: string;
 };
 
 const blank = (today: string): Form => ({
   personId: "", party: "", kindId: "", vekuKind: "", work: "", what: "", qty: "", rate: "", total: "",
   billKind: "rent", area: "", areaUnit: LAND_UNITS[0], driver: "", rateTouched: false, paid: "", paidTouched: false, date: today, note: "", dueDate: "",
+  method: "cash",
 });
 
 export function ExpenseEntryDialog({
@@ -598,17 +601,17 @@ export function ExpenseEntryDialog({
       if (head === "sardar") {
         if (!f.personId) throw new Error("সরদারের নাম বেছে নিন");
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
-        await createSardarPay({ data: { sardar_id: f.personId, amount: paid, payment_date: f.date, payment_type: "payment", method: "cash", note: note || null } });
+        await createSardarPay({ data: { sardar_id: f.personId, amount: paid, payment_date: f.date, payment_type: "payment", method: f.method, note: note || null } });
       } else if (head === "daily" || head === "staff") {
         if (!f.personId) throw new Error("নাম বেছে নিন");
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
         // last season's unpaid wage is settled first, the rest is this season's
-        await payWorker({ workerId: f.personId, amount: paid, date: f.date, note: note || null, createdBy: uid() });
+        await payWorker({ workerId: f.personId, amount: paid, date: f.date, note: note || null, createdBy: uid(), method: f.method });
       } else if (head === "ownerSalary" || head === "ownerWithdraw") {
         if (!f.personId) throw new Error("কোন মালিক, বেছে নিন");
         if (!(paid > 0)) throw new Error("কত টাকা নিলেন, লিখুন");
         const { error } = await supabase.from("owner_transactions").insert({
-          owner_id: f.personId, txn_type: head === "ownerSalary" ? "salary" : "withdraw", amount: paid, txn_date: f.date, note: note || null, created_by: uid(),
+          owner_id: f.personId, txn_type: head === "ownerSalary" ? "salary" : "withdraw", amount: paid, txn_date: f.date, method: f.method, note: note || null, created_by: uid(),
         });
         if (error) throw error;
       } else if (head === "openingOut") {
@@ -616,25 +619,25 @@ export function ExpenseEntryDialog({
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
         if (paid > opening.remaining + 0.001) throw new Error(`পূর্বের বাকি আছে মাত্র ৳ ${bn(opening.remaining)}`);
         const { error } = await supabase.from("opening_payments").insert({
-          opening_balance_id: opening.id, amount: paid, payment_date: f.date, method: "নগদ", note: note || null, created_by: uid(),
+          opening_balance_id: opening.id, amount: paid, payment_date: f.date, method: PAY_METHOD_BN[f.method] ?? "নগদ", note: note || null, created_by: uid(),
         });
         if (error) throw error;
       } else if (head === "loanRepay") {
         if (!loan) throw new Error("কার ঋণ, বেছে নিন");
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
         if (paid > loan.remaining + 0.5) throw new Error(`এই ঋণের বাকি আছে মাত্র ৳ ${bn(loan.remaining)}`);
-        const { error } = await supabase.from("loan_payments").insert({ loan_id: loan.id, amount: paid, payment_date: f.date, note: note || null, created_by: uid() });
+        const { error } = await supabase.from("loan_payments").insert({ loan_id: loan.id, amount: paid, payment_date: f.date, method: f.method, note: note || null, created_by: uid() });
         if (error) throw error;
       } else if (head === "loanGive") {
         if (!f.party.trim()) throw new Error("কাকে ঋণ দিলেন, নাম লিখুন");
         if (!(paid > 0)) throw new Error("কত টাকা দিলেন, লিখুন");
-        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "given", amount: paid, loan_date: f.date, due_date: f.dueDate || null, note: note || null, created_by: uid() });
+        const { error } = await supabase.from("loans").insert({ party_name: f.party.trim(), direction: "given", amount: paid, loan_date: f.date, due_date: f.dueDate || null, method: f.method, note: note || null, created_by: uid() });
         if (error) throw error;
       } else if (isCash) {
         if (!(paid > 0)) throw new Error("টাকার পরিমাণ দিন");
         if (head !== "power" && !f.what.trim()) throw new Error(head === "asset" ? "কী কেনা হলো, লিখুন" : "খরচের বিবরণ লিখুন");
         const category = (head === "power" ? POWER_BILL : head === "asset" ? `${ASSET_PREFIX}${f.what.trim()}` : `আনুষাঙ্গিক — ${f.what.trim()}`).slice(0, 80);
-        await createExp({ data: { category, amount: paid, expense_date: f.date, note: note || null } });
+        await createExp({ data: { category, amount: paid, expense_date: f.date, note: note || null, method: f.method } });
       } else {
         // sellers and contract people: a bill and / or money paid now
         if (!(bill > 0) && !(paid > 0)) throw new Error(billOpen ? "বিল বা দেওয়া টাকা লিখুন" : "কত টাকা দিলেন, লিখুন");
@@ -649,7 +652,7 @@ export function ExpenseEntryDialog({
           if (!(bill > 0)) throw new Error("মোট দাম লিখুন");
           if (paid < bill - 0.001) throw new Error("বাকি থাকলে দোকানের নাম লিখুন");
           if (paid > bill + 0.001) throw new Error("দেওয়া টাকা মোট দামের চেয়ে বেশি। আগের বাকি দিলে দোকানের নাম লিখুন।");
-          await createExp({ data: { category: `${PARTS_PREFIX}${f.what.trim()}`.slice(0, 80), amount: bill, expense_date: f.date, note: note || null } });
+          await createExp({ data: { category: `${PARTS_PREFIX}${f.what.trim()}`.slice(0, 80), amount: bill, expense_date: f.date, note: note || null, method: f.method } });
         } else {
           if (head !== "veku" && !f.party.trim()) throw new Error(`${partyLabel}: নাম লিখুন`);
           const sid = head === "veku" ? f.personId
@@ -661,7 +664,7 @@ export function ExpenseEntryDialog({
               : cfg ? (note ? `${cfg.item} পরিশোধ — ${note}` : `${cfg.item} পরিশোধ`)
               : `${what} — ${bill > 0 ? "পরিশোধ" : "অগ্রিম/বকেয়া পরিশোধ"}${note ? ` (${note})` : ""}`;
             const { error } = await supabase.from("supplier_payments").insert({
-              supplier_id: sid, amount: paid, payment_date: f.date, method: "cash", note: payNote, created_by: uid(),
+              supplier_id: sid, amount: paid, payment_date: f.date, method: f.method, note: payNote, created_by: uid(),
             });
             if (error) throw new Error(bill > 0 ? `বিল লেখা হয়েছে, কিন্তু দেওয়া টাকা সেভ হয়নি। আবার শুধু টাকাটা দিন। (${error.message})` : error.message);
           }
@@ -722,7 +725,7 @@ export function ExpenseEntryDialog({
     }
     if (again.current && !edit && head) {
       again.current = false;
-      startHead(head, { ...blank(today), date: f.date });
+      startHead(head, { ...blank(today), date: f.date, method: f.method });
       setRecent(readRecent(`out:${head}`));
       onDone?.();
       return;
@@ -960,6 +963,12 @@ export function ExpenseEntryDialog({
                 action={bill > 0 ? <button type="button" className="text-xs font-bold text-primary" onClick={() => set({ paid: String(Math.round(bill * 100) / 100), paidTouched: false })}>পুরোটা</button> : undefined}>
                 <Input className="h-11" type="number" min="0" step="0.01" inputMode="decimal" value={f.paid} placeholder={bill > 0 ? "না দিলে খালি রাখুন" : "০"}
                   onChange={(e) => set({ paid: e.target.value, paidTouched: true })} />
+                {!edit && (
+                  <>
+                    <div className="text-xs font-bold text-muted-foreground">কীভাবে দিলেন</div>
+                    <Chips value={f.method} onChange={(v) => set({ method: v })} options={PAY_METHODS} small />
+                  </>
+                )}
                 {head === "veku" && (num(f.paid) > 0 || !billOpen) && (
                   <>
                     <div className="text-xs font-bold text-muted-foreground">কিসের টাকা</div>

@@ -24,6 +24,26 @@ export const isAssetCategory = (c: string | null | undefined) => (c ?? "").norma
 /** collections.method used when bricks are given against a supplier due (see settle_supplier_with_bricks) */
 export const BRICK_SETTLE_COLLECTION = "ইট দিয়ে সমন্বয়";
 
+/**
+ * Where money sits: the drawer (cash), mobile banking (bKash/Nagad) or the bank.
+ * Every money row's `method` maps to one purse; NULL, 'cash' and the old Bangla 'নগদ'
+ * are the drawer, so rows written before methods were recorded stay cash. A brick
+ * settlement's collection and supplier payment are both "cash" here, so they cancel out.
+ */
+export type Purse = "cash" | "mobile" | "bank";
+export const PURSE_LABEL: Record<Purse, string> = { cash: "ড্রয়ারে (ক্যাশ)", mobile: "বিকাশ/নগদে", bank: "ব্যাংকে" };
+
+/** How a payment can be made, as stored in `method` (opening_payments keeps the Bangla label). */
+export const PAY_METHODS: Array<[string, string]> = [["cash", "ক্যাশ"], ["bkash", "বিকাশ"], ["nagad", "নগদ (মোবাইল)"], ["bank", "ব্যাংক"]];
+export const PAY_METHOD_BN: Record<string, string> = { cash: "নগদ", bkash: "বিকাশ", nagad: "নগদ (মোবাইল)", bank: "ব্যাংক" };
+
+export function purseOf(method: string | null | undefined): Purse {
+  const m = (method ?? "").normalize("NFC").trim().toLowerCase();
+  if (m === "bkash" || m === "nagad" || m === "rocket" || m === "mobile" || m === "বিকাশ" || m === "নগদ (মোবাইল)" || m === "রকেট") return "mobile";
+  if (m === "bank" || m === "cheque" || m === "ব্যাংক" || m === "চেক") return "bank";
+  return "cash";
+}
+
 function sum(rows: Array<{ amount: number | string | null }> | null) {
   return (rows ?? []).reduce((a, b) => a + Number(b.amount || 0), 0);
 }
@@ -57,20 +77,21 @@ async function rowsOf(table: string, select: string, column: string, f: DateFilt
 /** নির্দিষ্ট পরিসরের (বা সব সময়ের) মোট নগদ আয়, ব্যয় ও নিট ব্যালেন্স */
 export async function fetchCashSummary(filter: DateFilter = {}) {
   // every collection is cash that came in, a contract's advance too
-  const [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay] = await Promise.all([
-    rowsOf("collections", "id, amount", "payment_date", filter),
-    rowsOf("expenses", "id, amount, category", "expense_date", filter),
-    rowsOf("sardar_payments", "id, amount", "payment_date", filter),
-    rowsOf("worker_payments", "id, amount", "payment_date", filter),
-    rowsOf("supplier_payments", "id, amount", "payment_date", filter),
+  const [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay, xfer] = await Promise.all([
+    rowsOf("collections", "id, amount, method", "payment_date", filter),
+    rowsOf("expenses", "id, amount, category, method", "expense_date", filter),
+    rowsOf("sardar_payments", "id, amount, method", "payment_date", filter),
+    rowsOf("worker_payments", "id, amount, method", "payment_date", filter),
+    rowsOf("supplier_payments", "id, amount, method", "payment_date", filter),
     rowsOf("vehicle_expenses", "id, amount", "expense_date", filter),
-    rowsOf("owner_transactions", "id, amount, txn_type", "txn_date", filter),
-    rowsOf("loans", "id, amount, direction", "loan_date", filter),
-    rowsOf("loan_payments", "id, amount, loan:loans(direction)", "payment_date", filter),
-    rowsOf("opening_payments", "id, amount, ob:opening_balances(kind)", "payment_date", filter),
+    rowsOf("owner_transactions", "id, amount, txn_type, method", "txn_date", filter),
+    rowsOf("loans", "id, amount, direction, method", "loan_date", filter),
+    rowsOf("loan_payments", "id, amount, method, loan:loans(direction)", "payment_date", filter),
+    rowsOf("opening_payments", "id, amount, method, ob:opening_balances(kind)", "payment_date", filter),
+    rowsOf("cash_transfers", "id, amount, from_method, to_method", "transfer_date", filter),
   ]);
 
-  for (const r of [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay]) {
+  for (const r of [col, exp, sar, wrk, sup, veh, own, loans, lpay, opay, xfer]) {
     if (r.error) throw r.error;
   }
 
@@ -109,7 +130,33 @@ export async function fetchCashSummary(filter: DateFilter = {}) {
     openingPaid: s(opayRows),
   };
   const expense = Object.values(breakdown).reduce((a, b) => a + b, 0);
-  return { income, expense, net: income - expense, breakdown, incomeBreakdown };
+
+  // the same money, split by where it sits; moves between purses change only the split
+  const purses: Record<Purse, number> = { cash: 0, mobile: 0, bank: 0 };
+  const put = (rows: any[], sign: 1 | -1) => {
+    for (const r of rows) purses[purseOf(r.method)] += sign * Number(r.amount || 0);
+  };
+  put(col.data as any[], 1);
+  put(ownRows.filter((r) => r.txn_type === "invest"), 1);
+  put(loanRows.filter((r) => r.direction === "taken"), 1);
+  put(lpayRows.filter((r) => r.loan?.direction === "given"), 1);
+  put(opayIn, 1);
+  put(expRows, -1);
+  put(sar.data as any[], -1);
+  put(wrk.data as any[], -1);
+  put(sup.data as any[], -1);
+  put(veh.data as any[], -1);
+  put(ownRows.filter((r) => r.txn_type === "salary" || r.txn_type === "withdraw"), -1);
+  put(loanRows.filter((r) => r.direction === "given"), -1);
+  put(lpayRows.filter((r) => r.loan?.direction === "taken"), -1);
+  put(opayRows, -1);
+  for (const t of (xfer.data ?? []) as any[]) {
+    const a = Number(t.amount || 0);
+    purses[purseOf(t.from_method)] -= a;
+    purses[purseOf(t.to_method)] += a;
+  }
+
+  return { income, expense, net: income - expense, breakdown, incomeBreakdown, purses };
 }
 
 /**

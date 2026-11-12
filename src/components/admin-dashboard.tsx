@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { bn, isoDate } from "@/lib/format";
 import { fetchCashHistory } from "@/lib/cash-queries";
 import { LOAN_DUE_CLASS, fetchLoansDueSoon } from "@/lib/loan-due";
+import { PurseStrip } from "@/components/cash-purses";
 import {
   getKilnSnapshot,
   getKilnWeather,
@@ -116,6 +117,7 @@ function CashHero({ s, weather }: { s: KilnSnapshot; weather: WeatherInfo | null
           <circle cx={last[0]} cy={last[1]} r="3.5" fill={rising ? "#FB923C" : "#FCA5A5"} />
         </svg>
       </div>
+      <PurseStrip purses={s.cashSeason?.purses} />
 
       <div className="mt-3.5 grid grid-cols-2 gap-2">
         <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">

@@ -37,6 +37,7 @@ const DATE_COLUMN: Record<string, string> = {
   owner_transactions: "txn_date",
   loans: "loan_date",
   loan_payments: "payment_date",
+  cash_transfers: "transfer_date",
 };
 
 let range: { from: string; to: string } | null = null;

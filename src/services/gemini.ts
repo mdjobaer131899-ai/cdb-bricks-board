@@ -146,6 +146,8 @@ interface CashSummary {
   net: number;
   breakdown: Record<string, number>;
   incomeBreakdown: Record<string, number>;
+  /** the same hand cash split by where it sits (drawer, bKash/Nagad, bank) */
+  purses?: Record<"cash" | "mobile" | "bank", number>;
 }
 
 export interface KilnSnapshot {

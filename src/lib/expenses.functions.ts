@@ -7,6 +7,8 @@ const NewExpenseSchema = z.object({
   amount: z.number().positive(),
   expense_date: z.string().min(1),
   note: z.string().max(500).nullable().optional(),
+  /** how it was paid: cash (default), bkash, nagad, bank */
+  method: z.enum(["cash", "bkash", "nagad", "bank"]).optional(),
 });
 
 export const createExpense = createServerFn({ method: "POST" })
@@ -21,6 +23,7 @@ export const createExpense = createServerFn({ method: "POST" })
         amount: data.amount,
         expense_date: data.expense_date,
         note: data.note ?? null,
+        method: data.method ?? "cash",
         created_by: userId,
       })
       .select("id")

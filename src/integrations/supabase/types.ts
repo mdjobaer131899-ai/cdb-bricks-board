@@ -265,6 +265,39 @@ export type Database = {
         }
         Relationships: []
       }
+      cash_transfers: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          from_method: string
+          id: string
+          note: string | null
+          to_method: string
+          transfer_date: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string
+          from_method: string
+          id?: string
+          note?: string | null
+          to_method: string
+          transfer_date: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          from_method?: string
+          id?: string
+          note?: string | null
+          to_method?: string
+          transfer_date?: string
+        }
+        Relationships: []
+      }
       challan_counters: {
         Row: {
           last_value: number
@@ -722,6 +755,7 @@ export type Database = {
           created_by: string
           expense_date: string
           id: string
+          method: string | null
           note: string | null
           updated_at: string
         }
@@ -732,6 +766,7 @@ export type Database = {
           created_by: string
           expense_date?: string
           id?: string
+          method?: string | null
           note?: string | null
           updated_at?: string
         }
@@ -742,6 +777,7 @@ export type Database = {
           created_by?: string
           expense_date?: string
           id?: string
+          method?: string | null
           note?: string | null
           updated_at?: string
         }
@@ -1008,6 +1044,7 @@ export type Database = {
           created_by: string
           id: string
           loan_id: string
+          method: string | null
           note: string | null
           payment_date: string
           updated_at: string
@@ -1018,6 +1055,7 @@ export type Database = {
           created_by: string
           id?: string
           loan_id: string
+          method?: string | null
           note?: string | null
           payment_date?: string
           updated_at?: string
@@ -1028,6 +1066,7 @@ export type Database = {
           created_by?: string
           id?: string
           loan_id?: string
+          method?: string | null
           note?: string | null
           payment_date?: string
           updated_at?: string
@@ -1051,6 +1090,7 @@ export type Database = {
           due_date: string | null
           id: string
           loan_date: string
+          method: string | null
           note: string | null
           party_name: string
           updated_at: string
@@ -1063,6 +1103,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           loan_date?: string
+          method?: string | null
           note?: string | null
           party_name: string
           updated_at?: string
@@ -1075,6 +1116,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           loan_date?: string
+          method?: string | null
           note?: string | null
           party_name?: string
           updated_at?: string
@@ -1345,6 +1387,7 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          method: string | null
           note: string | null
           owner_id: string
           txn_date: string
@@ -1356,6 +1399,7 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          method?: string | null
           note?: string | null
           owner_id: string
           txn_date?: string
@@ -1367,6 +1411,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          method?: string | null
           note?: string | null
           owner_id?: string
           txn_date?: string
@@ -2851,6 +2896,7 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          method: string | null
           note: string | null
           payment_date: string
           payment_type: string
@@ -2861,6 +2907,7 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          method?: string | null
           note?: string | null
           payment_date?: string
           payment_type?: string
@@ -2871,6 +2918,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          method?: string | null
           note?: string | null
           payment_date?: string
           payment_type?: string
