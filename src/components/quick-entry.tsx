@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDownToLine, ArrowUpFromLine, FilePlus2, Layers, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, FilePlus2, Layers, Lock, type LucideIcon } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { EXPENSE_HEADS, ExpenseEntryDialog, type HeadKey } from "@/components/expense-entry";
 import { INCOME_HEADS, IncomeEntryDialog, type IncomeKey } from "@/components/income-entry";
 import { HeadTiles } from "@/components/money-form-parts";
+import { DayCloseDialog } from "@/components/day-close";
 import { isIncome, moneyHeadAllowed, type MoneyKey } from "@/lib/money-heads";
 import { usePageAccess } from "@/lib/page-permissions";
 
@@ -35,6 +36,7 @@ export function QuickEntrySheet() {
   const [open, setOpen] = useState(false);
   const [incomeHead, setIncomeHead] = useState<IncomeKey | null>(null);
   const [expenseHead, setExpenseHead] = useState<HeadKey | null>(null);
+  const [dayClose, setDayClose] = useState(false);
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
@@ -43,6 +45,7 @@ export function QuickEntrySheet() {
   }, []);
 
   const work = WORK_LINKS.filter((w) => can(w.to));
+  const canClose = can("/cash-book");
   // money entries belong to the cash book; brick-sale money also to the collections page
   const allowed = (k: MoneyKey) =>
     (can("/cash-book") || (k === "sale" && can("/collections"))) && moneyHeadAllowed(k, can);
@@ -63,9 +66,9 @@ export function QuickEntrySheet() {
           </SheetHeader>
 
           <div className="mt-4 space-y-4">
-            {work.length > 0 && (
+            {(work.length > 0 || canClose) && (
               <div>
-                <div className="text-xs font-bold tracking-wide text-muted-foreground">চালান ও উৎপাদন</div>
+                <div className="text-xs font-bold tracking-wide text-muted-foreground">চালান, উৎপাদন ও দিন বন্ধ</div>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {work.map((w) => (
                     <Link
@@ -80,6 +83,18 @@ export function QuickEntrySheet() {
                       <span className="text-[13px] font-bold leading-tight">{w.label}</span>
                     </Link>
                   ))}
+                  {canClose && (
+                    <button
+                      type="button"
+                      onClick={() => { setOpen(false); setDayClose(true); }}
+                      className="flex min-h-[86px] flex-col items-center justify-center gap-1.5 rounded-2xl border bg-card px-1 py-2.5 text-center transition active:scale-95"
+                    >
+                      <span className={`grid h-10 w-10 place-items-center rounded-xl ${STONE}`}>
+                        <Lock className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <span className="text-[13px] font-bold leading-tight">দিন বন্ধ</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -95,7 +110,7 @@ export function QuickEntrySheet() {
               />
             )}
 
-            {work.length === 0 && moneyKeys.length === 0 && (
+            {work.length === 0 && !canClose && moneyKeys.length === 0 && (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 আপনার জন্য কোনো এন্ট্রির পাতা খোলা নেই। অনুমতির জন্য মালিকের সাথে কথা বলুন।
               </p>
@@ -111,6 +126,7 @@ export function QuickEntrySheet() {
         onDone={done}
         onSwitchHead={(k) => { setIncomeHead(null); setExpenseHead(k as HeadKey); }}
       />
+      <DayCloseDialog open={dayClose} onOpenChange={setDayClose} />
       <ExpenseEntryDialog
         open={expenseHead !== null}
         onOpenChange={(o) => { if (!o) setExpenseHead(null); }}

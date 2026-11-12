@@ -265,6 +265,37 @@ export type Database = {
         }
         Relationships: []
       }
+      cash_day_closes: {
+        Row: {
+          close_date: string
+          closed_at: string
+          closed_by: string
+          counted: number
+          difference: number | null
+          expected: number
+          id: string
+          note: string | null
+        }
+        Insert: {
+          close_date: string
+          closed_at?: string
+          closed_by?: string
+          counted: number
+          expected: number
+          id?: string
+          note?: string | null
+        }
+        Update: {
+          close_date?: string
+          closed_at?: string
+          closed_by?: string
+          counted?: number
+          expected?: number
+          id?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
       cash_transfers: {
         Row: {
           amount: number

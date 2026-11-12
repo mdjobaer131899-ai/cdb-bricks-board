@@ -17,6 +17,7 @@ import { EXPENSE_HEADS, ExpenseEntryDialog, type ExpenseEdit, type HeadKey } fro
 import { INCOME_HEADS, IncomeEntryDialog, type IncomeKey } from "@/components/income-entry";
 import { HeadTiles } from "@/components/money-form-parts";
 import { PurseStrip } from "@/components/cash-purses";
+import { DayCloseCard } from "@/components/day-close";
 import { RAW_TYPES, TONE_CLASS, isIncome, moneyHead, moneyHeadAllowed, supplierHead, type MoneyKey } from "@/lib/money-heads";
 import { billHead } from "@/lib/ledger";
 import { usePageAccess } from "@/lib/page-permissions";
@@ -452,6 +453,9 @@ function CashBookPage() {
       <Button className="h-14 w-full gap-2 rounded-2xl text-base font-bold shadow-sm" onClick={() => setEntrySheet(true)}>
         <Plus className="h-5 w-5" /> নতুন এন্ট্রি
       </Button>
+
+      {/* count the drawer at the end of the day */}
+      <DayCloseCard />
 
       {/* Period chips */}
       <div className="overflow-x-auto [scrollbar-width:none]">
