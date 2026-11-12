@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NameCombo } from "@/components/ui/name-combo";
 import { Label } from "@/components/ui/label";
 import { Chips, Field, Section, tk } from "@/components/money-form-parts";
 import { supabase } from "@/integrations/supabase/client";
@@ -204,8 +205,7 @@ export function VekuDayDialog({ open, onOpenChange, vekus, history, defaultVeku,
             </div>
             <div className="space-y-1">
               <Label className="text-xs">চালক</Label>
-              <Input className="h-11" list="veku-day-drivers" value={f.driver} onChange={(e) => set({ driver: e.target.value, driverTouched: true })} />
-              <datalist id="veku-day-drivers">{last.drivers.map((d) => <option key={d} value={d} />)}</datalist>
+              <NameCombo value={f.driver} onChange={(v) => set({ driver: v, driverTouched: true })} options={last.drivers} />
             </div>
           </div>
 

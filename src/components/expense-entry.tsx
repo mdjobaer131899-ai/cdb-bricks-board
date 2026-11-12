@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NameCombo } from "@/components/ui/name-combo";
 import { Label } from "@/components/ui/label";
 import { BalanceStrip, Chips, Field, HeadTiles, RecentChips, Section, tk } from "@/components/money-form-parts";
 import { pushRecent, readRecent } from "@/lib/recent-picks";
@@ -813,20 +814,19 @@ export function ExpenseEntryDialog({
                   </>
                 ) : head === "loanGive" ? (
                   <>
-                    <Input className="h-11" list="expense-form-loan-names" value={f.party} placeholder="নাম লিখুন" onChange={(e) => set({ party: e.target.value })} />
-                    <datalist id="expense-form-loan-names">{[...new Set((loansQ.data ?? []).map((l) => l.name))].map((n) => <option key={n} value={n} />)}</datalist>
+                    <NameCombo value={f.party} placeholder="নাম লিখুন" onChange={(v) => set({ party: v })}
+                      options={(loansQ.data ?? []).map((l) => l.name)} />
                   </>
                 ) : head === "veku" ? (
                   <Chips value={f.personId} onChange={(v) => set({ personId: v, ...(f.rateTouched ? {} : { rate: "" }) })} options={sellers.map((s) => [s.id, s.name])} icon={Tractor} />
                 ) : (
                   <>
                     <RecentChips value={f.party} onPick={(v) => set({ party: v })} options={recentNames} />
-                    <Input className="h-11" list="expense-form-sellers" value={f.party} placeholder="নাম লিখুন বা বেছে নিন"
-                      onChange={(e) => set({ party: e.target.value })} />
-                    <datalist id="expense-form-sellers">
-                      {sellers.map((s) => <option key={s.id} value={s.name} />)}
-                      {head === "vehicle" && (customersQ.data ?? []).filter((n) => !sellers.some((s) => nfc(s.name) === nfc(n))).map((n) => <option key={`c${n}`} value={n} />)}
-                    </datalist>
+                    <NameCombo value={f.party} placeholder="নাম লিখুন বা বেছে নিন" onChange={(v) => set({ party: v })}
+                      options={[
+                        ...sellers.map((s) => s.name),
+                        ...(head === "vehicle" ? (customersQ.data ?? []).filter((n) => !sellers.some((s) => nfc(s.name) === nfc(n))).map((n) => ({ value: n, sub: "গ্রাহক" })) : []),
+                      ]} />
                     {f.party.trim() && !seller && supsQ.isSuccess && (
                       <p className="text-xs text-muted-foreground">নতুন নাম, {cfg ? `${cfg.title} খাতায়` : "সাপ্লায়ার পাতায়"} নিজে থেকে যোগ হবে।</p>
                     )}
@@ -992,8 +992,7 @@ export function ExpenseEntryDialog({
               {head === "veku" ? (
                 <div className="space-y-1">
                   <Label className="text-xs">চালক</Label>
-                  <Input className="h-11" list="expense-form-drivers" value={f.driver} onChange={(e) => set({ driver: e.target.value })} />
-                  <datalist id="expense-form-drivers">{drivers.map((d) => <option key={d} value={d} />)}</datalist>
+                  <NameCombo value={f.driver} onChange={(v) => set({ driver: v })} options={drivers} />
                 </div>
               ) : head === "loanGive" ? (
                 <div className="space-y-1">

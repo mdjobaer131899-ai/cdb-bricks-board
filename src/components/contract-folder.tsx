@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
+import { NameCombo } from "@/components/ui/name-combo";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -298,10 +299,11 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label>{cfg.personOf} নাম *</Label>
-                <Input className="h-11" list={cfg.trips ? "contract-customer-names" : undefined} value={ownerForm.name} onChange={(e) => setOwnerForm({ ...ownerForm, name: e.target.value })} />
+                {cfg.trips
+                  ? <NameCombo value={ownerForm.name} onChange={(v) => setOwnerForm({ ...ownerForm, name: v })} options={customersQ.data ?? []} />
+                  : <Input className="h-11" value={ownerForm.name} onChange={(e) => setOwnerForm({ ...ownerForm, name: e.target.value })} />}
                 {cfg.trips && (
                   <>
-                    <datalist id="contract-customer-names">{(customersQ.data ?? []).map((n) => <option key={n} value={n} />)}</datalist>
                     <p className="text-xs text-muted-foreground">গ্রাহক হলে তালিকা থেকে নামটা বেছে নিন, তাতে বানান এক থাকবে।</p>
                   </>
                 )}

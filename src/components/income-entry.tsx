@@ -7,6 +7,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NameCombo } from "@/components/ui/name-combo";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BalanceStrip, Chips, HeadTiles, RecentChips, Section, tk } from "@/components/money-form-parts";
@@ -282,8 +283,8 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
               {head === "sale" ? (
                 <>
                   <RecentChips value={f.party} onPick={(v) => set({ party: v })} options={recentNames} />
-                  <Input className="h-11" list="income-form-customers" value={f.party} placeholder="নাম লিখুন বা বেছে নিন" onChange={(e) => set({ party: e.target.value })} />
-                  <datalist id="income-form-customers">{customers.map((c) => <option key={c.id} value={c.name}>{c.phone ?? ""}</option>)}</datalist>
+                  <NameCombo value={f.party} placeholder="নাম লিখুন বা বেছে নিন" onChange={(v) => set({ party: v })}
+                    options={customers.map((c) => ({ value: c.name, sub: c.phone }))} emptyText="এই নামে কোনো গ্রাহক নেই" />
                   {f.party.trim() && !customer && customersQ.isSuccess && (
                     <p className="text-xs font-semibold text-destructive">এই নামে কোনো গ্রাহক নেই। তালিকা থেকে বেছে নিন, নতুন হলে আগে গ্রাহক পাতায় যোগ করুন।</p>
                   )}
@@ -291,8 +292,8 @@ export function IncomeEntryDialog({ open, onOpenChange, head: headProp, partyId,
               ) : head === "loanIn" ? (
                 <>
                   <RecentChips value={f.party} onPick={(v) => set({ party: v })} options={recentNames} />
-                  <Input className="h-11" list="income-form-loan-names" value={f.party} placeholder="নাম লিখুন" onChange={(e) => set({ party: e.target.value })} />
-                  <datalist id="income-form-loan-names">{[...new Set((loansQ.data ?? []).map((l) => l.name))].map((n) => <option key={n} value={n} />)}</datalist>
+                  <NameCombo value={f.party} placeholder="নাম লিখুন" onChange={(v) => set({ party: v })}
+                    options={(loansQ.data ?? []).map((l) => l.name)} />
                 </>
               ) : (
                 <>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NameCombo } from "@/components/ui/name-combo";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StatCard } from "@/components/stat-card";
@@ -486,8 +487,7 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
             <div><Label>ফোন</Label><Input value={wDlg.phone} onChange={(e) => setWDlg({ ...wDlg, phone: e.target.value })} /></div>
             {mode === "salary" && (
               <div><Label>পদ</Label>
-                <Input list="staff-role-suggest" placeholder="যেমন: ইঞ্জিন মেস্তুরি" value={ROLE_LABEL[wDlg.role] && wDlg.role !== "daily" ? ROLE_LABEL[wDlg.role] : wDlg.role} onChange={(e) => setWDlg({ ...wDlg, role: e.target.value })} />
-                <datalist id="staff-role-suggest">{ROLE_SUGGEST.map((r) => <option key={r} value={r} />)}</datalist>
+                <NameCombo placeholder="যেমন: ইঞ্জিন মেস্তুরি" value={ROLE_LABEL[wDlg.role] && wDlg.role !== "daily" ? ROLE_LABEL[wDlg.role] : wDlg.role} onChange={(v) => setWDlg({ ...wDlg, role: v })} options={ROLE_SUGGEST} />
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
