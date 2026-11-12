@@ -108,9 +108,47 @@ export const dayBefore = (d: string) => new Date(new Date(`${d}T00:00:00Z`).getT
 export const VEKU_TYPE = "ভেকু";
 export const VEKU_ITEM = "ভেকু";
 export const HOUR = "ঘণ্টা";
-export const VEKU_KINDS = ["ডিজেল", "মবিল-গ্রীজ", "যন্ত্রাংশ", "চালকের বেতন", "চালকের খরচ", "অন্যান্য"];
+export const VEKU_KINDS = ["ডিজেল", "অটো ভাড়া", "চালকের বেতন", "মেরামত", "যন্ত্রাংশ", "মবিল-গ্রীজ", "চালকের খরচ", "অন্যান্য"];
+/** kinds written on the daily sheet (দৈনিক খাতা); every other kind is on the repair sheet */
+export const VEKU_DAY_KINDS = new Set(["ডিজেল", "অটো ভাড়া", "চালকের বেতন"]);
+/** kinds offered on the repair sheet (মেরামত ও অন্যান্য) */
+export const VEKU_REPAIR_KINDS = ["মেরামত", "যন্ত্রাংশ", "মবিল-গ্রীজ", "অন্যান্য"];
+/**
+ * The driver's food money (খোরাকি, "H" on the paper sheet) is the kiln's own cost: an
+ * expenses row with this category and the note "<veku name> · চালক: X". It is not taken
+ * off the veku account. The diesel auto fare ("A") is: a veku payment of kind "অটো ভাড়া".
+ */
+export const VEKU_KHORAKI = "আনুষাঙ্গিক — ভেকু চালকের খোরাকি";
+export const VEKU_RATE = 1600;
+export const VEKU_AUTO_TK = 100;
+export const VEKU_KHORAKI_TK = 300;
+/** diesel paid with no diesel taken that day: an older pump due being paid */
+export const VEKU_DIESEL_OLD = "আগের ডিজেলের বাকি";
+/** on an hours row: diesel taken that day on credit from the pump */
+export const VEKU_DIESEL_CREDIT = "ডিজেল বাকিতে";
 const DRIVER = "চালক: ";
 const SEP = " · ";
+
+const asciiNum = (s: string) => s.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d))).replace(/,/g, "");
+/**
+ * Diesel facts kept in a note: "৪০ লিটার", "দাম ৳৫,৬০০" (what the diesel cost; the row's
+ * amount is what was paid), VEKU_DIESEL_OLD. price is null when the note has none.
+ */
+export function vekuDiesel(text: string | null) {
+  const a = asciiNum(text ?? "");
+  const l = a.match(/(\d+(?:\.\d+)?)\s*লিটার/);
+  const p = a.match(/দাম\s*৳?\s*(\d+(?:\.\d+)?)/);
+  return { litres: l ? Number(l[1]) : 0, price: p ? Number(p[1]) : null, old: (text ?? "").includes(VEKU_DIESEL_OLD) };
+}
+/** the part of an hours row's note about diesel taken on credit, if any */
+export function vekuCreditPart(rest: string) {
+  const part = rest.split(SEP).find((s) => s.trim().startsWith(VEKU_DIESEL_CREDIT));
+  return part ? vekuDiesel(part) : null;
+}
+/** the veku a khoraki expense belongs to: its note starts with the veku's name */
+export const khorakiVeku = (note: string | null, names: Array<{ id: string; name: string }>) =>
+  names.find((v) => { const n = (note ?? "").trim(); return n === v.name || n.startsWith(`${v.name}${SEP}`); })?.id ?? null;
+export const VEKU_SEP = SEP;
 
 /** "ডিজেল · চালক: মাসুম · খাতা থেকে" → parts */
 export function parseVekuNote(note: string | null) {
