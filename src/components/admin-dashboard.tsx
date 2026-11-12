@@ -1,40 +1,53 @@
-import { useEffect, useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import {
+  ArrowDownToLine, ArrowUpFromLine, Banknote, CheckCircle2, ChevronDown, ChevronRight, Cloud, CloudLightning, CloudRain,
+  FilePlus2, Layers, LayoutGrid, Receipt, Sun, X,
+} from "lucide-react";
 import { WeatherSignalBanner } from "@/components/weather-signals";
-import { Banknote, CalendarClock, ChevronRight, Cloud, CloudLightning, CloudRain, FilePlus2, Layers, Receipt, Sun } from "lucide-react";
-import { toast } from "sonner";
 import { BrandLogo } from "@/components/brand-logo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { bn, isoDate } from "@/lib/format";
-import { fetchCashHistory } from "@/lib/cash-queries";
-import { LOAN_DUE_CLASS, fetchLoansDueSoon } from "@/lib/loan-due";
-import { PurseStrip } from "@/components/cash-purses";
+import { TransferDialog } from "@/components/cash-purses";
+import { DayCloseDialog, useDayCloses } from "@/components/day-close";
 import { openQuickEntry } from "@/components/quick-entry";
-import {
-  getKilnSnapshot,
-  getKilnWeather,
-  kilnBnTime,
-  type KilnSnapshot,
-  type WeatherInfo,
-} from "@/services/gemini";
+import { supabase } from "@/integrations/supabase/client";
+import { bn, bnDate } from "@/lib/format";
+import { fetchCashHistory, type CashHistoryRow, type Purse } from "@/lib/cash-queries";
+import { buildDues } from "@/lib/dues";
+import { fetchLoansDueSoon, type LoanWithDue } from "@/lib/loan-due";
+import { moneyHead } from "@/lib/money-heads";
+import { getKilnSnapshot, getKilnWeather, type KilnSnapshot, type WeatherInfo } from "@/services/gemini";
 
 /* =========================================================
-   অ্যাডমিন ড্যাশবোর্ড
-   সব সংখ্যা আসে একই খাতা থেকে (services/gemini.ts → getKilnSnapshot),
-   তাই AI সহকারী আর এই পাতা সবসময় একই হিসাব দেখায়।
+   অ্যাডমিনের হোম পাতা
+   উপর থেকে: হাতে নগদ (তিন ভাগ, আজকের লেনদেন) → আজকের কাজ →
+   টাকা কুলাবে কিনা → পাওনা-দেনার খাতা → এই মাসে খরচ কোথায় →
+   উৎপাদন ও বিক্রি (শুরু না হলে এক লাইনে গুটানো)।
+   সংখ্যা আসে একই খাতা থেকে (getKilnSnapshot), তাই AI আর এই পাতা মেলে।
    ========================================================= */
 
 const tk = (n: number) => `৳${bn(Math.round(n))}`;
+const signedTk = (n: number) => `${n < -0.5 ? "−" : ""}${tk(Math.abs(n))}`;
 const sum = <T,>(rows: T[], pick: (r: T) => number) => rows.reduce((a, r) => a + (Number(pick(r)) || 0), 0);
 const LOW_STOCK = 10000;
+const PIECES_PER_TRUCK = 2000;
 
-function SectionCard({ title, action, children, className = "" }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
+function dhakaHour() {
+  return Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: "Asia/Dhaka" }).format(new Date()));
+}
+function prevMonthStart(monthStart: string) {
+  const [y, m] = monthStart.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`;
+}
+
+/** one quiet panel: a plain title, an optional link, the content */
+function Panel({ title, action, children, className = "" }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={`rounded-2xl border bg-card p-4 ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="section-label">{title}</h2>
+        <h2 className="font-display text-[17px] font-bold leading-tight">{title}</h2>
         {action}
       </div>
       {children}
@@ -42,125 +55,496 @@ function SectionCard({ title, action, children, className = "" }: { title: strin
   );
 }
 
-function MoreLink({ to, children }: { to: string; children: ReactNode }) {
+function MoreLink({ to, children, search }: { to: string; children: ReactNode; search?: Record<string, string> }) {
   return (
-    <Link to={to as never} className="inline-flex items-center gap-0.5 text-sm font-bold text-primary hover:underline">
+    <Link to={to as never} search={search as never} className="inline-flex items-center gap-0.5 text-sm font-bold text-primary">
       {children}
-      <ChevronRight className="h-4 w-4" />
+      <ChevronRight className="h-4 w-4" aria-hidden="true" />
     </Link>
   );
 }
 
-/* ---------- হাতে নগদ (গাঢ় কার্ড) ---------- */
-function CashHero({ s, weather }: { s: KilnSnapshot; weather: WeatherInfo | null }) {
-  const today = s.today;
-  const weekAgo = isoDate(new Date(Date.now() - 6 * 86400000));
-  const histQ = useQuery({
-    queryKey: ["dash-cash-history", weekAgo, today],
-    queryFn: () => fetchCashHistory({ from: weekAgo, to: today }),
-  });
+/* ---------- হাতে নগদ: গাঢ় কার্ড, নিচে তিনটা ইটে তিন ভাগ ---------- */
+const PURSE_ORDER: Purse[] = ["cash", "mobile", "bank"];
+const PURSE_NAME: Record<Purse, string> = { cash: "ড্রয়ারে", mobile: "বিকাশ/নগদে", bank: "ব্যাংকে" };
+const PURSE_BRICK: Record<Purse, string> = { cash: "bg-[#c2532f]", mobile: "bg-[#d98b5f]", bank: "bg-[#8a8178]" };
 
+function CashHero({ s, weather, todayRows }: { s: KilnSnapshot; weather: WeatherInfo | null; todayRows: CashHistoryRow[] }) {
+  const [open, setOpen] = useState(false);
+  const [transfer, setTransfer] = useState(false);
   const net = s.cashSeason?.net ?? 0;
+  const purses = s.cashSeason?.purses;
   const todayIn = s.cashToday?.income ?? 0;
   const todayOut = s.cashToday?.expense ?? 0;
+  const positive = purses ? PURSE_ORDER.map((p) => Math.max(0, purses[p])) : [];
+  const course = sum(positive, (x) => x) || 1;
 
-  // গত ৭ দিনের দিনশেষের ক্যাশ: আজকের ক্যাশ থেকে পেছনে হিসাব
-  const points = useMemo(() => {
-    const rows = histQ.data ?? [];
-    const days: string[] = [];
-    for (let i = 6; i >= 0; i--) days.push(isoDate(new Date(Date.now() - i * 86400000)));
-    const dayNet = new Map<string, number>();
-    for (const r of rows) dayNet.set(r.date, (dayNet.get(r.date) ?? 0) + (r.dir === "in" ? r.amount : -r.amount));
-    const closing: number[] = new Array(7).fill(0);
-    let running = net;
-    for (let i = 6; i >= 0; i--) {
-      closing[i] = running;
-      running -= dayNet.get(days[i]) ?? 0;
-    }
-    return closing;
-  }, [histQ.data, net]);
-
-  const spark = useMemo(() => {
-    const min = Math.min(...points);
-    const max = Math.max(...points);
-    const span = max - min || 1;
-    return points.map((v, i) => `${2 + i * 15.3},${36 - ((v - min) / span) * 30}`).join(" ");
-  }, [points]);
-  const last = spark.split(" ").pop()?.split(",") ?? ["94", "6"];
-  const rising = points[6] >= points[0];
-
-  const WeatherIcon = !weather
-    ? Sun
-    : weather.precipNow > 0 || weather.code >= 95
-      ? CloudLightning
-      : weather.todayRainProb >= 40
-        ? CloudRain
-        : weather.code >= 2
-          ? Cloud
-          : Sun;
+  const WeatherIcon = !weather ? Sun
+    : weather.precipNow > 0 || weather.code >= 95 ? CloudLightning
+    : weather.todayRainProb >= 40 ? CloudRain
+    : weather.code >= 2 ? Cloud : Sun;
 
   return (
-    <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
+    <section className="bg-brick-pattern relative overflow-hidden rounded-[22px] bg-ink p-[18px] text-ink-foreground">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-bold tracking-[0.12em] text-stone-300">হাতে নগদ · মূল ক্যাশ</span>
-        <Link to={"/weather" as never} className="flex items-center gap-1.5 rounded-full bg-amber-200/10 px-2.5 py-0.5 text-xs font-semibold text-amber-200">
+        <span className="text-[13px] font-semibold text-stone-300">হাতে নগদ</span>
+        <Link to={"/weather" as never} className="flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-amber-100">
           <WeatherIcon className="h-3.5 w-3.5" aria-hidden="true" />
-          {weather ? `${bn(weather.temp)}° · বৃষ্টি ${bn(weather.todayRainProb)}%` : "আবহাওয়া…"}
+          {weather ? `${bn(weather.temp)}°, বৃষ্টি ${bn(weather.todayRainProb)}%` : "আবহাওয়া"}
         </Link>
       </div>
 
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <Link to="/cash-book" className="font-display num text-[42px] font-extrabold leading-[0.95] tracking-tight text-ink-foreground">
-          {tk(net)}
-        </Link>
-        <svg width="96" height="40" viewBox="0 0 96 40" role="img" aria-label={rising ? "গত ৭ দিনে ক্যাশ বেড়েছে" : "গত ৭ দিনে ক্যাশ কমেছে"} className="shrink-0">
-          <polyline points={spark} fill="none" stroke={rising ? "#FB923C" : "#FCA5A5"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx={last[0]} cy={last[1]} r="3.5" fill={rising ? "#FB923C" : "#FCA5A5"} />
-        </svg>
-      </div>
-      <PurseStrip purses={s.cashSeason?.purses} />
+      <Link to="/cash-book" className={`mt-1.5 block font-display num text-[44px] font-extrabold leading-none tracking-tight ${net < 0 ? "text-red-300" : "text-ink-foreground"}`}>
+        {signedTk(net)}
+      </Link>
 
-      <div className="mt-3.5 grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-          <div className="text-xs font-semibold text-emerald-200">আজ এসেছে</div>
-          <div className="num text-lg font-bold text-emerald-300">+{tk(todayIn)}</div>
+      {purses && (
+        <button type="button" onClick={() => setTransfer(true)} aria-label="তিন ভাগ: ব্যাংক বা বিকাশ থেকে তোলা ও জমা লিখুন" className="mt-4 block w-full text-left">
+          {/* one course of bricks: each brick as long as the money it holds */}
+          <span className="flex h-[18px] gap-[3px]" aria-hidden="true">
+            {PURSE_ORDER.map((p, i) => positive[i] > 0.5 && (
+              <span key={p} className={`rounded-[3px] ${PURSE_BRICK[p]}`} style={{ flexGrow: positive[i] / course, flexBasis: 0, minWidth: 10 }} />
+            ))}
+          </span>
+          <span className="mt-2.5 grid grid-cols-3 gap-2">
+            {PURSE_ORDER.map((p) => (
+              <span key={p} className="block min-w-0">
+                <span className="flex items-center gap-1.5 text-xs text-stone-300">
+                  <span className={`h-2 w-3 rounded-[2px] ${PURSE_BRICK[p]}`} aria-hidden="true" />
+                  {PURSE_NAME[p]}
+                </span>
+                <span className={`num block truncate text-[15px] font-bold ${purses[p] < -0.5 ? "text-red-300" : ""}`}>{signedTk(purses[p])}</span>
+              </span>
+            ))}
+          </span>
+          <span className="mt-1.5 block text-[11px] text-stone-400">ব্যাংক থেকে তোলা বা জমা লিখতে এখানে চাপুন</span>
+        </button>
+      )}
+      <TransferDialog open={transfer} onOpenChange={setTransfer} />
+
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="mt-4 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5 text-left"
+      >
+        <span className="flex-1">
+          <span className="block text-xs text-stone-300">আজ এসেছে</span>
+          <span className="num text-[17px] font-bold text-emerald-300">+{tk(todayIn)}</span>
+        </span>
+        <span className="flex-1">
+          <span className="block text-xs text-stone-300">আজ গেছে</span>
+          <span className="num text-[17px] font-bold text-red-300">−{tk(todayOut)}</span>
+        </span>
+        <ChevronDown className={`h-5 w-5 shrink-0 text-stone-300 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+      </button>
+
+      {open && (
+        <div className="mt-2 rounded-xl bg-white/[0.04]">
+          {todayRows.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-stone-300">আজ এখনো কিছু লেখা হয়নি।</p>
+          ) : (
+            <ul className="divide-y divide-white/10">
+              {todayRows.slice(0, 6).map((r) => (
+                <li key={r.id}>
+                  <Link to={"/cash-book" as never} search={{ row: r.id } as never} className="flex items-center gap-3 px-3 py-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{r.detail || r.head}</span>
+                      <span className="block truncate text-xs text-stone-400">{r.head}</span>
+                    </span>
+                    <span className={`num text-sm font-bold ${r.dir === "in" ? "text-emerald-300" : "text-red-300"}`}>
+                      {r.dir === "in" ? "+" : "−"}{tk(r.amount)}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Link to="/cash-book" className="flex items-center justify-center gap-1 border-t border-white/10 py-2 text-xs font-bold text-amber-100">
+            {todayRows.length > 6 ? `আরও ${bn(todayRows.length - 6)}টি, ক্যাশ বইয়ে দেখুন` : "ক্যাশ বই খুলুন"}
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
         </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-          <div className="text-xs font-semibold text-red-200">আজ গেছে</div>
-          <div className="num text-lg font-bold text-red-300">−{tk(todayOut)}</div>
-        </div>
-      </div>
-      {net < 0 && (
-        <p className="mt-2 text-xs font-semibold text-red-200">ক্যাশ ঋণাত্মক দেখাচ্ছে, ক্যাশ বইয়ের এন্ট্রি একবার মিলিয়ে নিন।</p>
       )}
     </section>
   );
 }
 
-/* ---------- দ্রুত কাজের বাটন ---------- */
+/* ---------- আজকের কাজ: অ্যাপ নিজে তালিকা বানায়, একবারে সর্বোচ্চ ৩টা ---------- */
+type Task = { id: string; tone: "red" | "amber"; text: string; sub?: string; to?: string; run?: () => void; once?: boolean };
+
+const dismissKey = (t: Task, today: string) => `cdb-dash-dismiss:${t.id}${t.once ? "" : `:${today}`}`;
+function isDismissed(key: string) {
+  try { return localStorage.getItem(key) === "1"; } catch { return false; }
+}
+
+function TasksPanel({ s, rows, loans }: { s: KilnSnapshot; rows: CashHistoryRow[]; loans: LoanWithDue[] }) {
+  const closesQ = useDayCloses();
+  const transfersQ = useQuery({
+    queryKey: ["dash-any-transfer"],
+    queryFn: async () => {
+      const { count, error } = await supabase.from("cash_transfers").select("id", { count: "exact", head: true });
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+  const [closeDate, setCloseDate] = useState<string | null>(null);
+  const [transfer, setTransfer] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [, setTick] = useState(0);
+
+  const hour = dhakaHour();
+  const closed = new Set((closesQ.data ?? []).map((c) => c.close_date));
+  const hadLines = (d: string) => rows.some((r) => r.date === d);
+  const pending = s.sales.filter((r) => r.status === "pending").length;
+  const bank = s.cashSeason?.purses?.bank ?? 0;
+  const kachaRecent = s.kacha.some((k) => k.entry_type === "production" && String(k.entry_date) >= s.yesterday);
+  const kachaToday = s.kacha.some((k) => k.entry_type === "production" && k.entry_date === s.today);
+
+  const tasks: Task[] = [];
+  if (closesQ.isSuccess && hadLines(s.yesterday) && !closed.has(s.yesterday)) {
+    tasks.push({ id: "close-yesterday", tone: "red", text: "গতকালের দিন বন্ধ হয়নি", sub: "ড্রয়ার গুনে হিসাব মিলিয়ে নিন", run: () => setCloseDate(s.yesterday) });
+  }
+  for (const l of loans) {
+    tasks.push({
+      id: `loan-${l.id}`,
+      tone: l.due.tone === "overdue" ? "red" : "amber",
+      text: `${l.party}: ${l.direction === "taken" ? "ঋণ শোধ" : "ঋণ ফেরত পাওয়া"} ${tk(l.remaining)}`,
+      sub: l.due.text,
+      to: "/loans",
+    });
+  }
+  if (pending > 0) tasks.push({ id: "approvals", tone: "amber", text: `${bn(pending)}টি চালান অনুমোদন বাকি`, sub: "দাম বসিয়ে অনুমোদন দিন", to: "/approvals" });
+  if (closesQ.isSuccess && hour >= 17 && hadLines(s.today) && !closed.has(s.today)) {
+    tasks.push({ id: "close-today", tone: "amber", text: "আজকের দিন বন্ধ করুন", sub: "সন্ধ্যায় ড্রয়ার গুনে লিখুন", run: () => setCloseDate(s.today) });
+  }
+  if (kachaRecent && !kachaToday && hour >= 12) {
+    tasks.push({ id: "kacha-today", tone: "amber", text: "আজকের কাঁচা ইট লেখা হয়নি", sub: "মিলের হিসাব লিখে রাখুন", to: "/production-steps/kacha" });
+  }
+  if (transfersQ.data === 0 && bank > 0.5) {
+    tasks.push({ id: "bank-hint", tone: "amber", once: true, text: `ব্যাংকে ${tk(bank)} দেখাচ্ছে`, sub: "তুলে খরচ করে থাকলে \"টাকা সরানো\" দিয়ে লিখুন", run: () => setTransfer(true) });
+  }
+
+  const visible = tasks.filter((t) => !isDismissed(dismissKey(t, s.today))).sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1));
+  const shown = showAll ? visible : visible.slice(0, 3);
+  const dismiss = (t: Task) => {
+    try { localStorage.setItem(dismissKey(t, s.today), "1"); } catch { /* storage off: it simply shows again */ }
+    setTick((n) => n + 1);
+  };
+
+  return (
+    <Panel title="আজকের কাজ" action={visible.length > 0 ? <span className="text-xs font-semibold text-muted-foreground">{bn(visible.length)}টি বাকি</span> : undefined}>
+      {visible.length === 0 ? (
+        <p className="flex items-center gap-2 text-sm font-semibold text-success">
+          <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> এখন কোনো কাজ বাকি নেই
+        </p>
+      ) : (
+        <ul className="-mx-1 divide-y">
+          {shown.map((t) => {
+            const body = (
+              <>
+                <span className={`mt-1 h-9 w-1 shrink-0 rounded-full ${t.tone === "red" ? "bg-destructive" : "bg-warning"}`} aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold leading-snug">{t.text}</span>
+                  {t.sub && <span className="block text-xs text-muted-foreground">{t.sub}</span>}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </>
+            );
+            return (
+              <li key={t.id} className="flex items-center gap-1">
+                {t.to ? (
+                  <Link to={t.to as never} className="flex min-w-0 flex-1 items-start gap-3 px-1 py-2.5">{body}</Link>
+                ) : (
+                  <button type="button" onClick={t.run} className="flex min-w-0 flex-1 items-start gap-3 px-1 py-2.5 text-left">{body}</button>
+                )}
+                <button type="button" onClick={() => dismiss(t)} aria-label="পরে দেখব" className="rounded-lg p-2 text-muted-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {visible.length > 3 && (
+        <button type="button" onClick={() => setShowAll((v) => !v)} className="mt-1 text-xs font-bold text-primary">
+          {showAll ? "কম দেখান" : `আরও ${bn(visible.length - 3)}টি`}
+        </button>
+      )}
+      <DayCloseDialog open={closeDate !== null} onOpenChange={(o) => { if (!o) setCloseDate(null); }} date={closeDate ?? undefined} />
+      <TransferDialog open={transfer} onOpenChange={setTransfer} />
+    </Panel>
+  );
+}
+
+/* ---------- টাকা কুলাবে? হাতে নগদ বনাম যা দিতে হবে ---------- */
+function CashRunway({ s, loans }: { s: KilnSnapshot; loans: LoanWithDue[] }) {
+  const hand = s.cashSeason?.net ?? 0;
+  const pay = buildDues(s).pay;
+  const total = (key: string) => pay.find((l) => l.key === key)?.total ?? 0;
+  const labour = total("sardar-due") + total("staff-due");
+  const sellers = total("supplier-due") + total("old-payable");
+  const loanSoon = sum(loans.filter((l) => l.direction === "taken"), (l) => l.remaining);
+  const need = labour + sellers + loanSoon;
+  if (need < 0.5) return null;
+
+  const scale = Math.max(hand, need, 1);
+  const left = hand - need;
+  const verdict = left >= 0
+    ? { cls: "text-success", text: `সব বাকি শোধ করেও হাতে থাকবে ${tk(left)}` }
+    : hand >= loanSoon
+      ? { cls: "text-warning", text: `সব বাকি শোধে ঘাটতি ${tk(-left)}` }
+      : { cls: "text-destructive", text: `সামনের ঋণের টাকাও হাতে নেই, ঘাটতি ${tk(-left)}` };
+
+  return (
+    <Panel title="টাকা কুলাবে?" action={<MoreLink to="/dues">বিস্তারিত</MoreLink>}>
+      <div className="space-y-2.5">
+        <div>
+          <div className="flex justify-between text-xs font-semibold text-muted-foreground"><span>হাতে আছে</span><span className="num">{signedTk(hand)}</span></div>
+          <div className="mt-1 h-2.5 rounded-full bg-muted"><div className="h-2.5 rounded-full bg-ink" style={{ width: `${Math.max(0, (hand / scale) * 100)}%` }} /></div>
+        </div>
+        <div>
+          <div className="flex justify-between text-xs font-semibold text-muted-foreground"><span>দিতে হবে</span><span className="num">{tk(need)}</span></div>
+          <div className="mt-1 flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-muted">
+            {[[loanSoon, "bg-destructive"], [labour, "bg-primary"], [sellers, "bg-[#d98b5f]"]].map(([v, c]) => (
+              (v as number) > 0.5 && <div key={c as string} className={c as string} style={{ width: `${((v as number) / scale) * 100}%` }} />
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className={`mt-3 text-[15px] font-bold ${verdict.cls}`}>{verdict.text}</p>
+      <ul className="mt-2 grid grid-cols-1 gap-1 text-xs text-muted-foreground sm:grid-cols-3">
+        {loanSoon > 0.5 && <li className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-[2px] bg-destructive" aria-hidden="true" />৭ দিনের মধ্যে ঋণ <b className="num text-foreground">{tk(loanSoon)}</b></li>}
+        {labour > 0.5 && <li className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-[2px] bg-primary" aria-hidden="true" />সরদার ও শ্রমিকের বাকি <b className="num text-foreground">{tk(labour)}</b></li>}
+        {sellers > 0.5 && <li className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-[2px] bg-[#d98b5f]" aria-hidden="true" />সাপ্লায়ার ও পুরনো দেনা <b className="num text-foreground">{tk(sellers)}</b></li>}
+      </ul>
+    </Panel>
+  );
+}
+
+/* ---------- পাওনা-দেনার খাতা: হালখাতার মতো দুই কলাম ---------- */
+const SHORT: Record<string, string> = {
+  "customer-due": "গ্রাহকের বাকি",
+  "old-receivable": "গত বছরের পাওনা",
+  "sardar-advance": "সরদারের দাদন",
+  "staff-advance": "স্টাফের অগ্রিম",
+  "supplier-advance": "সাপ্লায়ারে আগাম",
+  "loan-given": "দেওয়া ঋণ",
+  "sardar-due": "সরদার",
+  "staff-due": "স্টাফ ও শ্রমিক",
+  "supplier-due": "সাপ্লায়ার ও অন্যান্য",
+  "old-payable": "পূর্বের দেনা",
+  "loan-taken": "নেওয়া ঋণ",
+};
+const BRICK_KEYS = new Set(["booking-owed", "customer-advance", "old-brick-due"]);
+
+function KhataColumn({ title, lines, tone }: { title: string; lines: Array<{ key: string; total: number }>; tone: string }) {
+  const shown = lines.slice(0, 4);
+  const rest = sum(lines.slice(4), (l) => l.total);
+  const total = sum(lines, (l) => l.total);
+  return (
+    <div className="min-w-0">
+      <div className={`border-b-2 pb-1.5 font-display text-[15px] font-bold ${tone}`}>{title}</div>
+      <ul className="text-[13px]">
+        {shown.map((l) => (
+          <li key={l.key} className="flex items-baseline justify-between gap-2 border-b border-dashed py-1.5">
+            <span className="truncate text-muted-foreground">{SHORT[l.key] ?? l.key}</span>
+            <span className="num shrink-0 font-semibold">{tk(l.total)}</span>
+          </li>
+        ))}
+        {rest > 0.5 && (
+          <li className="flex items-baseline justify-between gap-2 border-b border-dashed py-1.5">
+            <span className="text-muted-foreground">অন্যান্য</span>
+            <span className="num font-semibold">{tk(rest)}</span>
+          </li>
+        )}
+        {lines.length === 0 && <li className="py-1.5 text-muted-foreground">কিছু নেই</li>}
+      </ul>
+      {/* the account-book total: a double rule above it */}
+      <div className={`mt-1.5 flex items-baseline justify-between border-t-[3px] border-double pt-1 ${tone}`}>
+        <span className="text-xs font-semibold">মোট</span>
+        <span className="font-display num text-lg font-extrabold">{tk(total)}</span>
+      </div>
+    </div>
+  );
+}
+
+function Khata({ s }: { s: KilnSnapshot }) {
+  const { receive, pay } = buildDues(s);
+  const cashPay = pay.filter((l) => !BRICK_KEYS.has(l.key));
+  const advance = pay.find((l) => l.key === "customer-advance")?.total ?? 0;
+  const bookingTrucks = sum(s.bookings ?? [], (b) => b.trucksLeft);
+  const oldTrucks = sum(s.opening.filter((o) => o.kind === "customer_brick_due" && (o.remainingQty ?? 0) > 0), (o) => (o.remainingQty ?? 0) / PIECES_PER_TRUCK);
+  const brickParts = [
+    advance > 0.5 && `অগ্রিম ${tk(advance)}`,
+    bookingTrucks > 0 && `বুকিং ${bn(bookingTrucks)} গাড়ি`,
+    oldTrucks > 0.01 && `গত বছরের ${bn(Math.round(oldTrucks * 10) / 10)} গাড়ি`,
+  ].filter(Boolean) as string[];
+
+  return (
+    <Panel title="পাওনা-দেনা" action={<MoreLink to="/dues">সব হিসাব</MoreLink>}>
+      <Link to={"/dues" as never} className="grid grid-cols-2 gap-4">
+        <KhataColumn title="আমরা পাবো" lines={receive} tone="text-success border-success/60" />
+        <KhataColumn title="আমরা দেব" lines={cashPay} tone="text-destructive border-destructive/60" />
+      </Link>
+      {brickParts.length > 0 && (
+        <p className="mt-3 rounded-xl bg-accent px-3 py-2 text-[13px] text-accent-foreground">
+          <b>ইট দেওয়া বাকি:</b> {brickParts.join(", ")}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+/* ---------- এই মাসে খরচ কোথায় (ক্যাশ বইয়ের হিসাব) ---------- */
+function MonthSpend({ s, rows }: { s: KilnSnapshot; rows: CashHistoryRow[] }) {
+  const day = Number(s.today.slice(8, 10));
+  const isCost = (r: CashHistoryRow) => r.dir === "out" && moneyHead(r.key)?.group !== "move";
+  const thisMonth = rows.filter((r) => isCost(r) && r.date >= s.monthStart);
+  // last month up to the same day, so a half month is not compared with a full one
+  const lastSame = rows.filter((r) => isCost(r) && r.date < s.monthStart && Number(r.date.slice(8, 10)) <= day);
+  const by = new Map<string, number>();
+  for (const r of thisMonth) by.set(r.head, (by.get(r.head) ?? 0) + r.amount);
+  const heads = [...by].sort((a, b) => b[1] - a[1]);
+  const top = heads.slice(0, 4);
+  const restTotal = sum(heads.slice(4), (h) => h[1]);
+  const total = sum(thisMonth, (r) => r.amount);
+  const before = sum(lastSame, (r) => r.amount);
+  const max = Math.max(1, ...top.map((h) => h[1]), restTotal);
+  const change = total - before;
+
+  return (
+    <Panel title="এই মাসে খরচ কোথায়" action={<MoreLink to="/ledger">খরচের খাতা</MoreLink>}>
+      {total < 0.5 ? (
+        <p className="text-sm text-muted-foreground">এই মাসে এখনো কোনো খরচ লেখা হয়নি।</p>
+      ) : (
+        <>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-display num text-2xl font-extrabold">{tk(total)}</span>
+            {before > 0.5 && (
+              <span className={`text-xs font-semibold ${change > 0 ? "text-destructive" : "text-success"}`}>
+                গত মাসের এই সময়ের চেয়ে {tk(Math.abs(change))} {change > 0 ? "বেশি" : "কম"}
+              </span>
+            )}
+          </div>
+          <ul className="mt-3 space-y-2.5">
+            {[...top, ...(restTotal > 0.5 ? [["বাকি খাত", restTotal] as [string, number]] : [])].map(([name, v], i) => (
+              <li key={name}>
+                <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                  <span className="truncate font-semibold">{name}</span>
+                  <span className="num shrink-0 text-muted-foreground">{tk(v)} <span className="text-xs">({bn(Math.round((v / total) * 100))}%)</span></span>
+                </div>
+                <div className="mt-1 h-2 rounded-[3px] bg-muted">
+                  <div className={`h-2 rounded-[3px] ${i === 0 ? "bg-primary" : "bg-primary/45"}`} style={{ width: `${(v / max) * 100}%` }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+/* ---------- উৎপাদন ও বিক্রি: শুরু না হলে এক লাইনে ---------- */
+function useSeasonTarget() {
+  return useQuery({
+    queryKey: ["dash-season-target"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("seasons").select("id, name, target_production").eq("is_active", true).order("start_date", { ascending: false }).limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+function ProductionAndSales({ s }: { s: KilnSnapshot }) {
+  const targetQ = useSeasonTarget();
+  const target = Number(targetQ.data?.target_production || 0);
+  const made = sum(s.kacha.filter((k) => k.entry_type === "production"), (k) => k.quantity);
+  const started = s.kacha.length > 0 || s.sales.length > 0;
+
+  if (!started) {
+    return (
+      <section className="flex items-center gap-3 rounded-2xl border border-dashed bg-card/60 p-4">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground"><Layers className="h-5 w-5" aria-hidden="true" /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-display text-[15px] font-bold">উৎপাদন ও বিক্রি এখনো শুরু হয়নি</span>
+          <span className="block text-xs text-muted-foreground">প্রথম কাঁচা ইট বা চালান লিখলে এখানে উৎপাদন, স্টক আর চালান দেখাবে।</span>
+        </span>
+        {target <= 0 && <MoreLink to="/seasons">লক্ষ্য বসান</MoreLink>}
+      </section>
+    );
+  }
+
+  const today = s.kacha.filter((r) => r.entry_date === s.today);
+  const q = (type: string) => sum(today.filter((r) => r.entry_type === type), (r) => r.quantity);
+  const steps = [
+    { label: "কাঁচা ইট", value: q("production"), to: "/production-steps/kacha", icon: Layers },
+    { label: "ভাটায় ঢোকানো", value: q("load"), to: "/production-steps/load", icon: ArrowDownToLine },
+    { label: "পাকা বের", value: q("unload"), to: "/production-steps/unload", icon: ArrowUpFromLine },
+  ];
+  const stock = s.stock.filter((x) => x.qty > 0).sort((a, b) => b.qty - a.qty);
+  const stockTotal = sum(stock, (x) => x.qty);
+  const pct = target > 0 ? Math.min(100, (made / target) * 100) : 0;
+
+  return (
+    <Panel title="উৎপাদন ও বিক্রি" action={<MoreLink to="/challans">চালান</MoreLink>}>
+      {target > 0 ? (
+        <div className="mb-4">
+          <div className="flex items-baseline justify-between text-[13px]">
+            <span className="font-semibold">মৌসুমের লক্ষ্য {bn(target)} ইট</span>
+            <span className="num text-muted-foreground">{bn(Math.round(pct))}%</span>
+          </div>
+          <div className="mt-1 h-2.5 rounded-full bg-muted"><div className="h-2.5 rounded-full bg-primary" style={{ width: `${pct}%` }} /></div>
+          <p className="mt-1 text-xs text-muted-foreground">এ পর্যন্ত কাঁচা ইট {bn(made)}</p>
+        </div>
+      ) : (
+        <p className="mb-3 text-xs text-muted-foreground">মৌসুমের লক্ষ্য বসানো নেই। <Link to={"/seasons" as never} className="font-bold text-primary">মৌসুম পাতায় বসান</Link></p>
+      )}
+
+      <div className="grid grid-cols-3 gap-2">
+        {steps.map((st) => (
+          <Link key={st.label} to={st.to as never} className="rounded-xl bg-muted/60 px-2 py-2.5 text-center">
+            <st.icon className="mx-auto h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <span className="mt-1 block font-display num text-lg font-bold leading-none">{bn(st.value)}</span>
+            <span className="text-[11px] font-semibold text-muted-foreground">আজ {st.label}</span>
+          </Link>
+        ))}
+      </div>
+
+      <div className="mt-4 flex items-baseline justify-between">
+        <span className="text-[13px] font-semibold">পাকা ইটের স্টক</span>
+        <span className="font-display num text-lg font-bold">{bn(stockTotal)}</span>
+      </div>
+      {stock.length > 0 && (
+        <ul className="mt-1 grid grid-cols-2 gap-x-4 text-[13px]">
+          {stock.slice(0, 6).map((x) => (
+            <li key={x.name} className="flex justify-between border-b border-dashed py-1">
+              <span className="truncate text-muted-foreground">{x.name}</span>
+              <span className={`num font-semibold ${x.qty < LOW_STOCK ? "text-destructive" : ""}`}>{bn(x.qty)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/* ---------- কম্পিউটারে দ্রুত কাজের বোতাম (ফোনে + বোতাম এই কাজ করে) ---------- */
 function QuickActions() {
-  // money in / out open the "+" sheet straight on its "কাকে?" box
-  const items: Array<{ key: string; to?: string; step?: "in" | "out"; label: string; icon: typeof FilePlus2; primary?: boolean; chip: string; color: string }> = [
-    { key: "challan", to: "/entries/new", label: "নতুন চালান", icon: FilePlus2, primary: true, chip: "bg-white/15", color: "text-white" },
-    { key: "in", step: "in", label: "টাকা পেলাম", icon: Banknote, chip: "bg-emerald-50 dark:bg-emerald-950/50", color: "text-emerald-700 dark:text-emerald-300" },
-    { key: "out", step: "out", label: "টাকা দিলাম", icon: Receipt, chip: "bg-red-50 dark:bg-red-950/50", color: "text-red-700 dark:text-red-300" },
-    { key: "kacha", to: "/production-steps/kacha", label: "কাঁচা ইট", icon: Layers, chip: "bg-stone-100 dark:bg-stone-800", color: "text-stone-700 dark:text-stone-200" },
+  const items: Array<{ key: string; to?: string; step?: "in" | "out"; label: string; icon: typeof FilePlus2; primary?: boolean }> = [
+    { key: "challan", to: "/entries/new", label: "নতুন চালান", icon: FilePlus2, primary: true },
+    { key: "in", step: "in", label: "টাকা পেলাম", icon: Banknote },
+    { key: "out", step: "out", label: "টাকা দিলাম", icon: Receipt },
+    { key: "kacha", to: "/production-steps/kacha", label: "কাঁচা ইট", icon: Layers },
   ];
   const cls = (primary?: boolean) =>
-    `flex min-h-[84px] flex-col items-center justify-center gap-1.5 rounded-2xl px-1 py-2.5 text-center transition active:scale-95 ${
-      primary ? "bg-primary text-primary-foreground" : "border bg-card text-foreground"
-    }`;
+    `flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition active:scale-95 ${primary ? "bg-primary text-primary-foreground" : "border bg-card"}`;
   return (
-    <section className="grid grid-cols-4 gap-2">
+    <section className="hidden grid-cols-4 gap-2 md:grid">
       {items.map((it) => {
-        const body = (
-          <>
-            <span className={`grid h-9 w-9 place-items-center rounded-[11px] ${it.chip}`}>
-              <it.icon className={`h-5 w-5 ${it.color}`} aria-hidden="true" />
-            </span>
-            <span className="text-[13px] font-bold leading-tight">{it.label}</span>
-          </>
-        );
+        const body = <><it.icon className="h-4 w-4" aria-hidden="true" />{it.label}</>;
         return it.to ? (
           <Link key={it.key} to={it.to as never} className={cls(it.primary)}>{body}</Link>
         ) : (
@@ -171,274 +555,78 @@ function QuickActions() {
   );
 }
 
-/* ---------- আজকের হিসাব ---------- */
-function TodayStrip({ s }: { s: KilnSnapshot }) {
-  const t = s.today;
-  const sales = s.sales.filter((r) => r.sale_date === t && r.status !== "rejected");
-  const pendingAll = s.sales.filter((r) => r.status === "pending").length;
-  const customers = new Set(sales.map((r) => r.customer_id)).size;
-  // money out today over every head (sardar, staff, sellers, bills …), the cash book's figure
-  const outToday = s.cashToday?.expense ?? 0;
-
-  return (
-    <SectionCard
-      title="আজকের হিসাব"
-      action={
-        pendingAll > 0 ? (
-          <Link to="/approvals" className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-            {bn(pendingAll)}টি অনুমোদন বাকি
-          </Link>
-        ) : undefined
-      }
-    >
-      <div className="grid grid-cols-3">
-        <div className="flex flex-col gap-0.5 border-r pr-2.5">
-          <span className="text-[13px] text-muted-foreground">বিক্রি</span>
-          <span className="font-display num text-[22px] font-bold leading-tight">{tk(sum(sales, (r) => r.total_amount))}</span>
-          <span className="text-xs text-muted-foreground">{bn(sum(sales, (r) => r.quantity))} পিস</span>
-        </div>
-        <div className="flex flex-col gap-0.5 border-r px-2.5">
-          <span className="text-[13px] text-muted-foreground">চালান</span>
-          <span className="font-display num text-[22px] font-bold leading-tight">{bn(sales.length)}টি</span>
-          <span className="text-xs text-muted-foreground">{bn(customers)} জন গ্রাহক</span>
-        </div>
-        <div className="flex flex-col gap-0.5 pl-2.5">
-          <span className="text-[13px] text-muted-foreground">টাকা গেছে</span>
-          <Link to="/cash-book" className="font-display num text-[22px] font-bold leading-tight text-destructive">{tk(outToday)}</Link>
-          <span className="text-xs text-muted-foreground">সব খাত মিলিয়ে</span>
-        </div>
-      </div>
-    </SectionCard>
-  );
-}
-
-/* ---------- উৎপাদন লাইন ---------- */
-function ProductionLine({ s }: { s: KilnSnapshot }) {
-  const rows = s.kacha.filter((r) => r.entry_date === s.today);
-  const q = (type: string) => sum(rows.filter((r) => r.entry_type === type), (r) => r.quantity);
-  const steps = [
-    { n: "১", label: "কাঁচা ইট", value: q("production"), ring: "border-stone-400 bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200", to: "/production-steps/kacha" },
-    { n: "২", label: "ভাটায় ঢোকানো", value: q("load"), ring: "border-orange-600 bg-orange-50 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300", to: "/production-steps/load" },
-    { n: "৩", label: "পাকা বের", value: q("unload"), ring: "border-primary bg-primary text-primary-foreground", to: "/production-steps/unload" },
-  ];
-  return (
-    <SectionCard title="উৎপাদন লাইন · আজ" action={<MoreLink to="/production-steps/kacha">বিস্তারিত</MoreLink>}>
-      <div className="flex items-start">
-        {steps.map((st, i) => (
-          <div key={st.n} className="contents">
-            {i > 0 && <div className="mt-5 h-0.5 w-5 shrink-0 bg-border" aria-hidden="true" />}
-            <Link to={st.to as never} className="flex flex-1 flex-col items-center gap-1.5 text-center">
-              <span className={`grid h-10 w-10 place-items-center rounded-full border-2 text-[13px] font-bold ${st.ring}`}>{st.n}</span>
-              <span className="font-display num text-lg font-bold leading-none">{bn(st.value)}</span>
-              <span className="text-xs font-semibold text-muted-foreground">{st.label}</span>
-            </Link>
-          </div>
-        ))}
-      </div>
-    </SectionCard>
-  );
-}
-
-/* ---------- পাওনা-দেনা (lib/dues.ts rules; every tile opens /dues) ---------- */
-function MoneyTiles({ s }: { s: KilnSnapshot }) {
-  const dues = s.customers.filter((c) => c.balance > 0.5);
-  const adv = s.customers.filter((c) => c.balance < -0.5);
-  const sardarOwed = s.sardars.filter((x) => x.due > 0.5);
-  const supplierOwed = s.suppliers.filter((x) => x.due > 0.5);
-  const tiles = [
-    { label: "গ্রাহকের বাকি", dot: "bg-amber-600", color: "text-amber-700 dark:text-amber-400", value: sum(dues, (c) => c.balance), sub: `${bn(dues.length)} জন · আমরা পাবো`, to: "/dues" },
-    { label: "গ্রাহকের অগ্রিম", dot: "bg-blue-600", color: "text-blue-700 dark:text-blue-300", value: sum(adv, (c) => -c.balance), sub: `${bn(adv.length)} জন · ইট দেওয়া বাকি`, to: "/dues" },
-    { label: "সরদার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(sardarOwed, (x) => x.due), sub: `${bn(sardarOwed.length)} জন সরদার`, to: "/dues" },
-    { label: "সাপ্লায়ার পাবে", dot: "bg-red-600", color: "text-destructive", value: sum(supplierOwed, (x) => x.due), sub: `${bn(supplierOwed.length)} জন · ভেকু, গাড়ি, জমিসহ`, to: "/dues" },
-  ];
-  return (
-    <section className="grid grid-cols-2 gap-2.5">
-      {tiles.map((t) => (
-        <Link key={t.label} to={t.to as never} className="flex flex-col gap-1 rounded-2xl border bg-card p-3.5 transition active:scale-[0.98]">
-          <span className="flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground">
-            <span className={`h-2 w-2 rounded-full ${t.dot}`} aria-hidden="true" />
-            {t.label}
-          </span>
-          <span className={`font-display num text-2xl font-extrabold leading-tight ${t.color}`}>{tk(t.value)}</span>
-          <span className="text-xs text-muted-foreground">{t.sub}</span>
-        </Link>
-      ))}
-    </section>
-  );
-}
-
-/* ---------- ঋণের শেষ তারিখ: পেরিয়ে গেছে বা ৭ দিনের মধ্যে (lib/loan-due.ts) ---------- */
-function LoanDueAlert() {
-  const q = useQuery({ queryKey: ["loans", "due-soon"], queryFn: fetchLoansDueSoon, refetchInterval: 15 * 60_000 });
-  const rows = q.data ?? [];
-  if (!rows.length) return null;
-  return (
-    <Link to="/loans" className="block rounded-2xl border border-warning/50 bg-warning/10 p-3.5 transition active:scale-[0.99]">
-      <div className="mb-1.5 flex items-center gap-2 text-sm font-bold">
-        <CalendarClock className="h-4 w-4 text-warning" /> ঋণের শেষ তারিখ
-      </div>
-      <ul className="space-y-1 text-sm">
-        {rows.map((r) => (
-          <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-x-2">
-            <span>
-              <b>{r.party}</b> — {r.direction === "taken" ? "শোধ দিতে হবে" : "ফেরত পাওয়ার কথা"} <span className="num font-semibold">{tk(r.remaining)}</span>
-            </span>
-            <span className={`text-xs font-semibold ${LOAN_DUE_CLASS[r.due.tone]}`}>{r.due.text}</span>
-          </li>
-        ))}
-      </ul>
-    </Link>
-  );
-}
-
-/* ---------- পাকা ইটের স্টক ---------- */
-const STOCK_COLORS = ["bg-primary", "bg-amber-500", "bg-stone-400", "bg-teal-600", "bg-sky-600", "bg-rose-400"];
-
-function StockCard({ s }: { s: KilnSnapshot }) {
-  const items = s.stock.filter((x) => x.qty > 0).sort((a, b) => b.qty - a.qty);
-  const total = sum(items, (x) => x.qty);
-  return (
-    <SectionCard title="পাকা ইটের স্টক" action={<span className="font-display num text-lg font-bold">{bn(total)} পিস</span>}>
-      {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">স্টকে এখন কোনো পাকা ইট নেই।</p>
-      ) : (
-        <>
-          <div className="flex h-3.5 gap-[3px] overflow-hidden rounded-full" aria-hidden="true">
-            {items.map((x, i) => (
-              <div key={x.name} className={STOCK_COLORS[i % STOCK_COLORS.length]} style={{ width: `${(x.qty / total) * 100}%` }} />
-            ))}
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {items.map((x, i) => (
-              <div key={x.name} className="flex flex-col">
-                <span className="flex items-center gap-1.5 text-[13px] font-semibold">
-                  <span className={`h-2.5 w-2.5 rounded-[3px] ${STOCK_COLORS[i % STOCK_COLORS.length]}`} aria-hidden="true" />
-                  {x.name}
-                </span>
-                <span className={`num text-[15px] font-bold ${x.qty < LOW_STOCK ? "text-destructive" : ""}`}>
-                  {bn(x.qty)}
-                  {x.qty < LOW_STOCK ? " · কম" : ""}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </SectionCard>
-  );
-}
-
-/* ---------- সাম্প্রতিক চালান ---------- */
-const STATUS: Record<string, { label: string; cls: string }> = {
-  approved: { label: "অনুমোদিত", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200" },
-  pending: { label: "অপেক্ষায়", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200" },
-  rejected: { label: "বাতিল", cls: "bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300" },
-};
-
-function RecentChallans({ s }: { s: KilnSnapshot }) {
-  const nameOf = (id: string) => s.customers.find((c) => c.id === id)?.name ?? "অজানা গ্রাহক";
-  const brickOf = (id: string) => s.brickTypes.find((b) => b.id === id)?.name ?? "ইট";
-  const rows = [...s.sales]
-    .sort((a, b) => String(b.sale_date).localeCompare(String(a.sale_date)) || String(b.challan_no).localeCompare(String(a.challan_no)))
-    .slice(0, 5);
-  return (
-    <SectionCard title="সাম্প্রতিক চালান" action={<MoreLink to="/challans">সব দেখুন</MoreLink>} className="pb-1">
-      {rows.length === 0 ? (
-        <p className="pb-3 text-sm text-muted-foreground">এখনো কোনো চালান নেই।</p>
-      ) : (
-        <ul className="divide-y">
-          {rows.map((r) => {
-            const name = nameOf(r.customer_id);
-            const st = STATUS[r.status] ?? STATUS.pending;
-            return (
-              <li key={r.id ?? r.challan_no}>
-                <Link to="/challans/$id" params={{ id: String(r.id) }} className="flex items-center gap-3 py-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted text-[15px] font-bold text-muted-foreground">
-                    {name.trim().charAt(0).toUpperCase()}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-[15px] font-bold">{name}</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {brickOf(r.brick_type_id)} · {bn(r.quantity)} পিস{r.challan_no ? ` · ${r.challan_no}` : ""}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="num text-[15px] font-bold">{Number(r.total_amount) > 0 ? tk(Number(r.total_amount)) : "—"}</span>
-                    <span className={`rounded-full px-2 text-[11px] font-bold ${st.cls}`}>{st.label}</span>
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </SectionCard>
-  );
-}
-
 /* ---------- মূল পাতা ---------- */
 export function AdminDashboard({ navGrid }: { navGrid?: ReactNode }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const snapQ = useQuery({
     queryKey: ["kiln-snapshot"],
     queryFn: () => getKilnSnapshot(true),
-    refetchInterval: 60_000,
+    // the whole ledger is read for this page: every 5 minutes is enough, and on return to the app
+    refetchInterval: 5 * 60_000,
   });
-  const weatherQ = useQuery({
-    queryKey: ["kiln-weather"],
-    queryFn: () => getKilnWeather(),
-    refetchInterval: 15 * 60_000,
-  });
+  const weatherQ = useQuery({ queryKey: ["kiln-weather"], queryFn: () => getKilnWeather(), refetchInterval: 15 * 60_000 });
+  const loansQ = useQuery({ queryKey: ["loans", "due-soon"], queryFn: fetchLoansDueSoon, refetchInterval: 15 * 60_000 });
 
   const s = snapQ.data;
+  const from = s ? prevMonthStart(s.monthStart) : null;
+  const histQ = useQuery({
+    queryKey: ["dash-history", from, s?.today],
+    enabled: !!s,
+    queryFn: () => fetchCashHistory({ from: from!, to: s!.today }),
+  });
+  const rows = histQ.data ?? [];
+  const todayRows = useMemo(() => (s ? rows.filter((r) => r.date === s.today).reverse() : []), [rows, s]);
+  const loans = loansQ.data ?? [];
   const weather = weatherQ.data ?? null;
-  const dateLabel = new Date().toLocaleDateString("bn-BD", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Dhaka" });
+  const dateLabel = s ? bnDate(s.today) : "";
+  const weekday = new Date().toLocaleDateString("bn-BD", { weekday: "long", timeZone: "Asia/Dhaka" });
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-3.5">
-      <div className="flex items-center gap-3 px-0.5 pt-1">
+    <div className="mx-auto w-full max-w-5xl space-y-4">
+      <header className="flex items-center gap-3 px-0.5 pt-1">
         <BrandLogo size="sm" className="shrink-0" />
         <div className="min-w-0">
           <h1 className="font-display text-xl font-extrabold leading-tight">সি ডি বি ব্রিকস</h1>
-          <p className="truncate text-xs font-semibold text-muted-foreground">কাপাসিয়া, গাজীপুর · {dateLabel}</p>
+          <p className="truncate text-xs font-semibold text-muted-foreground">{weekday}, {dateLabel}</p>
         </div>
-      </div>
+      </header>
 
       {!s ? (
-        <div className="space-y-3.5">
-          <Skeleton className="h-[188px] rounded-[20px]" />
-          <div className="grid grid-cols-4 gap-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[84px] rounded-2xl" />
-            ))}
-          </div>
-          <Skeleton className="h-28 rounded-2xl" />
-          <Skeleton className="h-36 rounded-2xl" />
+        <div className="space-y-4">
+          <Skeleton className="h-[230px] rounded-[22px]" />
+          <Skeleton className="h-32 rounded-2xl" />
+          <Skeleton className="h-40 rounded-2xl" />
         </div>
       ) : (
-        <div className="grid gap-3.5 lg:grid-cols-2 lg:items-start">
-          <div className="space-y-3.5">
-            <CashHero s={s} weather={weather} />
+        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <div className="space-y-4">
+            <CashHero s={s} weather={weather} todayRows={todayRows} />
             <WeatherSignalBanner />
-            <LoanDueAlert />
             <QuickActions />
-            <TodayStrip s={s} />
-            <ProductionLine s={s} />
+            <TasksPanel s={s} rows={rows} loans={loans} />
+            <CashRunway s={s} loans={loans} />
           </div>
-          <div className="space-y-3.5">
-            <MoneyTiles s={s} />
-            <StockCard s={s} />
-            <RecentChallans s={s} />
+          <div className="space-y-4">
+            <Khata s={s} />
+            <MonthSpend s={s} rows={rows} />
+            <ProductionAndSales s={s} />
           </div>
         </div>
       )}
 
       {navGrid && (
-        <div className="pt-2">
-          <h2 className="section-label mb-3 px-1 lg:hidden">সব মেনু</h2>
-          {navGrid}
+        <div className="lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-expanded={menuOpen}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border bg-card py-3 text-sm font-bold"
+          >
+            <LayoutGrid className="h-4 w-4" aria-hidden="true" /> {menuOpen ? "সব পাতা লুকান" : "সব পাতা দেখুন"}
+          </button>
+          {menuOpen && <div className="pt-4">{navGrid}</div>}
         </div>
       )}
-
     </div>
   );
 }
