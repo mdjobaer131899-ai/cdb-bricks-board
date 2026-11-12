@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { markCheckin } from "@/lib/routines";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarCheck, CalendarX, Pencil, Plus, Printer, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -217,6 +218,8 @@ export function StaffLedgerPage({ mode }: { mode: Mode }) {
   const saveAtt = useMutation({
     mutationFn: async () => {
       await writeDay(attDate, activeOn(attDate).map((w) => ({ id: w.id, present: present.has(w.id), half: present.has(w.id) && half.has(w.id) })));
+      // the whole day was checked here, so the assistant's 3 pm reminder stops for it
+      if (mode === "daily" && me?.user.id) await markCheckin("attendance", attDate, me.user.id);
     },
     onSuccess: () => { toast.success("হাজিরা সংরক্ষিত"); setAttOpen(false); invalidate(); },
     onError: (e: Error) => toast.error(e.message),

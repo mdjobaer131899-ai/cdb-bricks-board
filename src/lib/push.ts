@@ -69,3 +69,11 @@ export async function sendTestPush() {
   if (!data?.sent) throw new Error(data?.errors?.[0] ? `পাঠানো যায়নি: ${data.errors[0]}` : "পাঠানো যায়নি");
   return data;
 }
+
+/** sends today's attendance reminder to this admin's phones now (kiln-routines) */
+export async function sendRoutineTestPush() {
+  const { data, error } = await supabase.functions.invoke("kiln-routines", { body: { action: "test" } });
+  if (error) throw new Error(await functionError(error));
+  if (!data?.sent) throw new Error(data?.errors?.[0] ? `পাঠানো যায়নি: ${data.errors[0]}` : "পাঠানো যায়নি");
+  return data;
+}

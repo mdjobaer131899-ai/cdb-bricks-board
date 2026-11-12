@@ -1,13 +1,22 @@
 import React, { useState, useRef, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Mic, MicOff, Send, Sparkles, X, Printer, CheckCircle, Bot, User, Save, Loader2, Camera, Paperclip, FileText } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { processBrickFieldCommand, saveAiActionToDatabase, AIAttachment } from "../services/gemini";
+import { processBrickFieldCommand, saveAiActionToDatabase, startAttendanceCheck, AIAttachment } from "../services/gemini";
 import { toast } from "sonner";
 import { bn, bnDate } from "@/lib/format";
 
 export const OPEN_AI_CHAT_EVENT = "open-ai-chat-drawer";
+/** opens the chat on a check-in question, e.g. today's attendance (detail: { ask: "attendance" }) */
+export const AI_ASK_EVENT = "ai-chat-ask";
+export type AiAsk = "attendance";
+
+/** open the assistant on a check-in from anywhere (home tasks, notifications) */
+export function askAi(ask: AiAsk) {
+  window.dispatchEvent(new CustomEvent(AI_ASK_EVENT, { detail: { ask } }));
+}
 
 interface Message {
   role: "user" | "assistant";
@@ -17,9 +26,12 @@ interface Message {
   data?: any;
   saved?: boolean;
   challanNo?: string;
+  /** one-tap answers under an assistant message */
+  chips?: string[];
 }
 
 export function AiAssistantFab() {
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,6 +55,38 @@ export function AiAssistantFab() {
     const handleOpenEvent = () => setIsOpen((prev) => !prev);
     window.addEventListener(OPEN_AI_CHAT_EVENT, handleOpenEvent);
     return () => window.removeEventListener(OPEN_AI_CHAT_EVENT, handleOpenEvent);
+  }, []);
+
+  // a check-in: the assistant opens and asks first (from a home task or a phone notification)
+  const startAsk = async (ask: AiAsk) => {
+    if (ask !== "attendance") return;
+    setIsOpen(true);
+    setLoading(true);
+    try {
+      const q = await startAttendanceCheck();
+      setMessages((prev) => [...prev, { role: "assistant", text: q.text, chips: q.chips }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", text: "খাতা পড়া যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।" }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    const onAsk = (e: Event) => void startAsk(((e as CustomEvent).detail?.ask ?? "attendance") as AiAsk);
+    window.addEventListener(AI_ASK_EVENT, onAsk);
+    // opened from a notification: /?ask=attendance
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("ask") === "attendance") {
+        url.searchParams.delete("ask");
+        window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+        setTimeout(() => void startAsk("attendance"), 600);
+      }
+    } catch {
+      // ignore
+    }
+    return () => window.removeEventListener(AI_ASK_EVENT, onAsk);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -195,7 +239,9 @@ export function AiAssistantFab() {
         toast.error(res.message || "সেভ করতে সমস্যা হয়েছে।");
         return;
       }
-      toast.success("সফলভাবে খাতায় (Database-এ) সেভ হয়েছে!");
+      toast.success(res?.message || "খাতায় সেভ হয়েছে");
+      // not a useMutation, so the pages are refreshed here
+      void queryClient.invalidateQueries();
       setMessages((prev) =>
         prev.map((m, i) =>
           i === idx ? { ...m, saved: true, challanNo: res?.challanNo } : m
@@ -341,6 +387,57 @@ export function AiAssistantFab() {
                       </div>
                     )}
                     <p className="whitespace-pre-line">{m.text}</p>
+
+                    {m.role === "assistant" && m.chips && m.chips.length > 0 && idx === messages.length - 1 && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {m.chips.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            disabled={loading}
+                            onClick={() => handleSend(c)}
+                            className="rounded-full border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-800 hover:bg-orange-100 disabled:opacity-50"
+                          >
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* হাজিরার কার্ড */}
+                    {m.data?.type === "ATTENDANCE" && (
+                      <div className="mt-3 space-y-1.5 rounded-xl border border-orange-200 bg-orange-50/70 p-3 text-xs text-foreground shadow-xs">
+                        <div className="border-b border-orange-200 pb-1 font-bold text-orange-700">🧑‍🏭 ডেলি শ্রমিকের হাজিরা · {bnDate(m.data.data?.date)}</div>
+                        {(m.data.data?.marks ?? []).length === 0 ? (
+                          <div>সবাই উপস্থিত, নতুন কিছু বদলাবে না।</div>
+                        ) : (
+                          <ul className="space-y-0.5">
+                            {(m.data.data?.marks ?? []).map((x: any) => (
+                              <li key={x.workerId} className="flex items-center justify-between gap-2">
+                                <span className="font-semibold">{x.name}</span>
+                                <span className={x.status === "absent" ? "font-bold text-red-700" : x.status === "half" ? "font-bold text-amber-700" : "font-bold text-emerald-700"}>
+                                  {x.status === "absent" ? "অনুপস্থিত" : x.status === "half" ? "হাফ দিন" : "উপস্থিত"}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="text-muted-foreground">বাকিরা উপস্থিত ধরা হবে।</div>
+                        {!m.saved ? (
+                          <Button
+                            size="sm"
+                            disabled={savingIdx === idx}
+                            onClick={() => handleSaveEntry(idx, "ATTENDANCE", m.data.data)}
+                            className="mt-1 h-8 w-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700"
+                          >
+                            {savingIdx === idx ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+                            হাজিরা খাতায় সেভ করুন
+                          </Button>
+                        ) : (
+                          <div className="w-full rounded border border-emerald-300 bg-emerald-100 py-1 text-center text-xs font-bold text-emerald-700">✓ হাজিরা উঠেছে</div>
+                        )}
+                      </div>
+                    )}
 
                     {/* ১. চালান কার্ড */}
                     {m.data?.type === "SALE_CHALLAN" && (

@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PurseTiles, TransferDialog } from "@/components/cash-purses";
 import { DayCloseDialog, useDayCloses } from "@/components/day-close";
 import { openQuickEntry } from "@/components/quick-entry";
+import { askAi } from "@/components/ai-assistant-fab";
+import { hm, useRoutines } from "@/lib/routines";
 import { supabase } from "@/integrations/supabase/client";
 import { bn, bnDate } from "@/lib/format";
 import { fetchCashHistory, type CashHistoryRow } from "@/lib/cash-queries";
@@ -36,6 +38,9 @@ const PIECES_PER_TRUCK = 2000;
 
 function dhakaHour() {
   return Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: "Asia/Dhaka" }).format(new Date()));
+}
+function dhakaHM() {
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Asia/Dhaka" }).format(new Date());
 }
 function prevMonthStart(monthStart: string) {
   const [y, m] = monthStart.split("-").map(Number);
@@ -184,6 +189,11 @@ function TasksPanel({ s, rows, loans }: { s: KilnSnapshot; rows: CashHistoryRow[
   const bank = s.cashSeason?.purses?.bank ?? 0;
   const kachaRecent = s.kacha.some((k) => k.entry_type === "production" && String(k.entry_date) >= s.yesterday);
   const kachaToday = s.kacha.some((k) => k.entry_type === "production" && k.entry_date === s.today);
+  // the assistant's attendance routine: from its time until it is done today
+  const routinesQ = useRoutines();
+  const attRoutine = routinesQ.data?.find((r) => r.kind === "attendance");
+  const dailyToday = s.workers.filter((w) => w.isDaily && w.active && (!w.join || w.join <= s.today) && (!w.leave || w.leave >= s.today)).length;
+  const attDone = s.checkins.some((c) => c.kind === "attendance" && c.date === s.today);
 
   const tasks: Task[] = [];
   if ((s.cashSeason?.net ?? 0) < -0.5) {
@@ -203,6 +213,9 @@ function TasksPanel({ s, rows, loans }: { s: KilnSnapshot; rows: CashHistoryRow[
       sub: l.due.text,
       to: "/loans",
     });
+  }
+  if (attRoutine?.enabled && dhakaHM() >= hm(attRoutine.at_time) && dailyToday > 0 && !attDone) {
+    tasks.push({ id: "attendance-today", tone: "amber", text: "আজকের হাজিরা দিন", sub: `ডেলি শ্রমিক ${bn(dailyToday)} জন · সহকারীকে বলুন কে কে আসেনি`, run: () => askAi("attendance") });
   }
   if (pending > 0) tasks.push({ id: "approvals", tone: "amber", text: `${bn(pending)}টি চালান অনুমোদন বাকি`, sub: "দাম বসিয়ে অনুমোদন দিন", to: "/approvals" });
   if (closesQ.isSuccess && hour >= 17 && hadLines(s.today) && !closed.has(s.today)) {

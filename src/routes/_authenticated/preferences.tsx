@@ -22,6 +22,7 @@ import { useTheme } from "@/lib/theme";
 import { SeasonSwitcher } from "@/components/season-switcher";
 import { GlobalSearch } from "@/components/global-search";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RoutinesCard } from "@/components/assistant-routines";
 
 export const Route = createFileRoute("/_authenticated/preferences")({
   head: () => ({ meta: [{ title: "সেটিংস — CDB Bricks" }] }),
@@ -125,6 +126,13 @@ function PreferencesPage() {
         />
         <Row icon={CalendarRange} label="চলতি মৌসুম" hint="কোন মৌসুমের হিসাব দেখবেন" right={<SeasonSwitcher />} />
       </Group>
+
+      {isAdmin && (
+        <section className="space-y-2">
+          <h2 className="section-label px-1">সহকারীর রুটিন</h2>
+          <RoutinesCard />
+        </section>
+      )}
 
       {isAdmin && (
         <Group title="অ্যাডমিন">

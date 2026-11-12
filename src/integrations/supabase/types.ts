@@ -65,6 +65,57 @@ export type Database = {
           },
         ]
       }
+      agent_checkins: {
+        Row: {
+          check_date: string
+          done_at: string
+          done_by: string
+          id: string
+          kind: string
+          note: string | null
+        }
+        Insert: {
+          check_date: string
+          done_at?: string
+          done_by?: string
+          id?: string
+          kind: string
+          note?: string | null
+        }
+        Update: {
+          check_date?: string
+          done_at?: string
+          done_by?: string
+          id?: string
+          kind?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
+      agent_routines: {
+        Row: {
+          at_time: string
+          enabled: boolean
+          kind: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          at_time: string
+          enabled?: boolean
+          kind: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          at_time?: string
+          enabled?: boolean
+          kind?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       app_secrets: {
         Row: {
           created_at: string
