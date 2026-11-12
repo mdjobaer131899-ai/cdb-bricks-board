@@ -440,12 +440,63 @@ export async function saveReminder(r: ReminderEntry, uid: string): Promise<SaveO
   return { success: true, refs: [ref], message: `ঠিক আছে, ${whenText(at.toISOString())}-এ ফোনে মনে করিয়ে দেব: ${text}` };
 }
 
+/* ---------------------------------------------------------------- customers and bookings */
+
+export type CustomerEntry = { name: string; phone: string; address: string; note?: string };
+export type BookingEntry = {
+  customerId: string;
+  customer: string;
+  date: string;
+  items: Array<{ brickTypeId: string; name: string; trucks: number; perTruck: number; rate: number }>;
+  method: PayMethod;
+  note?: string;
+};
+
+/** a new customer, as the customers page adds one (name, mobile and address) */
+export async function saveCustomer(c: CustomerEntry, uid: string): Promise<SaveOutcome> {
+  const name = c.name.trim();
+  if (!name) throw new Error("গ্রাহকের নাম বলুন");
+  if (!c.phone.trim()) throw new Error("মোবাইল নাম্বার বলুন");
+  if (!c.address.trim()) throw new Error("ঠিকানা বলুন");
+  const { data: same } = await supabase.from("customers").select("id, name").ilike("name", name.replace(/[\\%_]/g, (m) => "\\" + m)).limit(1);
+  if (same?.length) throw new Error(`"${(same[0] as { name: string }).name}" নামে গ্রাহক আগে থেকেই আছে। নতুন মানুষ হলে নামের সাথে পিতার নাম বা গ্রাম যোগ করুন।`);
+  const ref = await insertOne("customers", { name, phone: c.phone.trim(), address: c.address.trim(), notes: (c.note ?? "").trim() || null, created_by: uid });
+  return { success: true, refs: [ref], message: `নতুন গ্রাহক যোগ হয়েছে: ${name} (${c.phone.trim()})। এখন তাঁর নামে চালান বা জমা দেওয়া যাবে।` };
+}
+
+/** booking value: trucks × pieces per truck × rate per piece */
+export const bookingValue = (b: Pick<BookingEntry, "items">) =>
+  Math.round(b.items.reduce((a, i) => a + i.trucks * i.perTruck * i.rate, 0) * 100) / 100;
+
+/** a fixed-price booking, through the same RPC as the advance page (admin): the full price is taken today */
+export async function saveBooking(b: BookingEntry): Promise<SaveOutcome> {
+  if (!b.customerId) throw new Error("কোন গ্রাহক, বোঝা যায়নি");
+  if (!b.items.length) throw new Error("কোন ইট, কত গাড়ি, কী দামে, বলুন");
+  for (const i of b.items) {
+    if (!(i.trucks > 0)) throw new Error("কত গাড়ি, বলুন");
+    if (!(i.perTruck > 0)) throw new Error("এক গাড়িতে কত পিস, বলুন");
+    if (!(i.rate > 0)) throw new Error("প্রতি পিসের দাম বলুন");
+  }
+  const amount = bookingValue(b);
+  const { data, error } = await (supabase.rpc as any)("create_booking", {
+    _customer_id: b.customerId, _date: b.date,
+    _items: b.items.map((i) => ({ brick_type_id: i.brickTypeId, trucks: i.trucks, pieces_per_truck: i.perTruck, rate: i.rate })),
+    _paid: amount, _method: asMethod(b.method), _note: (b.note ?? "").trim(),
+  });
+  if (error) throw friendly(error);
+  return {
+    success: true,
+    refs: data ? [{ table: "contracts", id: String(data) }] : [],
+    message: `${b.customer}-এর ঠিক দামে বুকিং লেখা হয়েছে, পুরো ${tk(amount)} জমা${b.method !== "cash" ? ` (${METHOD_LABEL[asMethod(b.method)]})` : ""}। চালানের সময় "বুকিং থেকে" বাছলে এই দামেই যাবে।`,
+  };
+}
+
 /* ---------------------------------------------------------------- undo */
 
 const UNDO_TABLES = new Set([
   "collections", "opening_payments", "owner_transactions", "loans", "loan_payments", "sardar_payments", "worker_payments",
   "expenses", "purchases", "supplier_payments", "cash_transfers", "cash_day_closes", "kacha_brick_entries", "sales_entries",
-  "agent_reminders",
+  "agent_reminders", "customers", "contracts",
 ]);
 
 /** the admin's password, checked by signing in again (the same check as the cash book's delete) */
@@ -466,7 +517,10 @@ export async function undoSaved(refs: SavedRef[], password: string): Promise<str
   let n = 0;
   for (const r of [...refs].reverse()) {
     if (!UNDO_TABLES.has(r.table)) continue;
-    const { error } = await (supabase as any).from(r.table).delete().eq("id", r.id);
+    // a booking goes with its money, and only while no challan has used it (cancel_booking)
+    const { error } = r.table === "contracts"
+      ? await (supabase.rpc as any)("cancel_booking", { _id: r.id })
+      : await (supabase as any).from(r.table).delete().eq("id", r.id);
     if (error) throw friendly(error);
     n++;
   }

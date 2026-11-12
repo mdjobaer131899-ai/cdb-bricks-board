@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { bn, bnDate } from "@/lib/format";
 import { moneyHead, type MoneyKey } from "@/lib/money-heads";
-import { METHOD_LABEL, PAY_METHOD_LIST, SELLER_HEADS, whenText, type PayMethod, type SavedRef } from "@/lib/ai-entries";
+import { METHOD_LABEL, PAY_METHOD_LIST, SELLER_HEADS, bookingValue, whenText, type PayMethod, type SavedRef } from "@/lib/ai-entries";
 
 /**
  * One card under an assistant reply: what will be written, a quick change (amount, purse,
@@ -49,6 +49,8 @@ export function entryTitle(e: ChatEntry): string {
     case "DAY_CLOSE": return "🔒 দিন বন্ধ";
     case "BOOK_MARK": return "📒 কাগজের খাতায় তোলা";
     case "REMINDER": return "⏰ মনে করিয়ে দেওয়া";
+    case "CUSTOMER": return `👤 নতুন গ্রাহক · ${d.name ?? ""}`;
+    case "BOOKING": return `📒 ঠিক দামে বুকিং · ${d.customer ?? ""}`;
     default: return "এন্ট্রি";
   }
 }
@@ -74,7 +76,7 @@ function MethodChips({ value, onChange }: { value: PayMethod; onChange: (m: PayM
     <div className="flex flex-wrap gap-1">
       {PAY_METHOD_LIST.map((m) => (
         <button key={m} type="button" onClick={() => onChange(m)}
-          className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${value === m ? "border-orange-600 bg-orange-600 text-white" : "border-slate-300 bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-200"}`}>
+          className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${value === m ? "border-primary bg-primary text-primary-foreground" : "bg-background text-foreground"}`}>
           {METHOD_LABEL[m]}
         </button>
       ))}
@@ -129,7 +131,7 @@ function Body({ e }: { e: ChatEntry }) {
           <Row k="তারিখ" v={bnDate(d.date)} />
           {d.note && <Row k="নোট" v={d.note} />}
           {prev !== null && after !== null && (
-            <div className="num mt-1 rounded-lg bg-white/70 px-2 py-1 text-[11px] font-semibold dark:bg-slate-900">
+            <div className="num mt-1.5 rounded-xl bg-muted px-2.5 py-1.5 text-xs font-medium">
               আগে {dueWords(prev, side)} → পরে <b>{dueWords(after, side)}</b>
             </div>
           )}
@@ -202,6 +204,29 @@ function Body({ e }: { e: ChatEntry }) {
           <Row k="যে তারিখ পর্যন্ত" v={bnDate(d.upTo)} />
         </>
       );
+    case "CUSTOMER":
+      return (
+        <>
+          <Row k="নাম" v={d.name} strong />
+          <Row k="মোবাইল" v={d.phone} />
+          <Row k="ঠিকানা" v={d.address} />
+          {d.note && <Row k="নোট" v={d.note} />}
+        </>
+      );
+    case "BOOKING": {
+      const items = Array.isArray(d.items) ? d.items : [];
+      return (
+        <>
+          {items.map((i: any) => (
+            <Row key={i.brickTypeId} k={i.name} v={`${bn(num(i.trucks))} গাড়ি × ${bn(num(i.perTruck))} পিস × ${tk(num(i.rate))} = ${tk(num(i.trucks) * num(i.perTruck) * num(i.rate))}`} />
+          ))}
+          <Row k="আজ পুরো টাকা নেওয়া" v={tk(bookingValue({ items: items.map((i: any) => ({ ...i, trucks: num(i.trucks), perTruck: num(i.perTruck), rate: num(i.rate) })) }))} strong />
+          <Row k="কোথায় এলো" v={METHOD_LABEL[(d.method ?? "cash") as PayMethod] ?? "ক্যাশ"} />
+          <Row k="তারিখ" v={bnDate(d.date)} />
+          <div className="text-[11px] text-muted-foreground">পরে চালানে "বুকিং থেকে" বাছলে এই দামে ইট যাবে, বাজারদর বদলালেও।</div>
+        </>
+      );
+    }
     case "REMINDER":
       return (
         <>
@@ -271,20 +296,48 @@ function Editor({ e, onChange }: { e: ChatEntry; onChange: (d: any) => void }) {
       return <NumField label="পাতার নম্বর" value={d.page} onChange={(n) => set({ page: Math.round(n) })} />;
     case "REMINDER":
       return <TextField label="কী মনে করাতে হবে" value={d.text} onChange={(v) => set({ text: v })} />;
+    case "CUSTOMER":
+      return (
+        <div className="space-y-2">
+          <TextField label="নাম" value={d.name} onChange={(v) => set({ name: v })} />
+          <TextField label="মোবাইল" type="tel" value={d.phone} onChange={(v) => set({ phone: v })} />
+          <TextField label="ঠিকানা" value={d.address} onChange={(v) => set({ address: v })} />
+        </div>
+      );
+    case "BOOKING": {
+      const items = Array.isArray(d.items) ? d.items : [];
+      const setItem = (i: number, p: Record<string, unknown>) => set({ items: items.map((x: any, j: number) => (j === i ? { ...x, ...p } : x)) });
+      return (
+        <div className="space-y-2">
+          {items.map((it: any, i: number) => (
+            <div key={it.brickTypeId} className="space-y-1">
+              <div className="text-[11px] font-bold">{it.name}</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <NumField label="গাড়ি" value={it.trucks} onChange={(n) => setItem(i, { trucks: n })} />
+                <NumField label="গাড়িতে পিস" value={it.perTruck} onChange={(n) => setItem(i, { perTruck: n })} />
+                <NumField label="প্রতি পিস ৳" value={it.rate} onChange={(n) => setItem(i, { rate: n })} />
+              </div>
+            </div>
+          ))}
+          {dateField}
+          <MethodChips value={(d.method ?? "cash") as PayMethod} onChange={(m) => set({ method: m })} />
+        </div>
+      );
+    }
     default:
       return null;
   }
 }
 
-const EDITABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER"]);
-const UNDOABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "REMINDER", "SALE_CHALLAN"]);
+const EDITABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING"]);
+const UNDOABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "REMINDER", "SALE_CHALLAN", "CUSTOMER", "BOOKING"]);
 
 export function UndoBox({ onUndo, onCancel }: { onUndo: (password: string) => Promise<void>; onCancel?: () => void }) {
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   return (
-    <div className="mt-2 space-y-1.5 rounded-lg border border-rose-200 bg-rose-50 p-2 dark:border-rose-900 dark:bg-rose-950/40">
-      <div className="text-[11px] font-semibold text-rose-800 dark:text-rose-200">মুছতে অ্যাডমিন পাসওয়ার্ড দিন</div>
+    <div className="mt-2 space-y-1.5 rounded-xl border border-destructive/30 bg-destructive/5 p-2.5">
+      <div className="text-xs font-semibold text-destructive">মুছতে অ্যাডমিন পাসওয়ার্ড দিন</div>
       <div className="flex gap-1.5">
         <Input className="h-9 flex-1 text-sm" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="পাসওয়ার্ড" />
         <Button size="sm" variant="destructive" className="h-9 text-xs font-bold" disabled={!pw || busy}
@@ -313,10 +366,10 @@ export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, 
   const needsReason = entry.type === "DAY_CLOSE" && Math.abs(num(d.counted) - num(d.expected)) >= 1;
 
   return (
-    <div className="mt-2.5 space-y-1.5 rounded-xl border border-orange-200 bg-orange-50/70 p-3 text-xs text-foreground shadow-xs dark:border-slate-700 dark:bg-slate-800">
-      <div className="flex items-center justify-between gap-2 border-b border-orange-200 pb-1 font-bold text-orange-700 dark:border-slate-700 dark:text-orange-400">
+    <div className="mt-3 space-y-1.5 rounded-2xl border bg-card p-3.5 text-[13px] text-foreground shadow-xs">
+      <div className="flex items-center justify-between gap-2 border-b pb-1.5 text-sm font-semibold">
         <span className="min-w-0 truncate">{entryTitle(entry)}</span>
-        {entry.challanNo && <span className="rounded bg-orange-200/70 px-1.5 py-0.5 text-[11px]">#{entry.challanNo}</span>}
+        {entry.challanNo && <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px]">#{entry.challanNo}</span>}
       </div>
 
       {entry.type === "ATTENDANCE" ? (
@@ -350,46 +403,46 @@ export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, 
         <Body e={entry} />
       )}
 
-      {!entry.saved && editing && <div className="border-t border-orange-200 pt-2 dark:border-slate-700"><Editor e={entry} onChange={onChange} /></div>}
+      {!entry.saved && editing && <div className="border-t pt-2.5"><Editor e={entry} onChange={onChange} /></div>}
       {!entry.saved && entry.type === "DAY_CLOSE" && (
         <TextField label={needsReason ? "গরমিলের কারণ (লিখতেই হবে)" : "নোট (ইচ্ছা হলে)"} value={d.note} onChange={(v) => onChange({ ...d, note: v })} />
       )}
 
       {entry.undone ? (
-        <div className="w-full rounded border border-slate-300 bg-slate-100 py-1 text-center text-xs font-bold text-slate-600">মুছে ফেলা হয়েছে</div>
+        <div className="w-full rounded-xl bg-muted py-2 text-center text-xs font-semibold text-muted-foreground">মুছে ফেলা হয়েছে</div>
       ) : entry.saved ? (
         <>
-          <div className="flex w-full items-center justify-center gap-1 rounded border border-emerald-300 bg-emerald-100 py-1 text-center text-xs font-bold text-emerald-700">
+          <div className="flex w-full items-center justify-center gap-1 rounded-xl bg-emerald-50 py-2 text-center text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
             <CheckCircle className="h-3.5 w-3.5" /> {entry.viaForm ? "ফর্ম থেকে খাতায় উঠেছে" : "খাতায় উঠেছে"}
           </div>
           {entry.type === "SALE_CHALLAN" && onPrint && (
-            <Button size="sm" variant="outline" className="h-8 w-full text-xs font-bold" onClick={onPrint}><Printer className="mr-1 h-3.5 w-3.5" /> প্রিন্ট</Button>
+            <Button size="sm" variant="outline" className="h-9 w-full rounded-xl text-xs font-semibold" onClick={onPrint}><Printer className="mr-1 h-3.5 w-3.5" /> প্রিন্ট</Button>
           )}
           {isAdmin && !entry.viaForm && UNDOABLE.has(entry.type) && (entry.refs ?? []).length > 0 && (
             undoOpen
               ? <UndoBox onUndo={onUndo} onCancel={() => setUndoOpen(false)} />
-              : <button type="button" className="w-full pt-1 text-center text-[11px] font-semibold text-rose-700 underline-offset-2 hover:underline" onClick={() => setUndoOpen(true)}>ভুল হয়েছে? মুছুন</button>
+              : <button type="button" className="w-full pt-1 text-center text-xs font-medium text-destructive underline-offset-2 hover:underline" onClick={() => setUndoOpen(true)}>ভুল হয়েছে? মুছুন</button>
           )}
         </>
       ) : (
         <div className="flex gap-1.5 pt-1">
           <Button size="sm" disabled={busy || (needsReason && !String(d.note ?? "").trim())} onClick={onSave}
-            className="h-9 flex-1 bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700">
+            className="h-10 flex-1 rounded-xl text-[13px] font-bold">
             {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
-            {entry.type === "REMINDER" ? "রেখে দিন" : entry.type === "ATTENDANCE" ? "হাজিরা সেভ" : "খাতায় সেভ"}
+            {entry.type === "REMINDER" ? "রেখে দিন" : entry.type === "ATTENDANCE" ? "হাজিরা সেভ" : entry.type === "CUSTOMER" ? "গ্রাহক যোগ করুন" : "খাতায় সেভ"}
           </Button>
           {EDITABLE.has(entry.type) && (
-            <Button size="sm" variant="outline" className="h-9 px-2.5 text-xs font-bold" onClick={() => setEditing((x) => !x)} aria-label="বদলান">
+            <Button size="sm" variant="outline" className="h-10 rounded-xl px-3 text-xs font-semibold" onClick={() => setEditing((x) => !x)} aria-label="বদলান">
               <Pencil className="mr-1 h-3.5 w-3.5" />{editing ? "ঠিক আছে" : "বদলান"}
             </Button>
           )}
           {onOpenForm && (
-            <Button size="sm" variant="outline" className="h-9 px-2.5 text-xs font-bold" onClick={onOpenForm} aria-label="ফর্মে খুলুন">
+            <Button size="sm" variant="outline" className="h-10 rounded-xl px-3 text-xs font-semibold" onClick={onOpenForm} aria-label="ফর্মে খুলুন">
               <FileEdit className="mr-1 h-3.5 w-3.5" />ফর্ম
             </Button>
           )}
           {entry.type === "SALE_CHALLAN" && onPrint && (
-            <Button size="sm" variant="outline" className="h-9 px-2.5" onClick={onPrint} aria-label="প্রিন্ট"><Printer className="h-3.5 w-3.5" /></Button>
+            <Button size="sm" variant="outline" className="h-10 rounded-xl px-3" onClick={onPrint} aria-label="প্রিন্ট"><Printer className="h-3.5 w-3.5" /></Button>
           )}
         </div>
       )}

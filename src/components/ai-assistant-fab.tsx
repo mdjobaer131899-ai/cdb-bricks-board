@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mic, MicOff, Send, Sparkles, X, Bot, User, Camera, Paperclip, FileText, Volume2, VolumeX, Share2, Save, Loader2, Trash2 } from "lucide-react";
+import {
+  ArrowLeft, ArrowUp, BrickWall, Camera, Copy, FileText, HandCoins, ListChecks, Loader2, Lock, Mic, Paperclip, Save,
+  Share2, Sparkles, SquarePen, Sun, UserCheck, Volume2, VolumeX, Wallet, X,
+} from "lucide-react";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import {
   processBrickFieldCommand, saveAiActionToDatabase, startRoutineAsk, getAiHistory, setAiHistory,
   type AIAttachment, type AskKind,
@@ -501,287 +502,266 @@ export function AiAssistantFab() {
     if (form) patchEntry(form.at[0], form.at[1], { saved: true, viaForm: true });
   };
 
+  // the page under the chat does not scroll while it is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
+
+  // the writing box grows with the text, up to six lines
+  const boxRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 168)}px`;
+  }, [input, isOpen]);
+
+  const empty = messages.length <= 1;
+  const hour = Number(new Date().toLocaleString("en-GB", { timeZone: "Asia/Dhaka", hour: "2-digit", hour12: false }));
+  const greeting = hour >= 5 && hour < 12 ? "সুপ্রভাত" : hour < 16 && hour >= 12 ? "শুভ দুপুর" : hour >= 16 && hour < 18 ? "শুভ বিকেল" : hour >= 18 && hour < 21 ? "শুভ সন্ধ্যা" : "শুভ রাত্রি";
+  const firstName = me?.fullName && !me.fullName.includes("@") ? me.fullName.split(" ")[0] : "";
+  const starters: Array<{ icon: typeof Wallet; label: string; run: () => void }> = [
+    { icon: Wallet, label: "হাতে নগদ কত?", run: () => void handleSend("হাতে নগদ কত?") },
+    { icon: ListChecks, label: "আজকের কাজ কী বাকি?", run: () => void handleSend("আজকের কাজ কী বাকি?") },
+    { icon: UserCheck, label: "আজকের হাজিরা নাও", run: () => void startAsk("attendance") },
+    { icon: BrickWall, label: "আজকের কাঁচা ইট লিখি", run: () => void startAsk("kacha") },
+    { icon: Lock, label: "দিন বন্ধ করি", run: () => void startAsk("day_close") },
+    { icon: HandCoins, label: "কার কাছে কত বাকি?", run: () => void handleSend("কার কাছে কত বাকি?") },
+    { icon: Sun, label: "সকালের হিসাব", run: () => void startAsk("morning") },
+    { icon: Camera, label: "খাতার পাতা স্ক্যান", run: () => cameraInputRef.current?.click() },
+  ];
+  const canSend = !loading && (!!input.trim() || !!attachment);
+  const copyText = (t: string) => {
+    void navigator.clipboard?.writeText(t).then(() => toast.success("কপি হয়েছে"), () => toast.error("কপি হয়নি"));
+  };
+
   return (
     <>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="hidden md:flex fixed bottom-6 right-6 z-50 h-14 w-14 items-center justify-center rounded-full bg-orange-600 text-white shadow-xl hover:bg-orange-700 transition-all duration-300 focus:outline-none"
-        title="CDB AI সহকারী"
+        className="hidden md:flex fixed bottom-6 right-6 z-50 h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl transition hover:brightness-110 focus:outline-none focus-visible:ring-4 focus-visible:ring-primary/30"
+        title="সহকারী"
+        aria-label="সহকারী খুলুন"
       >
-        {isOpen ? <X className="h-6 w-6" /> : <Sparkles className="h-7 w-7 animate-pulse" />}
+        {isOpen ? <X className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
       </button>
 
       {isOpen && (
         <>
-          <div
-            onClick={() => setIsOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[2px] transition-opacity"
-          />
+          {/* desktop: the page stays visible, dimmed, beside the chat */}
+          {/* above the phone's bottom bar; a form opened from a card (z-50) comes on top of it */}
+          <div onClick={() => setIsOpen(false)} className={`fixed inset-0 hidden bg-black/30 md:block ${form ? "z-[44]" : "z-[60]"}`} />
 
-          <Card className="fixed bottom-20 md:bottom-24 right-3 left-3 md:left-auto md:right-6 z-50 md:w-[430px] h-[min(600px,calc(100dvh-7rem))] flex flex-col shadow-2xl border-2 border-slate-800 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-5">
-            <CardHeader className="bg-gradient-to-r from-slate-900 via-[#3b150a] to-slate-900 text-white p-3.5 flex flex-row items-center justify-between space-y-0 border-b border-orange-500/30">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-orange-600/20 border border-orange-500/40 flex items-center justify-center">
-                  <Sparkles className="h-5 w-5 text-amber-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-base font-extrabold text-white">CDB Bricks AI ব্রেন</CardTitle>
-                  <p className="text-[11px] text-amber-300/90 font-medium">হিসাব, এন্ট্রি, রসিদ স্ক্যান ও রুটিন সহকারী</p>
-                </div>
+          <section
+            role="dialog"
+            aria-label="সহকারী"
+            className={`fixed inset-0 ${form ? "z-[45]" : "z-[61]"} flex flex-col bg-background text-foreground md:inset-y-0 md:left-auto md:right-0 md:w-[480px] md:border-l md:shadow-2xl animate-in fade-in slide-in-from-bottom-4 md:slide-in-from-right-8 md:slide-in-from-bottom-0`}
+          >
+            {/* top bar */}
+            <header className="flex min-h-14 shrink-0 items-center gap-1 border-b border-border/60 px-2 pt-[env(safe-area-inset-top)]">
+              <button type="button" onClick={() => setIsOpen(false)} aria-label="বন্ধ করুন"
+                className="grid h-10 w-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+                <ArrowLeft className="h-5 w-5 md:hidden" />
+                <X className="hidden h-5 w-5 md:block" />
+              </button>
+              <div className="min-w-0 flex-1 text-center">
+                <div className="text-[15px] font-semibold leading-tight">সহকারী</div>
+                <div className="text-[11px] leading-tight text-muted-foreground">সি ডি বি ব্রিকসের খাতা দেখে উত্তর দেয়</div>
               </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-white hover:bg-white/15 h-8 w-8 rounded-full"
-                  onClick={toggleSpeak}
-                  aria-label={speakOn ? "উত্তর পড়ে শোনানো বন্ধ" : "উত্তর পড়ে শোনাও"}
-                  title={speakOn ? "উত্তর পড়ে শোনানো বন্ধ" : "উত্তর পড়ে শোনাও"}
-                >
-                  {speakOn ? <Volume2 className="h-4 w-4 text-amber-300" /> : <VolumeX className="h-4 w-4" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-white hover:bg-white/15 h-8 w-8 rounded-full"
-                  onClick={() => {
-                    setMessages([WELCOME]);
-                    setAiHistory([]);
-                  }}
-                  aria-label="নতুন করে শুরু"
-                  title="নতুন করে শুরু"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-white hover:bg-white/15 h-8 w-8 rounded-full"
-                  onClick={() => setIsOpen(false)}
-                  aria-label="বন্ধ"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
+              <button type="button" onClick={toggleSpeak} aria-label={speakOn ? "উত্তর পড়ে শোনানো বন্ধ" : "উত্তর পড়ে শোনাও"} title={speakOn ? "উত্তর পড়ে শোনানো বন্ধ" : "উত্তর পড়ে শোনাও"}
+                className={`grid h-10 w-10 place-items-center rounded-full hover:bg-muted ${speakOn ? "text-primary" : "text-muted-foreground"}`}>
+                {speakOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+              </button>
+              <button type="button" aria-label="নতুন কথা শুরু" title="নতুন কথা শুরু"
+                onClick={() => { setMessages([WELCOME]); setAiHistory([]); }}
+                className="grid h-10 w-10 place-items-center rounded-full text-muted-foreground hover:bg-muted">
+                <SquarePen className="h-5 w-5" />
+              </button>
+            </header>
 
-            <CardContent className="flex-1 overflow-y-auto p-4 space-y-3 text-sm bg-slate-50 dark:bg-slate-950">
-              {messages.map((m, idx) => {
-                const pending = (m.entries ?? []).filter((e) => !e.saved).length;
-                return (
-                  <div
-                    key={idx}
-                    className={`flex gap-2.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    {m.role === "assistant" && (
-                      <div className="h-7 w-7 rounded-full bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 border border-orange-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Bot className="h-4 w-4" />
-                      </div>
-                    )}
-                    <div
-                      className={`rounded-2xl px-3.5 py-2.5 max-w-[86%] leading-relaxed shadow-xs ${
-                        m.role === "user"
-                          ? "bg-orange-700 text-white rounded-br-none font-medium"
-                          : "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-tl-none border border-slate-200 dark:border-slate-800"
-                      }`}
-                    >
-                      {m.imagePreview && (
-                        <img
-                          src={m.imagePreview}
-                          alt="স্ক্যান করা ছবি"
-                          className="mb-2 max-h-40 rounded-lg border border-white/20 object-cover"
-                        />
-                      )}
-                      {!m.imagePreview && m.fileName && (
-                        <div className="mb-1.5 flex items-center gap-1.5 text-xs bg-black/20 px-2 py-1 rounded">
-                          <FileText className="h-3.5 w-3.5" /> {m.fileName}
-                        </div>
-                      )}
-                      {m.text && <p className="whitespace-pre-line">{m.text}</p>}
-
-                      {m.role === "assistant" && idx > 0 && m.text && (
-                        <div className="mt-1.5 flex items-center gap-3 text-[11px] font-semibold text-muted-foreground">
-                          <button type="button" className="inline-flex items-center gap-1 hover:text-orange-700" onClick={() => { if (!speakText(m.text)) toast.message("এই ফোনে পড়ে শোনানো যাচ্ছে না"); }}>
-                            <Volume2 className="h-3.5 w-3.5" /> শুনুন
-                          </button>
-                          {!m.entries?.length && (
-                            <button type="button" className="inline-flex items-center gap-1 hover:text-orange-700" onClick={() => shareText(m.text, m.share?.phone)}>
-                              <Share2 className="h-3.5 w-3.5" /> {m.share ? `${m.share.name}-কে WhatsApp` : "পাঠান"}
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                      {m.role === "assistant" && m.chips && m.chips.length > 0 && idx === messages.length - 1 && (
-                        <div className="mt-2.5 flex flex-wrap gap-1.5">
-                          {m.chips.map((c) => (
-                            <button
-                              key={c}
-                              type="button"
-                              disabled={loading}
-                              onClick={() => handleSend(c)}
-                              className="rounded-full border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-800 hover:bg-orange-100 disabled:opacity-50"
-                            >
-                              {c}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {m.undoTarget && (() => {
-                        const [ti, tj] = m.undoTarget!;
-                        const t = messages[ti]?.entries?.[tj];
-                        if (!t) return null;
-                        if (t.undone) return <div className="mt-2 rounded border border-slate-300 bg-slate-100 py-1 text-center text-xs font-bold text-slate-600">মুছে ফেলা হয়েছে</div>;
-                        return <UndoBox onUndo={(pw) => undoEntry(ti, tj, pw)} />;
-                      })()}
-
-                      {(m.entries ?? []).map((e, ei) => (
-                        <EntryCard
-                          key={ei}
-                          entry={e}
-                          busy={savingKey === `${idx}:${ei}`}
-                          isAdmin={isAdmin}
-                          onChange={(data) => patchEntry(idx, ei, { data })}
-                          onSave={() => void saveEntry(idx, ei)}
-                          onOpenForm={e.type === "MONEY" ? () => openForm(idx, ei) : undefined}
-                          onUndo={(pw) => undoEntry(idx, ei, pw)}
-                          onPrint={e.type === "SALE_CHALLAN" ? () => printChallan(e.data, e.challanNo) : undefined}
-                        />
-                      ))}
-
-                      {pending > 1 && (
-                        <Button
-                          size="sm"
-                          disabled={savingKey !== null}
-                          onClick={() => void saveAll(idx)}
-                          className="mt-2.5 h-10 w-full bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-800"
-                        >
-                          {savingKey !== null ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
-                          সব সেভ ({bn(pending)}টা)
-                        </Button>
-                      )}
+            {/* the talk */}
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              <div className="mx-auto w-full max-w-[720px] px-4 pb-6 pt-4">
+                {empty ? (
+                  <div className="flex min-h-[calc(100dvh-14rem)] flex-col justify-center py-6 md:min-h-[60vh]">
+                    <div className="mb-5 grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                      <Sparkles className="h-6 w-6" />
                     </div>
-                    {m.role === "user" && (
-                      <div className="h-7 w-7 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <User className="h-4 w-4" />
+                    <h2 className="text-[26px] font-semibold leading-tight tracking-tight">
+                      {greeting}{firstName ? `, ${firstName}` : ""}
+                    </h2>
+                    <p className="mt-1.5 text-[15px] leading-relaxed text-muted-foreground">
+                      হিসাব জিজ্ঞেস করুন, বা মুখে বলে খাতায় তুলুন। একবারে কয়েকটা এন্ট্রিও বলা যায়।
+                    </p>
+                    <div className="mt-6 grid grid-cols-2 gap-2">
+                      {starters.map((x) => (
+                        <button key={x.label} type="button" onClick={x.run} disabled={loading}
+                          className="flex min-h-[3.25rem] items-center gap-2.5 rounded-2xl border bg-card px-3 py-2.5 text-left text-[13px] font-medium leading-snug shadow-xs transition active:scale-[0.98] hover:bg-muted/60 disabled:opacity-50">
+                          <x.icon className="h-4 w-4 shrink-0 text-primary" />
+                          <span>{x.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {messages.map((m, idx) => {
+                      if (idx === 0 && m === messages[0] && m.text === WELCOME.text) return null;
+                      const pending = (m.entries ?? []).filter((e) => !e.saved).length;
+                      if (m.role === "user") {
+                        return (
+                          <div key={idx} className="flex justify-end">
+                            <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-muted px-4 py-2.5 text-[15px] leading-relaxed">
+                              {m.imagePreview && <img src={m.imagePreview} alt="পাঠানো ছবি" className="mb-2 max-h-48 rounded-2xl object-cover" />}
+                              {!m.imagePreview && m.fileName && (
+                                <div className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><FileText className="h-3.5 w-3.5" /> {m.fileName}</div>
+                              )}
+                              {m.text && <p className="whitespace-pre-line">{m.text}</p>}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={idx} className="flex gap-3">
+                          <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                            <Sparkles className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            {m.text && <p className="whitespace-pre-line text-[15px] leading-7">{m.text}</p>}
+
+                            {m.text && (
+                              <div className="mt-1 flex items-center gap-0.5 text-muted-foreground">
+                                <button type="button" title="কপি" aria-label="কপি" onClick={() => copyText(m.text)} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-muted"><Copy className="h-3.5 w-3.5" /></button>
+                                <button type="button" title="শুনুন" aria-label="শুনুন" onClick={() => { if (!speakText(m.text)) toast.message("এই ফোনে পড়ে শোনানো যাচ্ছে না"); }} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-muted"><Volume2 className="h-3.5 w-3.5" /></button>
+                                {!m.entries?.length && (
+                                  <button type="button" onClick={() => shareText(m.text, m.share?.phone)} className="flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium hover:bg-muted">
+                                    <Share2 className="h-3.5 w-3.5" /> {m.share ? `${m.share.name}-কে WhatsApp` : ""}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {m.chips && m.chips.length > 0 && idx === messages.length - 1 && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {m.chips.map((c) => (
+                                  <button key={c} type="button" disabled={loading} onClick={() => handleSend(c)}
+                                    className="rounded-full border bg-card px-3.5 py-2 text-[13px] font-semibold text-foreground shadow-xs hover:bg-muted disabled:opacity-50">
+                                    {c}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            {m.undoTarget && (() => {
+                              const [ti, tj] = m.undoTarget!;
+                              const t = messages[ti]?.entries?.[tj];
+                              if (!t) return null;
+                              if (t.undone) return <div className="mt-2 rounded-xl bg-muted py-2 text-center text-xs font-semibold text-muted-foreground">মুছে ফেলা হয়েছে</div>;
+                              return <UndoBox onUndo={(pw) => undoEntry(ti, tj, pw)} />;
+                            })()}
+
+                            {(m.entries ?? []).map((e, ei) => (
+                              <EntryCard
+                                key={ei}
+                                entry={e}
+                                busy={savingKey === `${idx}:${ei}`}
+                                isAdmin={isAdmin}
+                                onChange={(data) => patchEntry(idx, ei, { data })}
+                                onSave={() => void saveEntry(idx, ei)}
+                                onOpenForm={e.type === "MONEY" ? () => openForm(idx, ei) : undefined}
+                                onUndo={(pw) => undoEntry(idx, ei, pw)}
+                                onPrint={e.type === "SALE_CHALLAN" ? () => printChallan(e.data, e.challanNo) : undefined}
+                              />
+                            ))}
+
+                            {pending > 1 && (
+                              <Button size="sm" disabled={savingKey !== null} onClick={() => void saveAll(idx)}
+                                className="mt-3 h-11 w-full rounded-2xl text-sm font-bold">
+                                {savingKey !== null ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+                                সব সেভ ({bn(pending)}টা)
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {loading && (
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                          <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+                        </div>
+                        <div className="flex items-center gap-1" aria-label="ভাবছি">
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70 [animation-delay:-0.3s]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70 [animation-delay:-0.15s]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/70" />
+                        </div>
                       </div>
                     )}
                   </div>
-                );
-              })}
-              {loading && (
-                <div className="flex gap-2 items-center text-slate-600 dark:text-slate-400 text-xs font-medium italic">
-                  <Bot className="h-4 w-4 animate-spin text-orange-600" /> আপনার প্রশ্নের সঠিক উত্তর তৈরি হচ্ছে...
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </CardContent>
-            {/* ফাইল বা ছবি অ্যাটাচ করলে তার প্রিভিউ বার */}
-            {attachment && (
-              <div className="px-3 py-2 bg-orange-50 dark:bg-slate-800 border-t border-orange-200 dark:border-slate-700 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  {attachment.previewUrl ? (
-                    <img src={attachment.previewUrl} alt="Preview" className="h-10 w-10 rounded object-cover border border-orange-300" />
-                  ) : (
-                    <FileText className="h-8 w-8 text-orange-600 shrink-0" />
-                  )}
-                  <div className="truncate">
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{attachment.fileName}</p>
-                    <p className="text-[10px] text-orange-600 dark:text-orange-400">স্ক্যান করার জন্য প্রস্তুত — সেন্ড চাপুন</p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-full text-rose-600 hover:bg-rose-100"
-                  onClick={() => setAttachment(null)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                )}
+                <div ref={messagesEndRef} />
               </div>
-            )}
-
-            {/* ইনপুট বার: ক্যামেরা স্ক্যান + ফাইল অ্যাটাচ + ভয়েস মাইক + টেক্সট */}
-            <div className="p-2.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-1.5">
-              {/* হিডেন ইনপুটসমূহ */}
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,application/pdf"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
-
-              {/* ১. ক্যামেরা স্ক্যান বাটন */}
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={loading}
-                title="রসিদ বা খাতা ক্যামেরা দিয়ে স্ক্যান করুন"
-                className="h-9 w-9 flex-shrink-0 rounded-full border-slate-300 hover:bg-orange-50"
-              >
-                <Camera className="h-4 w-4 text-orange-600" />
-              </Button>
-
-              {/* ২. গ্যালারি / ফাইল অ্যাটাচ বাটন */}
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loading}
-                title="ছবি বা পিডিএফ ফাইল যুক্ত করুন"
-                className="h-9 w-9 flex-shrink-0 rounded-full border-slate-300 hover:bg-orange-50"
-              >
-                <Paperclip className="h-4 w-4 text-slate-700 dark:text-slate-300" />
-              </Button>
-
-              {/* ৩. ভয়েস মাইক বাটন */}
-              <Button
-                type="button"
-                variant={isListening ? "destructive" : "outline"}
-                size="icon"
-                onClick={toggleListening}
-                title="মুখে বলুন"
-                className={`h-9 w-9 flex-shrink-0 rounded-full border-slate-300 transition-all ${
-                  isListening ? "animate-pulse ring-2 ring-red-400" : ""
-                }`}
-              >
-                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4 text-orange-600" />}
-              </Button>
-
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder={attachment ? "ছবিটি সম্পর্কে কিছু লিখুন বা সরাসরি সেন্ড চাপুন..." : "মুখে বলুন, ছবি তুলুন বা লিখুন..."}
-                className="flex-1 h-9 text-sm bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 rounded-full px-3.5"
-                disabled={loading}
-              />
-
-              <Button
-                type="button"
-                size="icon"
-                onClick={() => handleSend()}
-                disabled={loading || (!input.trim() && !attachment)}
-                className="h-9 w-9 flex-shrink-0 rounded-full bg-orange-600 hover:bg-orange-700 text-white"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
             </div>
-          </Card>
+
+            {/* the writing box */}
+            <div className="shrink-0 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-1">
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+              <input ref={fileInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileSelect} />
+              <div className="mx-auto w-full max-w-[720px] rounded-[26px] border bg-card shadow-sm transition focus-within:border-primary/40 focus-within:shadow-md">
+                {attachment && (
+                  <div className="flex items-center gap-2 px-3 pt-3">
+                    <div className="flex min-w-0 items-center gap-2 rounded-xl bg-muted px-2 py-1.5">
+                      {attachment.previewUrl
+                        ? <img src={attachment.previewUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+                        : <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />}
+                      <span className="truncate text-xs font-medium">{attachment.fileName}</span>
+                      <button type="button" aria-label="ছবি সরান" onClick={() => setAttachment(null)} className="grid h-6 w-6 shrink-0 place-items-center rounded-full hover:bg-background"><X className="h-3.5 w-3.5" /></button>
+                    </div>
+                  </div>
+                )}
+                <textarea
+                  ref={boxRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                  disabled={loading}
+                  placeholder={isListening ? "শুনছি… বলুন" : attachment ? "ছবিটা সম্পর্কে কিছু লিখুন, বা সরাসরি পাঠান" : "সহকারীকে লিখুন বা মাইকে বলুন…"}
+                  className="block max-h-[168px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/80"
+                />
+                <div className="flex items-center gap-1 px-2 pb-2">
+                  <button type="button" title="ক্যামেরা দিয়ে খাতা বা রসিদ" aria-label="ক্যামেরা" disabled={loading}
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-50">
+                    <Camera className="h-[18px] w-[18px]" />
+                  </button>
+                  <button type="button" title="ছবি বা পিডিএফ" aria-label="ছবি বা পিডিএফ যুক্ত করুন" disabled={loading}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-50">
+                    <Paperclip className="h-[18px] w-[18px]" />
+                  </button>
+                  <div className="flex-1" />
+                  <button type="button" onClick={toggleListening} aria-label={isListening ? "শোনা বন্ধ" : "মুখে বলুন"} title="মুখে বলুন"
+                    className={`grid h-9 w-9 place-items-center rounded-full transition ${isListening ? "bg-destructive text-destructive-foreground ring-4 ring-destructive/20 animate-pulse" : "text-muted-foreground hover:bg-muted"}`}>
+                    <Mic className="h-[18px] w-[18px]" />
+                  </button>
+                  <button type="button" onClick={() => void handleSend()} disabled={!canSend} aria-label="পাঠান"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground transition disabled:bg-muted disabled:text-muted-foreground">
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-[18px] w-[18px]" />}
+                  </button>
+                </div>
+              </div>
+              <p className="mt-1.5 text-center text-[11px] text-muted-foreground">খাতায় তোলার আগে কার্ডটা দেখে নিন</p>
+            </div>
+          </section>
         </>
       )}
 
