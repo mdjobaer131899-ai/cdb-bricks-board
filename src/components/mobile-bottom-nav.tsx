@@ -1,15 +1,17 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, FileCheck2, Home, Settings, Sparkles } from "lucide-react";
+import { FileCheck2, Home, Plus, Settings, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { bn } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { supabase } from "@/integrations/supabase/client";
 import { OPEN_AI_CHAT_EVENT } from "@/components/ai-assistant-fab";
+import { OPEN_QUICK_ENTRY_EVENT } from "@/components/quick-entry";
 
 /**
- * মোবাইলের নিচের মেনু: হোম · চালান · AI (মাঝে, বড়) · রিপোর্ট · সেটিংস
- * চালানের কোণায় অনুমোদন বাকি চালানের সংখ্যা ভাসে।
+ * মোবাইলের নিচের মেনু: হোম · চালান · + নতুন এন্ট্রি (মাঝে, বড়) · AI · সেটিংস
+ * "+" যেকোনো পাতা থেকে নতুন এন্ট্রির তালিকা খোলে (quick-entry.tsx)।
+ * রিপোর্ট হোমের "সব মেনু"-তে আছে। চালানের কোণায় অনুমোদন বাকি চালানের সংখ্যা ভাসে।
  */
 export function MobileBottomNav() {
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -41,7 +43,6 @@ export function MobileBottomNav() {
     { title: "চালান", url: challanUrl, icon: FileCheck2, badge: pending },
   ];
   const right = [
-    { title: "রিপোর্ট", url: "/reports", icon: BarChart3, badge: 0 },
     { title: "সেটিংস", url: "/preferences", icon: Settings, badge: 0 },
   ];
 
@@ -84,14 +85,23 @@ export function MobileBottomNav() {
         {left.map(renderLink)}
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent(OPEN_AI_CHAT_EVENT))}
-          aria-label="AI সহকারী খুলুন"
+          onClick={() => window.dispatchEvent(new CustomEvent(OPEN_QUICK_ENTRY_EVENT))}
+          aria-label="নতুন এন্ট্রি"
           className="flex flex-col items-center gap-1"
         >
-          <span className="-mt-7 grid h-[60px] w-[60px] place-items-center rounded-[20px] border-4 border-background bg-ink shadow-lg transition active:scale-95">
-            <Sparkles className="h-7 w-7 text-orange-400" strokeWidth={2} aria-hidden="true" />
+          <span className="-mt-7 grid h-[60px] w-[60px] place-items-center rounded-[20px] border-4 border-background bg-primary text-primary-foreground shadow-lg transition active:scale-95">
+            <Plus className="h-8 w-8" strokeWidth={2.4} aria-hidden="true" />
           </span>
-          <span className="text-[12px] font-bold text-foreground">AI</span>
+          <span className="text-[12px] font-bold text-foreground">নতুন</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent(OPEN_AI_CHAT_EVENT))}
+          aria-label="AI সহকারী খুলুন"
+          className="relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[12px] font-semibold text-muted-foreground transition-colors"
+        >
+          <Sparkles className="h-6 w-6 text-orange-500" strokeWidth={2} aria-hidden="true" />
+          <span>AI</span>
         </button>
         {right.map(renderLink)}
       </div>

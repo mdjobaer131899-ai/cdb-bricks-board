@@ -13,6 +13,7 @@ import { PendingRoleState } from "@/components/pending-role-state";
 import { BrandLogo } from "@/components/brand-logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiAssistantFab } from "@/components/ai-assistant-fab";
+import { QuickEntrySheet } from "@/components/quick-entry";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -140,6 +141,7 @@ function AuthedLayout() {
           </SidebarInset>
         </div>
         <MobileBottomNav />
+        <QuickEntrySheet />
         <AiAssistantFab />
       </SidebarProvider>
     </SeasonProvider>

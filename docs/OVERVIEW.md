@@ -71,7 +71,7 @@ supabase/
 
 ## ৪. মডিউল ও পেজ
 
-নেভিগেশনের মূল উৎস `NAV_GROUPS` ([app-sidebar.tsx](../src/components/app-sidebar.tsx#L13))। সাইডবার (ট্যাবলেট), উপরের মেনুবার (ডেস্কটপ) আর ড্যাশবোর্ডের NavGrid এটাই পড়ে। মোবাইলের নিচের মেনু ([mobile-bottom-nav.tsx](../src/components/mobile-bottom-nav.tsx)) নিজের আলাদা তালিকা রাখে।
+নেভিগেশনের মূল উৎস `NAV_GROUPS` ([app-sidebar.tsx](../src/components/app-sidebar.tsx#L13))। সাইডবার (ট্যাবলেট), উপরের মেনুবার (ডেস্কটপ) আর ড্যাশবোর্ডের NavGrid এটাই পড়ে। মোবাইলের নিচের মেনু ([mobile-bottom-nav.tsx](../src/components/mobile-bottom-nav.tsx)) নিজের আলাদা তালিকা রাখে: হোম · চালান · মাঝে বড় "+" · AI · সেটিংস (রিপোর্ট হোমের "সব মেনু"-তে)। "+" যেকোনো পাতা থেকে [নতুন এন্ট্রির তালিকা](../src/components/quick-entry.tsx) খোলে: নতুন চালান, কাঁচা ইট, ভাটায় ঢোকানো, বের করা, আর ক্যাশ বইয়ের মতোই সব টাকার খাত (একই দুটি ফর্ম খোলে)।
 
 ### ৪.১ বিক্রয় ও গ্রাহক
 
