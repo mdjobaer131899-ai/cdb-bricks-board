@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Loader2, Lock, Printer } from "lucide-react";
+import { CheckCircle2, ChevronDown, Loader2, Lock, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -178,6 +178,8 @@ export function DayCloseCard() {
   const [openDate, setOpenDate] = useState<string | undefined>(undefined);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [printing, setPrinting] = useState<string | null>(null);
+  // the last closed days fold under the one-line card
+  const [showList, setShowList] = useState(false);
   const today = todayBD();
   const yesterday = dayBefore(today);
   const rows = closesQ.data ?? [];
@@ -207,35 +209,40 @@ export function DayCloseCard() {
   };
   const start = (d?: string) => { setOpenDate(d); setOpen(true); };
 
+  // one line: status, print today's sheet, close today; the last closed days fold under it
   return (
-    <section className="space-y-2.5 rounded-2xl border bg-card p-3.5">
+    <section className="rounded-2xl border bg-card px-3 py-2.5">
       <div className="flex items-center gap-2">
-        <Lock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <h2 className="flex-1 text-sm font-bold">দিন বন্ধ</h2>
-        <Button type="button" size="sm" variant="ghost" className="h-8 gap-1 text-xs" disabled={printing === today} onClick={() => void print(today, todayClose)}>
-          {printing === today ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />} আজকের শিট
-        </Button>
-      </div>
-
-      {todayClose ? (
-        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm dark:bg-emerald-950/40">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
-          <span className="num flex-1 font-semibold text-emerald-800 dark:text-emerald-200">
-            আজ বন্ধ হয়েছে · গুনে {tk(todayClose.counted)} · {signed(todayClose.difference ?? 0)}
-          </span>
+        {todayClose
+          ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
+          : <Lock className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-bold">দিন বন্ধ</div>
+          <div className={`num truncate text-[11px] ${todayClose ? "font-semibold text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}>
+            {todayClose ? `আজ বন্ধ হয়েছে · গুনে ${tk(todayClose.counted)} · ${signed(todayClose.difference ?? 0)}` : "আজ এখনো বন্ধ হয়নি"}
+          </div>
         </div>
-      ) : (
-        <Button type="button" className="h-11 w-full rounded-xl font-bold" onClick={() => start(today)}>আজকের দিন বন্ধ করুন</Button>
-      )}
+        <Button type="button" size="icon" variant="ghost" className="h-9 w-9 shrink-0" aria-label="আজকের শিট প্রিন্ট" disabled={printing === today} onClick={() => void print(today, todayClose)}>
+          {printing === today ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+        </Button>
+        {!todayClose && (
+          <Button type="button" size="sm" className="h-9 shrink-0 rounded-lg px-3 font-bold" onClick={() => start(today)}>বন্ধ করুন</Button>
+        )}
+        {rows.length > 0 && (
+          <Button type="button" size="icon" variant="ghost" className="h-9 w-9 shrink-0" aria-label={showList ? "আগের দিন লুকান" : "আগের বন্ধ দিনগুলো দেখুন"} aria-expanded={showList} onClick={() => setShowList((v) => !v)}>
+            <ChevronDown className={`h-4 w-4 transition ${showList ? "rotate-180" : ""}`} />
+          </Button>
+        )}
+      </div>
       {changedSince && (
-        <p className="text-xs font-semibold text-warning">দিন বন্ধের পরে আজকের এন্ট্রি বদলেছে। এখন ড্রয়ারে থাকার কথা {tk(changedQ.data ?? 0)}।</p>
+        <p className="mt-1.5 text-xs font-semibold text-warning">দিন বন্ধের পরে আজকের এন্ট্রি বদলেছে। এখন ড্রয়ারে থাকার কথা {tk(changedQ.data ?? 0)}।</p>
       )}
       {!yesterdayClosed && !closesQ.isLoading && (
-        <button type="button" onClick={() => start(yesterday)} className="text-xs font-bold text-primary">গতকাল ({bnDate(yesterday)}) বন্ধ হয়নি, এখন করুন</button>
+        <button type="button" onClick={() => start(yesterday)} className="mt-1 text-xs font-bold text-primary">গতকাল ({bnDate(yesterday)}) বন্ধ হয়নি, এখন করুন</button>
       )}
 
-      {rows.length > 0 && (
-        <ul className="divide-y rounded-xl border text-sm">
+      {showList && rows.length > 0 && (
+        <ul className="mt-2 divide-y rounded-xl border text-sm">
           {rows.slice(0, 5).map((r) => (
             <li key={r.id} className="flex items-center gap-2 px-3 py-2">
               <span className="min-w-0 flex-1">
@@ -256,7 +263,6 @@ export function DayCloseCard() {
           ))}
         </ul>
       )}
-      <p className="text-[11px] text-muted-foreground">মোট বন্ধ দিন: {bn(rows.length)}{rows.length >= 10 ? "+" : ""}। শিট প্রিন্ট করে সই দিয়ে রাখলে কাগজের খাতায় আর তুলতে হয় না।</p>
 
       <DayCloseDialog open={open} onOpenChange={setOpen} date={openDate} />
     </section>

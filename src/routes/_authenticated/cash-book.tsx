@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownUp, CalendarRange, Check, ChevronRight, ListFilter, Lock, Pencil, Plus, Printer, Trash2 } from "lucide-react";
+import { ArrowDownUp, ArrowLeftRight, CalendarRange, Check, ChevronRight, ListFilter, Lock, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/c
 import { EXPENSE_HEADS, ExpenseEntryDialog, type ExpenseEdit, type HeadKey } from "@/components/expense-entry";
 import { INCOME_HEADS, IncomeEntryDialog, type IncomeKey } from "@/components/income-entry";
 import { HeadTiles } from "@/components/money-form-parts";
-import { PurseTiles } from "@/components/cash-purses";
+import { TransferDialog } from "@/components/cash-purses";
 import { DayCloseCard } from "@/components/day-close";
 import { openQuickEntry } from "@/components/quick-entry";
 import { MONEY_HEADS, RAW_TYPES, TONE_CLASS, isIncome, moneyHead, moneyHeadAllowed, supplierHead, type MoneyKey } from "@/lib/money-heads";
@@ -58,7 +58,7 @@ function CashBookRoute() {
   const navigate = useNavigate();
   const heads = view === "heads";
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="mx-auto grid max-w-3xl grid-cols-2 gap-1 rounded-2xl border bg-muted/60 p-1" role="tablist" aria-label="ক্যাশ বই দেখার ধরন">
         {([[false, "সব লেনদেন"], [true, "খাত ও নাম অনুযায়ী"]] as const).map(([v, label]) => (
           <button
@@ -67,7 +67,7 @@ function CashBookRoute() {
             role="tab"
             aria-selected={heads === v}
             onClick={() => navigate({ to: "/cash-book", search: v ? { view: "heads" } : {} })}
-            className={`h-10 rounded-xl text-sm font-bold transition ${heads === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+            className={`h-9 rounded-xl text-sm font-bold transition ${heads === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
           >
             {label}
           </button>
@@ -454,70 +454,83 @@ function CashBookPage() {
   ];
 
   const handCash = seasonSum.data?.net ?? 0;
+  const purses = seasonSum.data?.purses;
+  const [transferOpen, setTransferOpen] = useState(false);
 
   return (
-    <div className={`mx-auto max-w-3xl space-y-4 ${bookMode ? "pb-64 md:pb-40" : "pb-28 md:pb-6"}`}>
-      {/* Title */}
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-[26px] font-extrabold leading-tight">ক্যাশ বই</h1>
-          <p className="text-sm text-muted-foreground">মূল ক্যাশের সব নগদ আয়-ব্যয়</p>
-        </div>
+    <div className={`mx-auto max-w-3xl space-y-3 ${bookMode ? "pb-64 md:pb-40" : "pb-28 md:pb-6"}`}>
+      {/* Title, print, a new entry */}
+      <div className="flex items-center gap-2">
+        <h1 className="font-display min-w-0 flex-1 truncate text-[22px] font-extrabold leading-tight">ক্যাশ বই</h1>
         <Button variant="outline" size="icon" className="h-10 w-10 shrink-0 rounded-xl" onClick={print} aria-label="প্রিন্ট">
           <Printer className="h-5 w-5" />
         </Button>
+        {!bookMode && (
+          <Button className="h-10 shrink-0 gap-1.5 rounded-xl px-3.5 font-bold" onClick={() => openQuickEntry()}>
+            <Plus className="h-4 w-4" /> এন্ট্রি
+          </Button>
+        )}
       </div>
 
-      {/* Hand cash hero */}
-      <section className="relative overflow-hidden rounded-2xl border bg-card p-4 shadow-sm">
+      {/* Hand cash, in one small card */}
+      <section className="relative overflow-hidden rounded-2xl border bg-card px-4 py-3 shadow-sm">
         <span className="absolute inset-y-0 left-0 w-1 bg-primary" aria-hidden="true" />
-        <div className="text-sm font-semibold text-muted-foreground">হাতে নগদ</div>
-        {seasonSum.isLoading ? (
-          <Skeleton className="mt-2 h-10 w-48" />
-        ) : (
-          <div className={`mt-1.5 font-display num text-[38px] font-extrabold leading-none tracking-tight ${handCash < 0 ? "text-destructive" : ""}`}>
-            {handCash < 0 ? "−" : ""}{tk(Math.abs(handCash))}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-muted-foreground">হাতে নগদ</div>
+            {seasonSum.isLoading ? (
+              <Skeleton className="mt-1 h-8 w-40" />
+            ) : (
+              <div className={`font-display num text-[28px] font-extrabold leading-tight tracking-tight ${handCash < 0 ? "text-destructive" : ""}`}>
+                {handCash < 0 ? "−" : ""}{tk(Math.abs(handCash))}
+              </div>
+            )}
           </div>
-        )}
-        <PurseTiles purses={seasonSum.data?.purses} />
-        <div className="mt-1 grid grid-cols-2 gap-3 border-t pt-3">
-          <div>
-            <div className="text-xs text-muted-foreground">{PERIOD_WORD[preset]} এসেছে</div>
-            <div className="num text-lg font-bold text-success">+{tk(period?.income ?? 0)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">{PERIOD_WORD[preset]} গেছে</div>
-            <div className="num text-lg font-bold text-destructive">−{tk(period?.expense ?? 0)}</div>
-          </div>
+          <button type="button" onClick={() => setTransferOpen(true)} className="flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-bold text-primary">
+            <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden="true" /> টাকা সরানো
+          </button>
         </div>
-        {handCash < 0 && (
-          <p className="mt-2 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-xs font-semibold text-destructive">
-            হাতে নগদ ঋণাত্মক: কোনো টাকা আসা লেখা বাকি থাকতে পারে, এন্ট্রিগুলো একবার মিলিয়ে নিন।
-          </p>
+        {purses && (
+          <div className="num mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+            {([["cash", "ড্রয়ার"], ["mobile", "বিকাশ/নগদ"], ["bank", "ব্যাংক"]] as const).map(([k, label]) => (
+              <span key={k}>{label} <b className={purses[k] < -0.5 ? "text-destructive" : "text-foreground"}>{purses[k] < -0.5 ? "−" : ""}{tk(Math.abs(purses[k]))}</b></span>
+            ))}
+          </div>
         )}
+        {handCash < 0 && (
+          <p className="mt-1 text-[11px] font-semibold text-destructive">ঋণাত্মক: কোনো টাকা আসা লেখা বাকি থাকতে পারে, এন্ট্রিগুলো মিলিয়ে নিন।</p>
+        )}
+        <div className="num mt-2 flex flex-wrap items-center gap-x-3 border-t pt-2 text-xs">
+          <span className="text-muted-foreground">{PERIOD_WORD[preset]}</span>
+          <span>এসেছে <b className="text-success">+{tk(period?.income ?? 0)}</b></span>
+          <span>গেছে <b className="text-destructive">−{tk(period?.expense ?? 0)}</b></span>
+        </div>
       </section>
+      <TransferDialog open={transferOpen} onOpenChange={setTransferOpen} />
 
       {/* paper book: what is still to be written, one tap to start */}
       {!bookMode && unbookedAll.length > 0 && marks.isSuccess && (
         <button type="button" onClick={startBooking}
-          className="flex w-full items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-left dark:border-amber-800 dark:bg-amber-950/30">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"><Check className="h-5 w-5" /></span>
+          className="flex w-full items-center gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-left dark:border-amber-800 dark:bg-amber-950/30">
+          <Check className="h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden="true" />
           <span className="min-w-0 flex-1">
-            <span className="block font-bold text-amber-900 dark:text-amber-200">খাতায় তোলা বাকি {bn(unbookedAll.length)}টি</span>
-            <span className="num block text-xs text-amber-800 dark:text-amber-300">{tk(unbookedAll.reduce((a, r) => a + r.amount, 0))} · {preset === "season" ? "এই সিজনে" : rangeText}</span>
+            <span className="block text-sm font-bold text-amber-900 dark:text-amber-200">খাতায় তোলা বাকি {bn(unbookedAll.length)}টি</span>
+            <span className="num block truncate text-[11px] text-amber-800 dark:text-amber-300">{tk(unbookedAll.reduce((a, r) => a + r.amount, 0))} · {preset === "season" ? "এই সিজনে" : rangeText}</span>
           </span>
-          <span className="shrink-0 rounded-xl bg-amber-600 px-3 py-2 text-sm font-bold text-white">খাতায় তুলুন</span>
+          <span className="shrink-0 rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-bold text-white">খাতায় তুলুন</span>
         </button>
       )}
-      {!bookMode && unbookedAll.length === 0 && marks.isSuccess && pageTotals.length > 0 && (
-        <p className="flex items-center gap-2 px-1 text-xs text-muted-foreground"><Check className="h-4 w-4 text-success" /> সব খরচ খাতায় তোলা আছে</p>
-      )}
       {!bookMode && (pageTotals.length > 0 || noPageAll.length > 0) && (
-        <button type="button" onClick={() => setPagesSheet(true)} className="px-1 text-xs font-semibold text-primary">খাতার পৃষ্ঠা অনুযায়ী মোট দেখুন</button>
+        <div className="flex items-center justify-between gap-2 px-1 text-xs">
+          {unbookedAll.length === 0 && marks.isSuccess
+            ? <span className="flex items-center gap-1 text-muted-foreground"><Check className="h-3.5 w-3.5 text-success" aria-hidden="true" /> সব খরচ খাতায় তোলা</span>
+            : <span />}
+          <button type="button" onClick={() => setPagesSheet(true)} className="font-semibold text-primary">খাতার পৃষ্ঠা অনুযায়ী মোট</button>
+        </div>
       )}
       {!bookMode && noPageAll.length > 0 && marks.isSuccess && (
         <button type="button" onClick={startPageFix}
-          className="flex w-full items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-left text-sm dark:border-amber-800 dark:bg-amber-950/30">
+          className="flex w-full items-center justify-between gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 text-left text-sm dark:border-amber-800 dark:bg-amber-950/30">
           <span className="min-w-0">
             <b className="text-amber-900 dark:text-amber-200">পৃষ্ঠা নম্বর নেই {bn(noPageAll.length)}টি খরচে</b>
             <span className="num block text-xs text-amber-800 dark:text-amber-300">{tk(noPageAll.reduce((a, r) => a + r.amount, 0))} · খাতায় তোলা, কিন্তু কোনো পৃষ্ঠার মোটে নেই</span>
@@ -526,20 +539,13 @@ function CashBookPage() {
         </button>
       )}
       {bookMode && (
-        <div className="rounded-2xl border border-primary/40 bg-primary/5 px-4 py-3 text-sm">
+        <div className="rounded-2xl border border-primary/40 bg-primary/5 px-3 py-2.5 text-xs leading-relaxed">
           {bookTarget === "nopage" ? (
             <><b>পৃষ্ঠা নম্বর বসানো:</b> এগুলো আগে খাতায় তোলা হয়েছিল, কিন্তু পৃষ্ঠা নম্বর ছাড়া। কাগজের খাতার একই পৃষ্ঠার খরচগুলোতে টিক দিন (দিনের পাশে চাপলে সেদিনের সব), নিচে সেই পৃষ্ঠা নম্বর দিয়ে "তুলুন" চাপুন।</>
           ) : (
             <><b>খাতায় তোলা:</b> যে খরচগুলো কাগজের খাতায় লিখেছেন সেগুলোতে টিক দিন (দিনের পাশে চাপলে সেদিনের সব), নিচে পৃষ্ঠা নম্বর দিয়ে "তুলুন" চাপুন।</>
           )}
         </div>
-      )}
-
-      {/* One entry button */}
-      {!bookMode && (
-        <Button className="h-14 w-full gap-2 rounded-2xl text-base font-bold shadow-sm" onClick={() => openQuickEntry()}>
-          <Plus className="h-5 w-5" /> নতুন এন্ট্রি
-        </Button>
       )}
 
       {/* count the drawer at the end of the day */}
@@ -553,7 +559,7 @@ function CashBookPage() {
               key={p}
               type="button"
               onClick={() => choosePreset(p)}
-              className={`h-10 rounded-full px-4 text-sm font-bold transition active:scale-95 ${
+              className={`h-9 rounded-full px-3.5 text-sm font-bold transition active:scale-95 ${
                 preset === p ? "bg-ink text-ink-foreground" : "border bg-card text-foreground"
               }`}
             >
@@ -563,7 +569,7 @@ function CashBookPage() {
           <button
             type="button"
             onClick={() => setDateSheet(true)}
-            className={`flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-bold transition active:scale-95 ${
+            className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-sm font-bold transition active:scale-95 ${
               preset === "custom" ? "bg-ink text-ink-foreground" : "border bg-card text-foreground"
             }`}
           >
@@ -575,19 +581,19 @@ function CashBookPage() {
 
       {/* List */}
       <section className="overflow-hidden rounded-[20px] border bg-card">
-        <div className="space-y-3 border-b p-3">
+        <div className="space-y-2 border-b px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-bold">{bookMode ? (bookTarget === "nopage" ? "পৃষ্ঠা নম্বর নেই" : "খাতায় তোলা বাকি") : head ?? "সব লেনদেন"}</div>
-              <div className="text-xs text-muted-foreground">{rangeText} · {bn(rows.length)}টি</div>
+              <div className="truncate text-[11px] text-muted-foreground">{rangeText} · {bn(rows.length)}টি</div>
             </div>
-            <div className="flex shrink-0 gap-1.5">
-              <Button variant="outline" size="sm" className="h-9 gap-1 rounded-lg" onClick={() => setNewestFirst((v) => !v)}>
-                <ArrowDownUp className="h-4 w-4" />{newestFirst ? "নতুন আগে" : "পুরনো আগে"}
+            <div className="flex shrink-0 gap-1">
+              <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-lg px-2 text-xs" onClick={() => setNewestFirst((v) => !v)}>
+                <ArrowDownUp className="h-3.5 w-3.5" />{newestFirst ? "নতুন আগে" : "পুরনো আগে"}
               </Button>
               {!bookMode && (
-                <Button variant={head ? "default" : "outline"} size="sm" className="h-9 gap-1 rounded-lg" onClick={() => setHeadSheet(true)}>
-                  <ListFilter className="h-4 w-4" />খাত
+                <Button variant={head ? "default" : "outline"} size="sm" className="h-8 gap-1 rounded-lg px-2.5 text-xs" onClick={() => setHeadSheet(true)}>
+                  <ListFilter className="h-3.5 w-3.5" />খাত
                 </Button>
               )}
             </div>
@@ -599,7 +605,7 @@ function CashBookPage() {
                   key={k}
                   type="button"
                   onClick={() => setKind(k)}
-                  className={`h-8 rounded-full px-3 text-xs font-bold transition ${
+                  className={`h-7 rounded-full px-3 text-xs font-bold transition ${
                     kind === k ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                   }`}
                 >
@@ -608,19 +614,10 @@ function CashBookPage() {
               ))}
             </div>
           </div>}
-          <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
-            <div className="rounded-lg bg-emerald-50 py-1.5 dark:bg-emerald-950/40">
-              <div className="text-emerald-700 dark:text-emerald-300">আয়</div>
-              <b className="num text-sm text-emerald-700 dark:text-emerald-300">{tk(listIn)}</b>
-            </div>
-            <div className="rounded-lg bg-red-50 py-1.5 dark:bg-red-950/40">
-              <div className="text-red-700 dark:text-red-300">ব্যয়</div>
-              <b className="num text-sm text-red-700 dark:text-red-300">{tk(listOut)}</b>
-            </div>
-            <div className="rounded-lg bg-muted py-1.5">
-              <div className="text-muted-foreground">নিট</div>
-              <b className="num text-sm">{listIn - listOut < 0 ? "−" : ""}{tk(Math.abs(listIn - listOut))}</b>
-            </div>
+          <div className="num flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+            <span className="text-muted-foreground">আয় <b className="text-emerald-700 dark:text-emerald-300">+{tk(listIn)}</b></span>
+            <span className="text-muted-foreground">ব্যয় <b className="text-red-700 dark:text-red-300">−{tk(listOut)}</b></span>
+            <span className="text-muted-foreground">নিট <b className="text-foreground">{listIn - listOut < 0 ? "−" : ""}{tk(Math.abs(listIn - listOut))}</b></span>
           </div>
           {head === "sale" && !bookMode && (
             <Link to="/dues" className="flex items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2 text-xs font-semibold">
@@ -646,7 +643,7 @@ function CashBookPage() {
                   const ids = dayRows.filter(pickable).map((r) => r.id);
                   const allOn = ids.length > 0 && ids.every((id) => picked.has(id));
                   return (
-                    <button type="button" onClick={() => togglePick(ids, !allOn)} className="flex w-full items-center justify-between gap-2 bg-muted/70 px-3 py-2 text-left text-xs">
+                    <button type="button" onClick={() => togglePick(ids, !allOn)} className="flex w-full items-center justify-between gap-2 bg-muted/70 px-3 py-1.5 text-left text-xs">
                       <span className="flex items-center gap-2">
                         <span className={`grid h-6 w-6 place-items-center rounded-md border-2 ${allOn ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40 bg-card"}`}>{allOn && <Check className="h-4 w-4" />}</span>
                         <b className="text-sm">{bnDate(d)}</b>
@@ -655,8 +652,8 @@ function CashBookPage() {
                     </button>
                   );
                 })() : (
-                <div className="flex items-center justify-between gap-2 bg-muted/70 px-3 py-2 text-xs">
-                  <b className="text-sm">{bnDate(d)}</b>
+                <div className="flex items-center justify-between gap-2 bg-muted/70 px-3 py-1.5 text-xs">
+                  <b className="text-[13px]">{bnDate(d)}</b>
                   <span className="num flex gap-2 font-semibold">
                     {inc > 0 && <span className="text-emerald-700 dark:text-emerald-300">+{tk(inc)}</span>}
                     {exp > 0 && <span className="text-red-700 dark:text-red-300">−{tk(exp)}</span>}
@@ -676,26 +673,22 @@ function CashBookPage() {
                         key={r.id}
                         type="button"
                         onClick={() => (canPick ? togglePick([r.id], !on) : setSelected(r))}
-                        className={`flex w-full items-center gap-3 px-3 py-3 text-left transition active:bg-muted/60 ${bookMode && on ? "bg-primary/5" : ""}`}
+                        className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition active:bg-muted/60 ${bookMode && on ? "bg-primary/5" : ""}`}
                       >
                         {canPick && (
-                          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>{on && <Check className="h-5 w-5" />}</span>
+                          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border-2 ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>{on && <Check className="h-4 w-4" />}</span>
                         )}
-                        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>
-                          <Icon className="h-5 w-5" aria-hidden="true" />
+                        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${tone}`}>
+                          <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block break-words font-bold leading-snug">{displayName}</span>
-                          <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                            <span>{displayHead}</span>
-                            {booked && (
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-success/15 px-1.5 font-semibold text-success">
-                                <Check className="h-3 w-3" />{mk?.page ? `পৃ. ${bn(mk.page)}` : "খাতায়"}
-                              </span>
-                            )}
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{displayName}</span>
+                        <span className="min-w-0 max-w-[38%] shrink truncate text-xs text-muted-foreground">{displayHead}</span>
+                        {booked && (
+                          <span className="shrink-0 text-[10px] font-bold text-success" title={mk?.page ? `খাতার পৃষ্ঠা ${bn(mk.page)}` : "খাতায় তোলা"}>
+                            ✓{mk?.page ? bn(mk.page) : ""}
                           </span>
-                        </span>
-                        <span className={`num shrink-0 font-display text-base font-extrabold ${
+                        )}
+                        <span className={`num shrink-0 text-sm font-bold ${
                           r.dir === "in" ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"
                         }`}>
                           {r.dir === "in" ? "+" : "−"}{tk(r.amount)}
