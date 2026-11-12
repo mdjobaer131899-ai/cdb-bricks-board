@@ -234,14 +234,14 @@ function EditEntryPage() {
       toast.error("ইটের ধরনের নাম লিখুন");
       return;
     }
-    setBusy(true);
-
-    if (entry.customer_id) {
-      await supabase
-        .from("customers")
-        .update({ name: customerName.trim() })
-        .eq("id", entry.customer_id);
+    // sales_entries.quantity is a whole number: adla is sold in whole feet
+    if (!(Number(quantity) > 0) || !Number.isInteger(Number(quantity))) {
+      toast.error(isAdla ? "আদলা পুরো ফুটে লিখুন (দশমিক নয়)" : "পরিমাণ পূর্ণ সংখ্যায় লিখুন");
+      return;
     }
+    setBusy(true);
+    // the customer's own name is changed on the customer page, never from one challan
+    // (renaming here used to rename the customer on every challan)
 
     const qty = Number(quantity) || 1;
     const finalUnit = isAdmin ? (Number(unitPrice) || 0) : Number(entry.unit_price);
@@ -290,6 +290,11 @@ function EditEntryPage() {
     if (!entry || !me || !isAdmin) return;
     if (needsPay && payMode === "cash" && !(Number(cashReceived) > 0)) {
       toast.error("কত টাকা নগদ পেলেন, লিখুন");
+      setConfirmApprove(false);
+      return;
+    }
+    if (!(Number(quantity) > 0) || !Number.isInteger(Number(quantity))) {
+      toast.error(isAdla ? "আদলা পুরো ফুটে লিখুন (দশমিক নয়)" : "পরিমাণ পূর্ণ সংখ্যায় লিখুন");
       setConfirmApprove(false);
       return;
     }
@@ -430,7 +435,8 @@ function EditEntryPage() {
           <CardContent>
             <div className="space-y-1.5">
               <Label>গ্রাহকের নাম</Label>
-              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required disabled={fieldsDisabled} />
+              <Input value={customerName} readOnly disabled aria-describedby="customer-name-help" />
+              <p id="customer-name-help" className="text-xs text-muted-foreground">গ্রাহকের নাম বদলাতে গ্রাহক পাতায় যান।</p>
             </div>
           </CardContent>
         </Card>
@@ -470,7 +476,7 @@ function EditEntryPage() {
             </div>
             <div className="space-y-1.5">
               <Label>{quantityLabel}</Label>
-              <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required disabled={fieldsDisabled} />
+              <Input type="number" min={1} step="1" inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} required disabled={fieldsDisabled} />
             </div>
             {isOthers && !fieldsDisabled && (
               <div className="space-y-1.5 sm:col-span-2">

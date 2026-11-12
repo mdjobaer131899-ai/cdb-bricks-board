@@ -61,7 +61,11 @@ function GuardedOutlet() {
   const adminOnly = path.startsWith("/users") || path.startsWith("/settings");
   // সেটিংস হাব (/preferences) সবার জন্য খোলা: থিম, মৌসুম, লগ আউট সেখানে
   const openToAll = path === "/preferences";
-  if (!openToAll && (adminOnly ? !isAdmin : !can(path))) {
+  // a challan's edit page (/entries/<id>/edit) belongs to the challan pages: a manager who may
+  // write or list challans may open it; the page itself only lets them change their own pending one
+  const challanEdit = /^\/entries\/[^/]+\/edit\/?$/.test(path);
+  const allowed = challanEdit ? can("/entries/new") || can("/challans") : can(path);
+  if (!openToAll && (adminOnly ? !isAdmin : !allowed)) {
     return <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">এই পাতা দেখার অনুমতি নেই। এডমিনের সাথে যোগাযোগ করুন।</div>;
   }
   return <Outlet />;

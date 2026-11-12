@@ -55,13 +55,6 @@ export const createContract = createServerFn({ method: "POST" })
       if (payErr) throw new Error(payErr.message);
     }
 
-    await supabase.rpc("log_audit", {
-      _action: "contract.create",
-      _entity_type: "contract",
-      _entity_id: row.id,
-      _old_value: null,
-      _new_value: JSON.parse(JSON.stringify(insertRow)),
-    });
 
     return row;
   });

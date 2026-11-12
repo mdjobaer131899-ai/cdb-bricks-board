@@ -68,13 +68,6 @@ export const createCashSale = createServerFn({ method: "POST" })
       if (colErr) throw new Error(colErr.message);
     }
 
-    await supabase.rpc("log_audit", {
-      _action: "cash_sale.create",
-      _entity_type: "sales_entry",
-      _entity_id: sale.id,
-      _old_value: null,
-      _new_value: JSON.parse(JSON.stringify({ ...data, total })),
-    });
 
     return { id: sale.id, challan_no: sale.challan_no, total };
   });

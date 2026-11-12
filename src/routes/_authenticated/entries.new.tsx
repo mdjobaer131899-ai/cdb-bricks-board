@@ -190,8 +190,13 @@ function NewEntryPage() {
       toast.error("গ্রাহক নির্বাচন করুন");
       return;
     }
-    if (!isOthers && !quantity) {
+    if (!(Number(quantity) > 0)) {
       toast.error("পরিমাণ লিখুন");
+      return;
+    }
+    // sales_entries.quantity is a whole number: adla is sold in whole feet
+    if (!Number.isInteger(Number(quantity))) {
+      toast.error(isAdla ? "আদলা পুরো ফুটে লিখুন (দশমিক নয়)" : "ইটের সংখ্যা পূর্ণ সংখ্যায় লিখুন");
       return;
     }
     if (isOthers && !customBrickName.trim()) {
@@ -210,7 +215,7 @@ function NewEntryPage() {
       toast.error("কত টাকা নগদ পেলেন, লিখুন");
       return;
     }
-    if (isAdmin && !isAdvance && !isOthers && !unitPrice && !choice && !openRate) {
+    if (isAdmin && !isAdvance && !unitPrice && !choice && !openRate) {
       toast.error("একক মূল্য দিন বা অগ্রিম চালান নির্বাচন করুন");
       return;
     }
@@ -218,7 +223,7 @@ function NewEntryPage() {
 
     const advanceFlag = isAdmin ? isAdvance : false;
     const finalUnitPrice = isAdmin && !advanceFlag ? Number(unitPrice) || 0 : 0;
-    const finalQuantity = isOthers ? 0 : Number(quantity);
+    const finalQuantity = Number(quantity);
 
     const targetChallanNo = challanNo.trim() || (await generateNextChallanNo(saleDate));
 
@@ -424,12 +429,10 @@ function NewEntryPage() {
                 </SelectContent>
               </Select>
             </div>
-            {!isOthers && (
-              <div className="space-y-1.5">
-                <Label>{quantityLabel}</Label>
-                <Input type="number" min={1} step={isAdla ? "0.01" : "1"} value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
-              </div>
-            )}
+            <div className="space-y-1.5">
+              <Label>{quantityLabel}</Label>
+              <Input type="number" min={1} step="1" inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+            </div>
             {isOthers && (
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>ইটের ধরনের নাম লিখুন</Label>

@@ -30,13 +30,6 @@ export const createExpense = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
 
-    await supabase.rpc("log_audit", {
-      _action: "expense.create",
-      _entity_type: "expense",
-      _entity_id: row.id,
-      _old_value: null,
-      _new_value: JSON.parse(JSON.stringify(data)),
-    });
     return row;
   });
 

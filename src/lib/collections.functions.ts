@@ -34,13 +34,6 @@ export const createCollection = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
 
-    await supabase.rpc("log_audit", {
-      _action: "collection.create",
-      _entity_type: "collection",
-      _entity_id: row.id,
-      _old_value: null,
-      _new_value: JSON.parse(JSON.stringify(data)),
-    });
 
     return row;
   });
