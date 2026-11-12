@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, ArrowRight, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Landmark, Loader2, Smartphone, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Chips, Section, tk } from "@/components/money-form-parts";
 import { supabase } from "@/integrations/supabase/client";
-import { PAY_METHODS, PURSE_LABEL, type Purse } from "@/lib/cash-queries";
+import { PAY_METHODS, type Purse } from "@/lib/cash-queries";
 import { bnDate, todayBD } from "@/lib/format";
 import { useCurrentUser } from "@/lib/use-current-user";
 
@@ -23,31 +23,42 @@ const PRESETS: Array<{ key: string; label: string; from: string; to: string }> =
   { key: "cash>bkash", label: "বিকাশে পাঠালাম", from: "cash", to: "bkash" },
 ];
 
+const PURSE_ICON: Record<Purse, typeof Wallet> = { cash: Wallet, mobile: Smartphone, bank: Landmark };
+const PURSE_SHORT: Record<Purse, string> = { cash: "ড্রয়ারে", mobile: "বিকাশ/নগদে", bank: "ব্যাংকে" };
+
 /**
- * Hand cash split by where it sits (drawer, bKash/Nagad, bank), for the dark hand-cash cards
- * on the dashboard and the cash book, with a button to record money moved between them.
+ * Hand cash split by where it sits (drawer, bKash/Nagad, bank): three small tiles on a light
+ * card (dashboard and cash book), with a button to record money moved between them.
  */
-export function PurseStrip({ purses }: { purses?: Record<Purse, number> | null }) {
+export function PurseTiles({ purses }: { purses?: Record<Purse, number> | null }) {
   const [open, setOpen] = useState(false);
   if (!purses) return null;
   return (
-    <>
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {PURSES.map((p) => (
-          <span key={p} className="num rounded-full border border-white/10 bg-white/[0.07] px-2.5 py-1 text-xs font-semibold text-stone-200">
-            {PURSE_LABEL[p]} {purses[p] < -0.5 ? "−" : ""}{tk(Math.abs(purses[p]))}
-          </span>
-        ))}
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex items-center gap-1 rounded-full bg-amber-200/15 px-2.5 py-1 text-xs font-bold text-amber-200"
-        >
+    <div className="mt-4">
+      <div className="grid grid-cols-3 gap-2">
+        {PURSES.map((p) => {
+          const Icon = PURSE_ICON[p];
+          const v = purses[p];
+          return (
+            <div key={p} className="min-w-0 rounded-xl bg-muted/70 px-2.5 py-2">
+              <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">{PURSE_SHORT[p]}</span>
+              </span>
+              <span className={`num mt-0.5 block truncate text-[15px] font-bold ${v < -0.5 ? "text-destructive" : ""}`}>
+                {v < -0.5 ? "−" : ""}{tk(Math.abs(v))}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1.5 flex justify-end">
+        <button type="button" onClick={() => setOpen(true)} className="flex items-center gap-1 py-1 text-xs font-bold text-primary">
           <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden="true" /> টাকা সরানো
         </button>
       </div>
       <TransferDialog open={open} onOpenChange={setOpen} />
-    </>
+    </div>
   );
 }
 

@@ -9,12 +9,12 @@ import {
 import { WeatherSignalBanner } from "@/components/weather-signals";
 import { BrandLogo } from "@/components/brand-logo";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TransferDialog } from "@/components/cash-purses";
+import { PurseTiles, TransferDialog } from "@/components/cash-purses";
 import { DayCloseDialog, useDayCloses } from "@/components/day-close";
 import { openQuickEntry } from "@/components/quick-entry";
 import { supabase } from "@/integrations/supabase/client";
 import { bn, bnDate } from "@/lib/format";
-import { fetchCashHistory, type CashHistoryRow, type Purse } from "@/lib/cash-queries";
+import { fetchCashHistory, type CashHistoryRow } from "@/lib/cash-queries";
 import { buildDues } from "@/lib/dues";
 import { fetchLoansDueSoon, type LoanWithDue } from "@/lib/loan-due";
 import { moneyHead } from "@/lib/money-heads";
@@ -64,20 +64,12 @@ function MoreLink({ to, children, search }: { to: string; children: ReactNode; s
   );
 }
 
-/* ---------- হাতে নগদ: গাঢ় কার্ড, নিচে তিনটা ইটে তিন ভাগ ---------- */
-const PURSE_ORDER: Purse[] = ["cash", "mobile", "bank"];
-const PURSE_NAME: Record<Purse, string> = { cash: "ড্রয়ারে", mobile: "বিকাশ/নগদে", bank: "ব্যাংকে" };
-const PURSE_BRICK: Record<Purse, string> = { cash: "bg-[#c2532f]", mobile: "bg-[#d98b5f]", bank: "bg-[#8a8178]" };
-
+/* ---------- হাতে নগদ: হালকা কার্ড, নিচে তিন জায়গার টাকা আর আজকের লেনদেন ---------- */
 function CashHero({ s, weather, todayRows }: { s: KilnSnapshot; weather: WeatherInfo | null; todayRows: CashHistoryRow[] }) {
   const [open, setOpen] = useState(false);
-  const [transfer, setTransfer] = useState(false);
   const net = s.cashSeason?.net ?? 0;
-  const purses = s.cashSeason?.purses;
   const todayIn = s.cashToday?.income ?? 0;
   const todayOut = s.cashToday?.expense ?? 0;
-  const positive = purses ? PURSE_ORDER.map((p) => Math.max(0, purses[p])) : [];
-  const course = sum(positive, (x) => x) || 1;
 
   const WeatherIcon = !weather ? Sun
     : weather.precipNow > 0 || weather.code >= 95 ? CloudLightning
@@ -85,77 +77,66 @@ function CashHero({ s, weather, todayRows }: { s: KilnSnapshot; weather: Weather
     : weather.code >= 2 ? Cloud : Sun;
 
   return (
-    <section className="bg-brick-pattern relative overflow-hidden rounded-[22px] bg-ink p-[18px] text-ink-foreground">
+    <section className="relative overflow-hidden rounded-2xl border bg-card p-4 shadow-sm">
+      {/* a thin brick-red edge marks the one card that holds the money */}
+      <span className="absolute inset-y-0 left-0 w-1 bg-primary" aria-hidden="true" />
+
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] font-semibold text-stone-300">হাতে নগদ</span>
-        <Link to={"/weather" as never} className="flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-amber-100">
-          <WeatherIcon className="h-3.5 w-3.5" aria-hidden="true" />
+        <span className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary/10 text-primary">
+            <Banknote className="h-4 w-4" aria-hidden="true" />
+          </span>
+          হাতে নগদ
+        </span>
+        <Link to={"/weather" as never} className="flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-foreground/80">
+          <WeatherIcon className="h-3.5 w-3.5 text-warning" aria-hidden="true" />
           {weather ? `${bn(weather.temp)}°, বৃষ্টি ${bn(weather.todayRainProb)}%` : "আবহাওয়া"}
         </Link>
       </div>
 
-      <Link to="/cash-book" className={`mt-1.5 block font-display num text-[44px] font-extrabold leading-none tracking-tight ${net < 0 ? "text-red-300" : "text-ink-foreground"}`}>
+      <Link
+        to="/cash-book"
+        className={`mt-2 block font-display num text-[38px] font-extrabold leading-none tracking-tight ${net < -0.5 ? "text-destructive" : "text-foreground"}`}
+      >
         {signedTk(net)}
       </Link>
 
-      {purses && (
-        <button type="button" onClick={() => setTransfer(true)} aria-label="তিন ভাগ: ব্যাংক বা বিকাশ থেকে তোলা ও জমা লিখুন" className="mt-4 block w-full text-left">
-          {/* one course of bricks: each brick as long as the money it holds */}
-          <span className="flex h-[18px] gap-[3px]" aria-hidden="true">
-            {PURSE_ORDER.map((p, i) => positive[i] > 0.5 && (
-              <span key={p} className={`rounded-[3px] ${PURSE_BRICK[p]}`} style={{ flexGrow: positive[i] / course, flexBasis: 0, minWidth: 10 }} />
-            ))}
-          </span>
-          <span className="mt-2.5 grid grid-cols-3 gap-2">
-            {PURSE_ORDER.map((p) => (
-              <span key={p} className="block min-w-0">
-                <span className="flex items-center gap-1.5 text-xs text-stone-300">
-                  <span className={`h-2 w-3 rounded-[2px] ${PURSE_BRICK[p]}`} aria-hidden="true" />
-                  {PURSE_NAME[p]}
-                </span>
-                <span className={`num block truncate text-[15px] font-bold ${purses[p] < -0.5 ? "text-red-300" : ""}`}>{signedTk(purses[p])}</span>
-              </span>
-            ))}
-          </span>
-          <span className="mt-1.5 block text-[11px] text-stone-400">ব্যাংক থেকে তোলা বা জমা লিখতে এখানে চাপুন</span>
-        </button>
-      )}
-      <TransferDialog open={transfer} onOpenChange={setTransfer} />
-      {net < -0.5 && (
-        <p className="mt-2 text-xs font-semibold text-red-200">হাতে নগদ ঋণাত্মক: কোনো টাকা আসা লেখা বাকি থাকতে পারে।</p>
-      )}
+      <PurseTiles purses={s.cashSeason?.purses} />
 
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="mt-4 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2.5 text-left"
+        className="mt-1 flex w-full items-center gap-3 border-t pt-3 text-left"
       >
         <span className="flex-1">
-          <span className="block text-xs text-stone-300">আজ এসেছে</span>
-          <span className="num text-[17px] font-bold text-emerald-300">+{tk(todayIn)}</span>
+          <span className="block text-xs text-muted-foreground">আজ এসেছে</span>
+          <span className="num text-[17px] font-bold text-success">+{tk(todayIn)}</span>
         </span>
         <span className="flex-1">
-          <span className="block text-xs text-stone-300">আজ গেছে</span>
-          <span className="num text-[17px] font-bold text-red-300">−{tk(todayOut)}</span>
+          <span className="block text-xs text-muted-foreground">আজ গেছে</span>
+          <span className="num text-[17px] font-bold text-destructive">−{tk(todayOut)}</span>
         </span>
-        <ChevronDown className={`h-5 w-5 shrink-0 text-stone-300 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+        <span className="flex items-center gap-0.5 text-xs font-semibold text-muted-foreground">
+          {open ? "লুকান" : "দেখুন"}
+          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+        </span>
       </button>
 
       {open && (
-        <div className="mt-2 rounded-xl bg-white/[0.04]">
+        <div className="mt-2 overflow-hidden rounded-xl border">
           {todayRows.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-stone-300">আজ এখনো কিছু লেখা হয়নি।</p>
+            <p className="px-3 py-3 text-sm text-muted-foreground">আজ এখনো কিছু লেখা হয়নি।</p>
           ) : (
-            <ul className="divide-y divide-white/10">
+            <ul className="divide-y">
               {todayRows.slice(0, 6).map((r) => (
                 <li key={r.id}>
-                  <Link to={"/cash-book" as never} search={{ row: r.id } as never} className="flex items-center gap-3 px-3 py-2">
+                  <Link to={"/cash-book" as never} search={{ row: r.id } as never} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{r.detail || r.head}</span>
-                      <span className="block truncate text-xs text-stone-400">{r.head}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{r.head}</span>
                     </span>
-                    <span className={`num text-sm font-bold ${r.dir === "in" ? "text-emerald-300" : "text-red-300"}`}>
+                    <span className={`num text-sm font-bold ${r.dir === "in" ? "text-success" : "text-destructive"}`}>
                       {r.dir === "in" ? "+" : "−"}{tk(r.amount)}
                     </span>
                   </Link>
@@ -163,7 +144,7 @@ function CashHero({ s, weather, todayRows }: { s: KilnSnapshot; weather: Weather
               ))}
             </ul>
           )}
-          <Link to="/cash-book" className="flex items-center justify-center gap-1 border-t border-white/10 py-2 text-xs font-bold text-amber-100">
+          <Link to="/cash-book" className="flex items-center justify-center gap-1 border-t bg-muted/40 py-2 text-xs font-bold text-primary">
             {todayRows.length > 6 ? `আরও ${bn(todayRows.length - 6)}টি, ক্যাশ বইয়ে দেখুন` : "ক্যাশ বই খুলুন"}
             <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>

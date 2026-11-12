@@ -16,7 +16,7 @@ import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/c
 import { EXPENSE_HEADS, ExpenseEntryDialog, type ExpenseEdit, type HeadKey } from "@/components/expense-entry";
 import { INCOME_HEADS, IncomeEntryDialog, type IncomeKey } from "@/components/income-entry";
 import { HeadTiles } from "@/components/money-form-parts";
-import { PurseStrip } from "@/components/cash-purses";
+import { PurseTiles } from "@/components/cash-purses";
 import { DayCloseCard } from "@/components/day-close";
 import { openQuickEntry } from "@/components/quick-entry";
 import { RAW_TYPES, TONE_CLASS, isIncome, moneyHead, moneyHeadAllowed, supplierHead, type MoneyKey } from "@/lib/money-heads";
@@ -425,28 +425,31 @@ function CashBookPage() {
       </div>
 
       {/* Hand cash hero */}
-      <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-        <div className="text-xs font-bold tracking-[0.12em] text-stone-300">হাতে নগদ · মূল ক্যাশ</div>
+      <section className="relative overflow-hidden rounded-2xl border bg-card p-4 shadow-sm">
+        <span className="absolute inset-y-0 left-0 w-1 bg-primary" aria-hidden="true" />
+        <div className="text-sm font-semibold text-muted-foreground">হাতে নগদ</div>
         {seasonSum.isLoading ? (
-          <Skeleton className="mt-3 h-10 w-48 bg-white/10" />
+          <Skeleton className="mt-2 h-10 w-48" />
         ) : (
-          <div className={`mt-2 font-display num text-[40px] font-extrabold leading-[0.95] tracking-tight ${handCash < 0 ? "text-red-300" : ""}`}>
+          <div className={`mt-1.5 font-display num text-[38px] font-extrabold leading-none tracking-tight ${handCash < 0 ? "text-destructive" : ""}`}>
             {handCash < 0 ? "−" : ""}{tk(Math.abs(handCash))}
           </div>
         )}
-        <PurseStrip purses={seasonSum.data?.purses} />
-        <div className="mt-3.5 grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="text-xs font-semibold text-emerald-200">{PERIOD_WORD[preset]} এসেছে</div>
-            <div className="num text-lg font-bold text-emerald-300">+{tk(period?.income ?? 0)}</div>
+        <PurseTiles purses={seasonSum.data?.purses} />
+        <div className="mt-1 grid grid-cols-2 gap-3 border-t pt-3">
+          <div>
+            <div className="text-xs text-muted-foreground">{PERIOD_WORD[preset]} এসেছে</div>
+            <div className="num text-lg font-bold text-success">+{tk(period?.income ?? 0)}</div>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="text-xs font-semibold text-red-200">{PERIOD_WORD[preset]} গেছে</div>
-            <div className="num text-lg font-bold text-red-300">−{tk(period?.expense ?? 0)}</div>
+          <div>
+            <div className="text-xs text-muted-foreground">{PERIOD_WORD[preset]} গেছে</div>
+            <div className="num text-lg font-bold text-destructive">−{tk(period?.expense ?? 0)}</div>
           </div>
         </div>
         {handCash < 0 && (
-          <p className="mt-2 text-xs font-semibold text-red-200">ক্যাশ ঋণাত্মক দেখাচ্ছে, এন্ট্রিগুলো একবার মিলিয়ে নিন।</p>
+          <p className="mt-2 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-xs font-semibold text-destructive">
+            হাতে নগদ ঋণাত্মক: কোনো টাকা আসা লেখা বাকি থাকতে পারে, এন্ট্রিগুলো একবার মিলিয়ে নিন।
+          </p>
         )}
       </section>
 
