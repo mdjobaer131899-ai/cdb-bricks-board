@@ -859,6 +859,30 @@ export type Database = {
           },
         ]
       }
+      drying_pots: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          mill_id: string
+          pot_no: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          mill_id: string
+          pot_no: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          mill_id?: string
+          pot_no?: number
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount: number
@@ -1652,6 +1676,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pot_counts: {
+        Row: {
+          count_date: string
+          created_at: string
+          created_by: string
+          id: string
+          note: string | null
+          photo_path: string | null
+          pot_id: string
+          quantity: number
+          updated_at: string
+        }
+        Insert: {
+          count_date: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string | null
+          photo_path?: string | null
+          pot_id: string
+          quantity: number
+          updated_at?: string
+        }
+        Update: {
+          count_date?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          note?: string | null
+          photo_path?: string | null
+          pot_id?: string
+          quantity?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pot_days: {
+        Row: {
+          count_date: string
+          kacha_entry_id: string
+          mill_id: string
+        }
+        Insert: {
+          count_date: string
+          kacha_entry_id: string
+          mill_id: string
+        }
+        Update: {
+          count_date?: string
+          kacha_entry_id?: string
+          mill_id?: string
+        }
+        Relationships: []
       }
       production_entries: {
         Row: {
@@ -3372,6 +3450,10 @@ export type Database = {
       }
     }
     Functions: {
+      sync_pot_day: {
+        Args: { _date: string; _mill: string }
+        Returns: string
+      }
       acc: { Args: { _code: string }; Returns: string }
       acc_for_method: { Args: { _method: string }; Returns: string }
       cancel_booking: { Args: { _id: string }; Returns: undefined }

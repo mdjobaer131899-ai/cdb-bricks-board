@@ -51,6 +51,7 @@ export function entryTitle(e: ChatEntry): string {
     case "REMINDER": return "⏰ মনে করিয়ে দেওয়া";
     case "CUSTOMER": return `👤 নতুন গ্রাহক · ${d.name ?? ""}`;
     case "BOOKING": return `📒 ঠিক দামে বুকিং · ${d.customer ?? ""}`;
+    case "POT_COUNT": return `🧱 পট গোনা · ${d.mill ?? ""} · পট ${bn(num(d.potNo))}`;
     default: return "এন্ট্রি";
   }
 }
@@ -204,6 +205,17 @@ function Body({ e }: { e: ChatEntry }) {
           <Row k="যে তারিখ পর্যন্ত" v={bnDate(d.upTo)} />
         </>
       );
+    case "POT_COUNT":
+      return (
+        <>
+          <Row k="মিল" v={d.mill} />
+          <Row k="পট" v={bn(num(d.potNo))} />
+          <Row k="ইট" v={`${bn(num(d.quantity))} পিস`} strong />
+          {d.prev != null && <Row k="আগে লেখা ছিল" v={`${bn(num(d.prev))} পিস (বদলে যাবে)`} />}
+          <Row k="তারিখ" v={bnDate(d.date)} />
+          <div className="text-[11px] text-muted-foreground">মিলের সব পটের যোগফল নিজে থেকে কাঁচা ইটের খাতায় উঠবে।</div>
+        </>
+      );
     case "CUSTOMER":
       return (
         <>
@@ -296,6 +308,8 @@ function Editor({ e, onChange }: { e: ChatEntry; onChange: (d: any) => void }) {
       return <NumField label="পাতার নম্বর" value={d.page} onChange={(n) => set({ page: Math.round(n) })} />;
     case "REMINDER":
       return <TextField label="কী মনে করাতে হবে" value={d.text} onChange={(v) => set({ text: v })} />;
+    case "POT_COUNT":
+      return <div className="grid grid-cols-2 gap-2"><NumField label="ইট" value={d.quantity} onChange={(n) => set({ quantity: Math.round(n) })} />{dateField}</div>;
     case "CUSTOMER":
       return (
         <div className="space-y-2">
@@ -329,8 +343,8 @@ function Editor({ e, onChange }: { e: ChatEntry; onChange: (d: any) => void }) {
   }
 }
 
-const EDITABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING"]);
-const UNDOABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "REMINDER", "SALE_CHALLAN", "CUSTOMER", "BOOKING"]);
+const EDITABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING", "POT_COUNT"]);
+const UNDOABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "REMINDER", "SALE_CHALLAN", "CUSTOMER", "BOOKING", "POT_COUNT"]);
 
 export function UndoBox({ onUndo, onCancel }: { onUndo: (password: string) => Promise<void>; onCancel?: () => void }) {
   const [pw, setPw] = useState("");
@@ -470,6 +484,7 @@ function entryMoney(e: ChatEntry): { out: number; in: number; label: string } {
     }
     case "SALE_CHALLAN": return { out: 0, in: num(d.paidAmount), label: `${bn(num(d.quantity))} পিস` };
     case "KACHA_BRICK": return { out: 0, in: 0, label: `${bn(num(d.quantity))} পিস` };
+    case "POT_COUNT": return { out: 0, in: 0, label: `${bn(num(d.quantity))} ইট` };
     case "TRANSFER": return { out: 0, in: 0, label: tk(num(d.amount)) };
     case "DAY_CLOSE": return { out: 0, in: 0, label: tk(num(d.counted)) };
     default: return { out: 0, in: 0, label: "" };

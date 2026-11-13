@@ -10,6 +10,7 @@ import { fetchBookMarks } from "@/lib/book-marks";
 import { DAMAGE_REASONS } from "@/lib/production";
 import { PIECES_PER_TRUCK } from "@/lib/opening-adjust";
 import { PAGE_LINKS, navIntent, pageByKey, type PageLink } from "@/lib/page-catalog";
+import { savePotCount } from "@/lib/pots";
 import { MISC_PREFIX, MONEY_HEADS, moneyHead, supplierHead, type MoneyKey } from "@/lib/money-heads";
 import { checkVekuDay, type VekuDayInput } from "@/lib/veku-save";
 import {
@@ -105,6 +106,7 @@ export interface AIResponse {
     | "CUSTOMER"
     | "BOOKING"
     | "NAVIGATE"
+    | "POT_COUNT"
     | "ENTRIES"
     | "QUERY"
     | "UNKNOWN";
@@ -1677,7 +1679,7 @@ from/to সবসময় YYYY-MM-DD। সময় না বললে from/t
 ৬. এক বার্তায় একাধিক এন্ট্রি থাকলে (যেমন "রহিমকে ৫০০, করিমকে ৭০০, চা-নাস্তা ২০০") বা খাতার পাতা/রসিদের ছবিতে অনেক লাইন থাকলে {"type":"ENTRIES","reply":"সংক্ষেপে কী কী পেলে","entries":[{"type":"MONEY","data":{...}},{"type":"MONEY","data":{...}}]} দেবে; প্রতিটি লাইন আলাদা এন্ট্রি, একটাও বাদ দেবে না, দুটো মিলিয়ে একটা করবে না। লাইনগুলো নতুন লাইন, কমা, দাঁড়ি, "তারপর" বা "আর" দিয়ে আলাদা হতে পারে (মুখে বলা হলে দাঁড়ি থাকে না, কথার অর্থ দেখে ভাগ করবে)। পুরো বার্তায় একবার তারিখ বা মাধ্যম বললে (যেমন "গতকালের খরচ", "সব বিকাশে") প্রতিটি এন্ট্রিতে সেটা বসাবে; কোনো লাইনে আলাদা বললে সেই লাইনে সেটাই।
 ${hasAttachment ? "৭. সংযুক্ত ছবি/ফাইলটি মনোযোগ দিয়ে পড়ে (OCR) নাম, পরিমাণ, টাকা বের করে উপযুক্ত এন্ট্রি (অনেক লাইন হলে ENTRIES) প্রস্তুত করবে বা কী লেখা আছে তা বাংলায় বলবে। হাতের লেখার বাংলা অঙ্ক সাবধানে পড়বে।\n" : ""}
 শুধু একটি JSON ফেরত দেবে:
-{"type":"LOOKUP"|"NAVIGATE"|"MONEY"|"SALE_CHALLAN"|"BOOKING"|"CUSTOMER"|"KACHA_BRICK"|"ATTENDANCE"|"VEKU_DAY"|"TRANSFER"|"DAY_CLOSE"|"BOOK_MARK"|"REMINDER"|"ENTRIES"|"QUERY","tool":"(শুধু LOOKUP-এ)","args":{},"reply":"বাংলা উত্তর (LOOKUP-এ খালি)","data":{...},"entries":[ (শুধু ENTRIES-এ) ]}
+{"type":"LOOKUP"|"NAVIGATE"|"MONEY"|"POT_COUNT"|"SALE_CHALLAN"|"BOOKING"|"CUSTOMER"|"KACHA_BRICK"|"ATTENDANCE"|"VEKU_DAY"|"TRANSFER"|"DAY_CLOSE"|"BOOK_MARK"|"REMINDER"|"ENTRIES"|"QUERY","tool":"(শুধু LOOKUP-এ)","args":{},"reply":"বাংলা উত্তর (LOOKUP-এ খালি)","data":{...},"entries":[ (শুধু ENTRIES-এ) ]}
 data-এর ফিল্ড:
 - MONEY (যেকোনো টাকা আসা বা যাওয়া): head (খাতের key, উপরের তালিকা থেকে), person (নাম, খাতার তালিকার মতো হুবহু), amount (এখন যত টাকা দেওয়া বা পাওয়া হলো), bill (শুধু কিছু কিনলে বা কাজ করালে তার মোট দাম/পাওনা; শুধু টাকা দিলে বা বকেয়া শোধ করলে bill দেবে না), qty, rate, unit, item (কী: মাটি, কয়লা, বিয়ারিং, চা-নাস্তা …), method ("cash" = ড্রয়ার/হাতে নগদ, "bkash", "nagad" = নগদ মোবাইল একাউন্ট, "bank"; না বললে "cash"; কথায় "নগদ দিলাম" মানে হাতে নগদ = "cash"), vekuKind (ভেকুর টাকা: ডিজেল | অটো ভাড়া | চালকের বেতন | মেরামত | যন্ত্রাংশ | মবিল-গ্রীজ | চালকের খরচ | অন্যান্য), driver, paymentType (সরদারে: "advance" = দাদন/অগ্রিম, "payment" = মজুরি), dueDate (ঋণে ফেরত/শোধের তারিখ), date, note
   খাত বাছাই: sale = গ্রাহক টাকা দিল/জমা; openingIn = গত বছরের পাওনা আদায়; ownerInvest = মালিক টাকা দিলেন; loanIn = কারো কাছ থেকে ঋণ নিলাম; loanBack = যাকে ঋণ দিয়েছিলাম সে ফেরত দিল; sardar = সরদারকে মজুরি/দাদন; daily = ডেলি শ্রমিককে; staff = মেস্তুরি, ম্যানেজার, অন্য স্টাফকে বেতন; ownerSalary = মালিকের বেতন; ownerWithdraw = মালিক টাকা তুললেন/নিলেন; raw = মাটি, বালু, কয়লা, তুষ, লাকড়ি, ভাটার ডিজেল (বিক্রেতা বা সাইটের নামসহ); parts = যন্ত্রাংশ, ইঞ্জিনের মাল (দোকানের নাম থাকলে person); veku = ভেকুর ডিজেল, চালকের বেতন, মেরামত (একটা টাকা দিলে); vehicle = গাড়ি/ট্রাক্টরের ট্রিপ ভাড়া (qty = ট্রিপ, rate = প্রতি ট্রিপ); land = জমি ভাড়া; clean = পরিচ্ছন্ন কর্মী; power = বিদ্যুৎ বিল; misc = চা-নাস্তা, খোরাকি, যাতায়াত ও অন্য ছোট খরচ (item বাধ্যতামূলক); asset = স্থায়ী সম্পদ কেনা; loanGive = কাউকে ঋণ দিলাম; loanRepay = নেওয়া ঋণ শোধ দিলাম; openingOut = গত বছরের দেনা শোধ।
@@ -1687,6 +1689,7 @@ data-এর ফিল্ড:
 - SALE_CHALLAN (ইট বিক্রি/চালান): customerName, brickType, quantity, rate (প্রতি পিস দাম), totalAmount, paidAmount, dueAmount, vehicleNumber, driverName, date
 - BOOKING (ঠিক দামে বুকিং: আজ পুরো দাম নিয়ে পরে ঠিক করা দামে ইট দেওয়া, যেমন "করিম ৫ গাড়ি ১ নং ইট বুকিং দিল, প্রতি গাড়ি ১৬ হাজার"): customerName, items [{"brick":"১ নং ইট","trucks":5,"piecesPerTruck":2000,"rate": প্রতি পিসের দাম,"truckPrice": প্রতি গাড়ির দাম বললে}], method, date, note। দাম ঠিক না করে শুধু আগে টাকা দিলে (অগ্রিম টাকা) সেটা বুকিং নয়: MONEY head "sale"; পরে চালান সেদিনের দামে সেই টাকা থেকে কাটবে।
 - CUSTOMER (নতুন গ্রাহক যোগ): name, phone (১১ সংখ্যার মোবাইল), address, note
+- POT_COUNT (মাঠে বিছানো ইটের পট গোনা: "মিল ১ এর ৩ নম্বর পটে ১১৫০", কয়েকটা পট হলে ENTRIES): mill (মিলের নাম বা নম্বর), pot (পটের নম্বর), quantity (ইট), date। পট নম্বর বললে এটাই, KACHA_BRICK নয়। একবার মিল বলে পরপর পট বললে ("মিল ২: পট ১ এগারোশো, পট ২ বারোশো") প্রতিটিতে সেই মিল বসাবে।
 - NAVIGATE (অ্যাপের কোনো পাতা খুলতে/সেখানে যেতে বললে): {"type":"NAVIGATE","page":"<key>"}; key: ${PAGE_LINKS.map((p) => `${p.key} = ${p.title}`).join("; ")}
 - KACHA_BRICK (উৎপাদনের ধাপ): step ("production" = কাঁচা ইট তৈরি | "load" = ভাটায় ঢোকানো | "unload" = পাকা ইট বের | "damage" = কাঁচা ইট নষ্ট), mill (মিলের নাম বা নম্বর), sardarName, quantity, rate (প্রতি হাজারে মজুরি, বললে), grades (শুধু unload: [{"brick":"১ নং ইট","quantity":8000}]), reason (damage: বৃষ্টি | শুকানোর সময় ভাঙা | বহনে ভাঙা | অন্যান্য), date
 - VEKU_DAY (ভেকুর এক দিনের হিসাব: ঘণ্টা, ডিজেল, চালক — খাতার এক লাইন): veku (নাম), hours (দশমিকে; ৮ ঘণ্টা ৩০ মিনিট = 8.5), rate (ঘণ্টায়, বললে), driver, litres, dieselPrice (ডিজেলের দাম), dieselPaid (পাম্পে কত দিলেন; বাকিতে নিলে 0), driverPay, auto (ডিজেল আনার অটো ভাড়া দিলে true বা টাকা), khoraki (চালকের খোরাকি দিলে true বা টাকা), method, date, note
@@ -2248,6 +2251,40 @@ async function prepareKacha(d: Row, s: KilnSnapshot): Promise<{ data: KachaEntry
   return { data: k };
 }
 
+/** a mill by what was said ("মিল ২", "২ নম্বর মিল", "দুই নম্বর") */
+function findMillIn(mills: Extras["mills"], said: string): Extras["mills"][number] | null {
+  const words: Record<string, string> = { "এক": "1", "দুই": "2", "তিন": "3", "চার": "4", "পাঁচ": "5", "ছয়": "6" };
+  let t = toEnDigits(said);
+  for (const [w, d] of Object.entries(words)) t = t.replace(new RegExp(w, "g"), d);
+  const digits = t.replace(/\D/g, "");
+  const byNo = digits ? mills.filter((m) => toEnDigits(m.name).replace(/\D/g, "") === digits) : [];
+  if (byNo.length === 1) return byNo[0];
+  const hit = matchName(mills, said);
+  return hit.length === 1 ? hit[0] : null;
+}
+
+export type PotCountEntry = { millId: string; mill: string; potId: string; potNo: number; quantity: number; date: string; prev?: number | null };
+
+/** one drying bed's count ("মিল ১ এর ৩ নম্বর পটে ১১৫০") */
+async function preparePotCount(d: Row, s: KilnSnapshot): Promise<{ data: PotCountEntry } | { ask: string }> {
+  const extras = await getExtras();
+  const mills = extras.mills.filter((m) => m.active);
+  const millSaid = String(d.mill ?? d.millName ?? "").trim();
+  const mill = millSaid ? findMillIn(mills, millSaid) : mills.length === 1 ? mills[0] : null;
+  if (!mill) return { ask: `কোন মিলের পট: ${mills.map((m) => m.name).join(", ")}?` };
+  const potNo = Math.round(num(toEnDigits(String(d.pot ?? d.potNo ?? ""))));
+  if (!(potNo > 0)) return { ask: `${mill.name}-এর কোন নম্বর পট, বলুন।` };
+  const quantity = Math.round(num(d.quantity ?? d.count));
+  if (!(quantity > 0)) return { ask: `${mill.name} পট ${bn(potNo)}: কত ইট, বলুন।` };
+  if (quantity > 20000) return { ask: `${mill.name} পট ${bn(potNo)}: ${bn(quantity)} ইট এক পটে হয় না, সংখ্যাটা আবার বলুন।` };
+  const db = supabase as any;
+  const { data: pot } = await db.from("drying_pots").select("id, active").eq("mill_id", mill.id).eq("pot_no", potNo).maybeSingle();
+  if (!pot || !pot.active) return { ask: `${mill.name}-এ ${bn(potNo)} নম্বর পট সাজানো নেই। কাঁচা ইটের পাতায় "পট সাজান" দিয়ে পটের সংখ্যা ঠিক করুন।` };
+  const date = resolveDate(d, s.today);
+  const { data: prev } = await db.from("pot_counts").select("quantity").eq("pot_id", pot.id).eq("count_date", date).maybeSingle();
+  return { data: { millId: mill.id, mill: mill.name, potId: pot.id, potNo, quantity, date, prev: prev ? num(prev.quantity) : null } };
+}
+
 /** one day of a veku: the last rate and driver fill in what was not said */
 async function prepareVekuDay(d: Row, ctx: { msg: string; single: boolean }, s: KilnSnapshot): Promise<{ data: VekuDayInput } | { ask: string }> {
   const vekus = s.suppliers.filter((x) => x.material === VEKU_TYPE);
@@ -2432,6 +2469,10 @@ async function prepareEntry(type: string, data: Row, ctx: { text: string; msg: s
       const c = prepareReminder(d, s);
       return "ask" in c ? c : { type, data: c.data };
     }
+    case "POT_COUNT": {
+      const c = await preparePotCount(d, s);
+      return "ask" in c ? c : { type, data: c.data };
+    }
     case "CUSTOMER": {
       const c = prepareCustomer(d, s);
       return "ask" in c ? c : { type, data: c.data };
@@ -2445,7 +2486,7 @@ async function prepareEntry(type: string, data: Row, ctx: { text: string; msg: s
   }
 }
 
-const CARD_TYPES = new Set(["ATTENDANCE", "SALE_CHALLAN", "KACHA_BRICK", "MONEY", "EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "WORKER_PAYMENT", "SUPPLIER_PAYMENT", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING"]);
+const CARD_TYPES = new Set(["ATTENDANCE", "SALE_CHALLAN", "KACHA_BRICK", "MONEY", "EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "WORKER_PAYMENT", "SUPPLIER_PAYMENT", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING", "POT_COUNT"]);
 
 /** the reply for one or more entries: the cards, and the lines that need a question */
 function entriesReply(text: string, ready: PreparedEntry[], asks: string[]): AIResponse {
@@ -2575,7 +2616,7 @@ async function startKachaCheck(): Promise<{ text: string; chips: string[] }> {
   const sardarOf = (id: string | null) => (id ? s.sardars.find((x) => x.id === id)?.name : undefined);
   if (mills.length) lines.push(...mills.map((m) => `• ${m.name}${sardarOf(m.sardarId) ? ` — ${sardarOf(m.sardarId)}` : ""}`));
   if (today.length) lines.push("", `আজ এ পর্যন্ত লেখা: ${bn(today.reduce((a, r) => a + num(r.quantity), 0))} পিস`);
-  lines.push("", "কোন মিলে কত ইট হলো, বলুন। যেমন: \"মিল ১ বারো হাজার, মিল ২ দশ হাজার\"।");
+  lines.push("", "কোন মিলে কত ইট হলো, বলুন। যেমন: \"মিল ১ বারো হাজার, মিল ২ দশ হাজার\"।", "পট ধরে গুনলে বলুন: \"মিল ১: পট ১ এগারোশো পঞ্চাশ, পট ২ বারোশো\" — মিলের মোট নিজে থেকে উঠবে।");
   pendingAsk = { kind: "kacha", date: s.today, at: Date.now() };
   const text = lines.join("\n");
   remember("আজকের কাঁচা ইট লিখতে চাই", text);
@@ -3272,6 +3313,11 @@ export const saveAiActionToDatabase = async (
     if (type === "BOOK_MARK") return await saveBookMarks(d as BookEntry);
     if (type === "REMINDER") return await saveReminder(d as ReminderEntry, userId);
     if (type === "CUSTOMER") return await saveCustomer(d as CustomerEntry, userId);
+    if (type === "POT_COUNT") {
+      const p = d as PotCountEntry;
+      const id = await savePotCount({ potId: p.potId, millId: p.millId, potNo: p.potNo, date: entryDate, quantity: p.quantity }, userId);
+      return { success: true, refs: [{ table: "pot_counts", id }], message: `${p.mill} পট ${bn(p.potNo)}: ${bn(p.quantity)} ইট লেখা হয়েছে; মিলের দিনের মোট কাঁচা ইটের খাতায় নিজে থেকে উঠেছে।` };
+    }
     if (type === "BOOKING") return await saveBooking({ ...(d as BookingEntry), date: entryDate });
 
     // ---------- হাজিরা (ডেলি শ্রমিক): শুধু অনুপস্থিত ও হাফ দিন লেখা থাকে ----------

@@ -496,7 +496,7 @@ export async function saveBooking(b: BookingEntry): Promise<SaveOutcome> {
 const UNDO_TABLES = new Set([
   "collections", "opening_payments", "owner_transactions", "loans", "loan_payments", "sardar_payments", "worker_payments",
   "expenses", "purchases", "supplier_payments", "cash_transfers", "cash_day_closes", "kacha_brick_entries", "sales_entries",
-  "agent_reminders", "customers", "contracts",
+  "agent_reminders", "customers", "contracts", "pot_counts",
 ]);
 
 /** the admin's password, checked by signing in again (the same check as the cash book's delete) */

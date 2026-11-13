@@ -21,6 +21,7 @@ import {
   type Mill, type ProductionRate, type RateKind,
 } from "@/lib/production";
 import { toast } from "sonner";
+import { PotBoard } from "@/components/pot-board";
 
 export type KachaStep = "production" | "load" | "damage";
 
@@ -301,6 +302,9 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
           </div>
         </section>
       )}
+
+      {/* drying beds: count each bed, the mill-day total goes to the list below by itself */}
+      {isMillStep && <PotBoard productionRows={rows} sardarName={sardarName} />}
 
       {/* Entries */}
       <section className="overflow-hidden rounded-[20px] border bg-card">

@@ -23,7 +23,7 @@ export const PAGE_LINKS: PageLink[] = [
   { key: "approvals", title: "অনুমোদন", to: "/approvals", perm: "/approvals", adminOnly: true, words: ["অনুমোদন", "অ্যাপ্রুভ", "এপ্রুভ", "approval"] },
   { key: "customers", title: "গ্রাহক", to: "/customers", perm: "/customers", words: ["গ্রাহক", "কাস্টমার", "ক্রেতা", "customer"] },
   { key: "advance", title: "অগ্রিম বিক্রি", to: "/advance-sales", perm: "/advance-sales", words: ["অগ্রিম বিক্রি", "ঠিক দামে বুকিং", "বুকিং", "অগ্রিম", "advance", "booking"] },
-  { key: "kacha", title: "কাঁচা ইট (মিল)", to: "/production-steps/kacha", perm: "/production-steps/kacha", words: ["কাঁচা ইট", "কাচা ইট", "কাঁচা", "মিলের", "মিল", "উৎপাদন", "production"] },
+  { key: "kacha", title: "কাঁচা ইট (মিল)", to: "/production-steps/kacha", perm: "/production-steps/kacha", words: ["পটের হিসাব", "কাঁচা ইট", "কাচা ইট", "কাঁচা", "পটের", "মিলের", "মিল", "উৎপাদন", "production"] },
   { key: "load", title: "ভাটায় ঢোকানো", to: "/production-steps/load", perm: "/production-steps/load", words: ["ভাটায় ঢোকানো", "ঢোকানো", "লোড", "load"] },
   { key: "unload", title: "বের করা", to: "/production-steps/unload", perm: "/production-steps/unload", words: ["পাকা ইট বের", "বের করা", "আনলোড", "unload"] },
   { key: "sardars", title: "সরদার খাতা", to: "/sardars", perm: "/sardars", words: ["সরদার খাতা", "সর্দার খাতা", "সরদার", "সর্দার", "দাদন", "sardar"] },
