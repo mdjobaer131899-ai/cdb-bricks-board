@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { GlobalSearch } from "@/components/global-search";
 import { SeasonSwitcher } from "@/components/season-switcher";
 
 export function AppHeader() {
@@ -64,7 +63,6 @@ export function AppHeader() {
       </div>
       <div className="ml-auto flex items-center gap-2">
         <SeasonSwitcher />
-        <GlobalSearch />
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : data?.role === "admin" ? (

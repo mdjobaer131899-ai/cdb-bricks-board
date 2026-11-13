@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft, ArrowUp, BrickWall, Camera, Copy, FileText, HandCoins, ListChecks, ListPlus, Loader2, Lock, Mic, Paperclip, Save,
   Share2, Sparkles, SquarePen, UserCheck, Volume2, VolumeX, Wallet, X,
@@ -16,12 +17,19 @@ import { undoSaved } from "@/lib/ai-entries";
 import { moneyHead } from "@/lib/money-heads";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useBackToClose } from "@/lib/back-close";
+import { usePageAccess } from "@/lib/page-permissions";
+import type { PageLink } from "@/lib/page-catalog";
 import { toast } from "sonner";
 import { bn } from "@/lib/format";
 
 export const OPEN_AI_CHAT_EVENT = "open-ai-chat-drawer";
 /** opens the chat on a check-in question, e.g. today's attendance (detail: { ask: "attendance" }) */
 export const AI_ASK_EVENT = "ai-chat-ask";
+/** sends a message to the assistant from anywhere (the search bar on every page) */
+export const AI_SEND_EVENT = "ai-chat-send";
+export function sendToAi(text: string) {
+  window.dispatchEvent(new CustomEvent(AI_SEND_EVENT, { detail: { text } }));
+}
 export type AiAsk = AskKind;
 const ASK_KINDS: AskKind[] = ["attendance", "kacha", "day_close", "loans", "morning", "reminders"];
 
@@ -203,6 +211,15 @@ function printChallan(d: any, challanNo?: string) {
 
 export function AiAssistantFab() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { can, isAdmin: adminAccess } = usePageAccess();
+  /** opens a page the assistant was asked for, if this user may see it */
+  const openPage = (page: PageLink): boolean => {
+    const allowed = page.perm === "/preferences" || (page.adminOnly ? adminAccess : can(page.perm));
+    if (!allowed) return false;
+    navigate({ to: page.to as any, search: (page.search ?? {}) as any });
+    return true;
+  };
   const { data: me } = useCurrentUser();
   const isAdmin = me?.role === "admin";
   const [isOpen, setIsOpen] = useState(false);
@@ -264,6 +281,14 @@ export function AiAssistantFab() {
   useEffect(() => {
     const onAsk = (e: Event) => void startAsk(((e as CustomEvent).detail?.ask ?? "attendance") as AiAsk);
     window.addEventListener(AI_ASK_EVENT, onAsk);
+    // the search bar on a page hands its words over: the chat opens and answers them
+    const onSend = (e: Event) => {
+      const text = String((e as CustomEvent).detail?.text ?? "").trim();
+      if (!text) return;
+      setIsOpen(true);
+      window.setTimeout(() => void handleSendRef.current?.(text), 50);
+    };
+    window.addEventListener(AI_SEND_EVENT, onSend);
     // opened from a notification: /?ask=attendance (kacha, day_close, loans, morning, reminders)
     try {
       const url = new URL(window.location.href);
@@ -276,7 +301,10 @@ export function AiAssistantFab() {
     } catch {
       // ignore
     }
-    return () => window.removeEventListener(AI_ASK_EVENT, onAsk);
+    return () => {
+      window.removeEventListener(AI_ASK_EVENT, onAsk);
+      window.removeEventListener(AI_SEND_EVENT, onSend);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -477,6 +505,17 @@ export function AiAssistantFab() {
         : res?.type && res.type !== "QUERY" && res.type !== "UNKNOWN" && res.type !== "ENTRIES" && res.data
           ? [{ type: res.type, data: res.data }]
           : [];
+      if (res?.nav) {
+        const page = res.nav as PageLink;
+        if (openPage(page)) {
+          addAssistant({ text: replyText || `${page.title} খুলছি…` });
+          // the page is what was asked for: the chat steps aside (it keeps the talk)
+          window.setTimeout(() => setIsOpen(false), 350);
+        } else {
+          addAssistant({ text: `"${page.title}" পাতা দেখার অনুমতি আপনার নেই। অ্যাডমিনকে বলুন।` });
+        }
+        return;
+      }
       addAssistant({ text: replyText, entries: list.length ? list : undefined, chips: res?.chips, share: res?.share });
     } catch (err: any) {
       console.error("Chat Error:", err);

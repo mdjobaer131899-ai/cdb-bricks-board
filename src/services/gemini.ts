@@ -9,6 +9,7 @@ import { fetchLoansDueSoon, loanDue } from "@/lib/loan-due";
 import { fetchBookMarks } from "@/lib/book-marks";
 import { DAMAGE_REASONS } from "@/lib/production";
 import { PIECES_PER_TRUCK } from "@/lib/opening-adjust";
+import { PAGE_LINKS, navIntent, pageByKey, type PageLink } from "@/lib/page-catalog";
 import { MISC_PREFIX, MONEY_HEADS, moneyHead, supplierHead, type MoneyKey } from "@/lib/money-heads";
 import { checkVekuDay, type VekuDayInput } from "@/lib/veku-save";
 import {
@@ -103,6 +104,7 @@ export interface AIResponse {
     | "REMINDER"
     | "CUSTOMER"
     | "BOOKING"
+    | "NAVIGATE"
     | "ENTRIES"
     | "QUERY"
     | "UNKNOWN";
@@ -116,6 +118,8 @@ export interface AIResponse {
   chips?: string[];
   /** a person's account was shown: their phone, to send it on WhatsApp */
   share?: { phone: string; name: string };
+  /** "সরদার পৃষ্ঠায় যাও": the page the chat opens */
+  nav?: PageLink;
 }
 
 type Row = Record<string, any>;
@@ -1673,7 +1677,7 @@ from/to সবসময় YYYY-MM-DD। সময় না বললে from/t
 ৬. এক বার্তায় একাধিক এন্ট্রি থাকলে (যেমন "রহিমকে ৫০০, করিমকে ৭০০, চা-নাস্তা ২০০") বা খাতার পাতা/রসিদের ছবিতে অনেক লাইন থাকলে {"type":"ENTRIES","reply":"সংক্ষেপে কী কী পেলে","entries":[{"type":"MONEY","data":{...}},{"type":"MONEY","data":{...}}]} দেবে; প্রতিটি লাইন আলাদা এন্ট্রি, একটাও বাদ দেবে না, দুটো মিলিয়ে একটা করবে না। লাইনগুলো নতুন লাইন, কমা, দাঁড়ি, "তারপর" বা "আর" দিয়ে আলাদা হতে পারে (মুখে বলা হলে দাঁড়ি থাকে না, কথার অর্থ দেখে ভাগ করবে)। পুরো বার্তায় একবার তারিখ বা মাধ্যম বললে (যেমন "গতকালের খরচ", "সব বিকাশে") প্রতিটি এন্ট্রিতে সেটা বসাবে; কোনো লাইনে আলাদা বললে সেই লাইনে সেটাই।
 ${hasAttachment ? "৭. সংযুক্ত ছবি/ফাইলটি মনোযোগ দিয়ে পড়ে (OCR) নাম, পরিমাণ, টাকা বের করে উপযুক্ত এন্ট্রি (অনেক লাইন হলে ENTRIES) প্রস্তুত করবে বা কী লেখা আছে তা বাংলায় বলবে। হাতের লেখার বাংলা অঙ্ক সাবধানে পড়বে।\n" : ""}
 শুধু একটি JSON ফেরত দেবে:
-{"type":"LOOKUP"|"MONEY"|"SALE_CHALLAN"|"BOOKING"|"CUSTOMER"|"KACHA_BRICK"|"ATTENDANCE"|"VEKU_DAY"|"TRANSFER"|"DAY_CLOSE"|"BOOK_MARK"|"REMINDER"|"ENTRIES"|"QUERY","tool":"(শুধু LOOKUP-এ)","args":{},"reply":"বাংলা উত্তর (LOOKUP-এ খালি)","data":{...},"entries":[ (শুধু ENTRIES-এ) ]}
+{"type":"LOOKUP"|"NAVIGATE"|"MONEY"|"SALE_CHALLAN"|"BOOKING"|"CUSTOMER"|"KACHA_BRICK"|"ATTENDANCE"|"VEKU_DAY"|"TRANSFER"|"DAY_CLOSE"|"BOOK_MARK"|"REMINDER"|"ENTRIES"|"QUERY","tool":"(শুধু LOOKUP-এ)","args":{},"reply":"বাংলা উত্তর (LOOKUP-এ খালি)","data":{...},"entries":[ (শুধু ENTRIES-এ) ]}
 data-এর ফিল্ড:
 - MONEY (যেকোনো টাকা আসা বা যাওয়া): head (খাতের key, উপরের তালিকা থেকে), person (নাম, খাতার তালিকার মতো হুবহু), amount (এখন যত টাকা দেওয়া বা পাওয়া হলো), bill (শুধু কিছু কিনলে বা কাজ করালে তার মোট দাম/পাওনা; শুধু টাকা দিলে বা বকেয়া শোধ করলে bill দেবে না), qty, rate, unit, item (কী: মাটি, কয়লা, বিয়ারিং, চা-নাস্তা …), method ("cash" = ড্রয়ার/হাতে নগদ, "bkash", "nagad" = নগদ মোবাইল একাউন্ট, "bank"; না বললে "cash"; কথায় "নগদ দিলাম" মানে হাতে নগদ = "cash"), vekuKind (ভেকুর টাকা: ডিজেল | অটো ভাড়া | চালকের বেতন | মেরামত | যন্ত্রাংশ | মবিল-গ্রীজ | চালকের খরচ | অন্যান্য), driver, paymentType (সরদারে: "advance" = দাদন/অগ্রিম, "payment" = মজুরি), dueDate (ঋণে ফেরত/শোধের তারিখ), date, note
   খাত বাছাই: sale = গ্রাহক টাকা দিল/জমা; openingIn = গত বছরের পাওনা আদায়; ownerInvest = মালিক টাকা দিলেন; loanIn = কারো কাছ থেকে ঋণ নিলাম; loanBack = যাকে ঋণ দিয়েছিলাম সে ফেরত দিল; sardar = সরদারকে মজুরি/দাদন; daily = ডেলি শ্রমিককে; staff = মেস্তুরি, ম্যানেজার, অন্য স্টাফকে বেতন; ownerSalary = মালিকের বেতন; ownerWithdraw = মালিক টাকা তুললেন/নিলেন; raw = মাটি, বালু, কয়লা, তুষ, লাকড়ি, ভাটার ডিজেল (বিক্রেতা বা সাইটের নামসহ); parts = যন্ত্রাংশ, ইঞ্জিনের মাল (দোকানের নাম থাকলে person); veku = ভেকুর ডিজেল, চালকের বেতন, মেরামত (একটা টাকা দিলে); vehicle = গাড়ি/ট্রাক্টরের ট্রিপ ভাড়া (qty = ট্রিপ, rate = প্রতি ট্রিপ); land = জমি ভাড়া; clean = পরিচ্ছন্ন কর্মী; power = বিদ্যুৎ বিল; misc = চা-নাস্তা, খোরাকি, যাতায়াত ও অন্য ছোট খরচ (item বাধ্যতামূলক); asset = স্থায়ী সম্পদ কেনা; loanGive = কাউকে ঋণ দিলাম; loanRepay = নেওয়া ঋণ শোধ দিলাম; openingOut = গত বছরের দেনা শোধ।
@@ -1683,6 +1687,7 @@ data-এর ফিল্ড:
 - SALE_CHALLAN (ইট বিক্রি/চালান): customerName, brickType, quantity, rate (প্রতি পিস দাম), totalAmount, paidAmount, dueAmount, vehicleNumber, driverName, date
 - BOOKING (ঠিক দামে বুকিং: আজ পুরো দাম নিয়ে পরে ঠিক করা দামে ইট দেওয়া, যেমন "করিম ৫ গাড়ি ১ নং ইট বুকিং দিল, প্রতি গাড়ি ১৬ হাজার"): customerName, items [{"brick":"১ নং ইট","trucks":5,"piecesPerTruck":2000,"rate": প্রতি পিসের দাম,"truckPrice": প্রতি গাড়ির দাম বললে}], method, date, note। দাম ঠিক না করে শুধু আগে টাকা দিলে (অগ্রিম টাকা) সেটা বুকিং নয়: MONEY head "sale"; পরে চালান সেদিনের দামে সেই টাকা থেকে কাটবে।
 - CUSTOMER (নতুন গ্রাহক যোগ): name, phone (১১ সংখ্যার মোবাইল), address, note
+- NAVIGATE (অ্যাপের কোনো পাতা খুলতে/সেখানে যেতে বললে): {"type":"NAVIGATE","page":"<key>"}; key: ${PAGE_LINKS.map((p) => `${p.key} = ${p.title}`).join("; ")}
 - KACHA_BRICK (উৎপাদনের ধাপ): step ("production" = কাঁচা ইট তৈরি | "load" = ভাটায় ঢোকানো | "unload" = পাকা ইট বের | "damage" = কাঁচা ইট নষ্ট), mill (মিলের নাম বা নম্বর), sardarName, quantity, rate (প্রতি হাজারে মজুরি, বললে), grades (শুধু unload: [{"brick":"১ নং ইট","quantity":8000}]), reason (damage: বৃষ্টি | শুকানোর সময় ভাঙা | বহনে ভাঙা | অন্যান্য), date
 - VEKU_DAY (ভেকুর এক দিনের হিসাব: ঘণ্টা, ডিজেল, চালক — খাতার এক লাইন): veku (নাম), hours (দশমিকে; ৮ ঘণ্টা ৩০ মিনিট = 8.5), rate (ঘণ্টায়, বললে), driver, litres, dieselPrice (ডিজেলের দাম), dieselPaid (পাম্পে কত দিলেন; বাকিতে নিলে 0), driverPay, auto (ডিজেল আনার অটো ভাড়া দিলে true বা টাকা), khoraki (চালকের খোরাকি দিলে true বা টাকা), method, date, note
 - TRANSFER (নিজেদের এক জায়গা থেকে আরেক জায়গায় টাকা সরানো; খরচ নয়, যেমন "বিকাশ থেকে ২০ হাজার ক্যাশ করলাম"): from, to ("cash" | "bkash" | "nagad" | "bank"), amount, date, note
@@ -3030,6 +3035,13 @@ export const processBrickFieldCommand = async (
   }
 
   if (!hasAttachment && message) {
+    // ০) "সরদার পৃষ্ঠায় যাও", "ভেকুর খাতা খোলো": open the page, no model needed
+    const page = navIntent(message);
+    if (page) {
+      const text = `${page.title} খুলছি…`;
+      remember(message, text);
+      return { ...reply(text, "NAVIGATE"), nav: page };
+    }
     // ক) the answer to a routine the assistant just asked (the drawer count, "হয়ে গেছে")
     const routine = await routineAnswer(message, snapshot).catch((e) => {
       console.warn("[AI] রুটিনের উত্তর:", e);
@@ -3071,6 +3083,14 @@ export const processBrickFieldCommand = async (
         remember(message || "(ছবি/ফাইল)", text);
         const who = String(args.name ?? args.person ?? args.customer ?? "");
         return { ...reply(text), share: parsed.tool === "person" && who ? shareFor(snapshot, who) : undefined };
+      }
+    }
+    if (type === "NAVIGATE") {
+      const page = pageByKey(String(parsed.page ?? parsed.data?.page ?? ""));
+      if (page) {
+        const text = `${page.title} খুলছি…`;
+        remember(message, text);
+        return { ...reply(text, "NAVIGATE"), nav: page };
       }
     }
     if (type === "LOOKUP") {

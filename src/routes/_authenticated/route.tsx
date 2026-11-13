@@ -13,6 +13,7 @@ import { PendingRoleState } from "@/components/pending-role-state";
 import { BrandLogo } from "@/components/brand-logo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiAssistantFab } from "@/components/ai-assistant-fab";
+import { AskBar } from "@/components/ask-bar";
 import { QuickEntrySheet } from "@/components/quick-entry";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -140,6 +141,8 @@ function AuthedLayout() {
             </div>
             <TopMenubar />
             <main className="flex-1 p-3 pb-20 md:p-6 md:pb-6">
+              {/* find a page, a name or a challan, or say what to do (components/ask-bar.tsx) */}
+              <AskBar />
               <GuardedOutlet />
             </main>
           </SidebarInset>
