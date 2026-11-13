@@ -1,15 +1,15 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, ArrowUp, BrickWall, Camera, Copy, FileText, HandCoins, ListChecks, Loader2, Lock, Mic, Paperclip, Save,
-  Share2, Sparkles, SquarePen, Sun, UserCheck, Volume2, VolumeX, Wallet, X,
+  ArrowLeft, ArrowUp, BrickWall, Camera, Copy, FileText, HandCoins, ListChecks, ListPlus, Loader2, Lock, Mic, Paperclip, Save,
+  Share2, Sparkles, SquarePen, UserCheck, Volume2, VolumeX, Wallet, X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import {
   processBrickFieldCommand, saveAiActionToDatabase, startRoutineAsk, getAiHistory, setAiHistory,
   type AIAttachment, type AskKind,
 } from "../services/gemini";
-import { EntryCard, UndoBox, entryTitle, type ChatEntry } from "./ai-entry-card";
+import { BatchList, EntryCard, UndoBox, entryTitle, type ChatEntry } from "./ai-entry-card";
 import { ExpenseEntryDialog, type ExpenseInitial, type HeadKey } from "./expense-entry";
 import { IncomeEntryDialog, type IncomeInitial, type IncomeKey } from "./income-entry";
 import { undoSaved } from "@/lib/ai-entries";
@@ -114,6 +114,21 @@ function shareText(text: string, phone?: string) {
   }
   window.open(`https://wa.me/?text=${encodeURIComponent(body)}`, "_blank");
 }
+
+/** how to give a day's expenses at once (the "একসাথে অনেক খরচ" tile) */
+const BATCH_HELP = [
+  "একসাথে অনেক খরচ দিতে প্রতিটা খরচ আলাদা লাইনে লিখুন (ফোনে এন্টার চাপলে নতুন লাইন হয়), অথবা মাইক চেপে একটার পর একটা বলে যান। যেমন:",
+  "",
+  "চা-নাস্তা ২০০",
+  "করিম সরদারকে দাদন ৫০০০",
+  "রহিম ট্রেডার্স থেকে মাটি ২০ হাজার, ৫ হাজার দিলাম",
+  "বিকাশে বিদ্যুৎ বিল ৪৫০০",
+  "ভেকু ১ ডিজেল ৫৬০০",
+  "",
+  "• সব খরচ গতকালের হলে শুরুতে বলুন \"গতকালের খরচ\"; সব বিকাশে দিলে বলুন \"সব বিকাশে\"।",
+  "• পাঠালে সব লাইন একটা তালিকায় আসবে, উপরে মোট টাকা। কোনো লাইন না বুঝলে সেটা আলাদা করে জিজ্ঞেস করব।",
+  "• কোনো লাইন চেপে দেখে নিন বা বদলান, তারপর \"সব সেভ\"। একবারে ২০টা পর্যন্ত ভালো চলে।",
+].join("\n");
 
 const UNDO_WORDS = /(মুছে দাও|মুছে দিন|মুছে ফেলো|মুছে ফেল|ডিলিট কর|ডিলিট দাও|বাতিল কর)/;
 
@@ -269,40 +284,110 @@ export function AiAssistantFab() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, isOpen]);
 
+  // ---------- voice typing: the words appear in the box as they are said, nothing is sent ----------
+  // The box keeps what was there before the mic started (baseRef); each listening session adds
+  // its words after it. Phones stop listening after a pause, so it starts again until the mic
+  // is tapped off. Some Android versions repeat the whole sentence in every result, so a result
+  // that already holds the text so far replaces it instead of being added again.
+  const listeningRef = useRef(false);
+  const baseRef = useRef("");
+  const sessionText = useRef("");
+  const skipResults = useRef(0);
+  const lastCount = useRef(0);
+  const joinText = (a: string, b: string) => (a && b ? `${a.replace(/\s+$/, "")} ${b.replace(/^\s+/, "")}` : a || b);
+
   useEffect(() => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "bn-BD";
+    recognition.maxAlternatives = 1;
 
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.lang = "bn-BD";
-      recognition.interimResults = false;
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(transcript);
+    recognition.onresult = (event: any) => {
+      lastCount.current = event.results.length;
+      let acc = "";
+      for (let i = skipResults.current; i < event.results.length; i++) {
+        const t = String(event.results[i][0]?.transcript ?? "").trim();
+        if (!t) continue;
+        if (acc && t.startsWith(acc)) acc = t;
+        else if (acc.endsWith(t)) continue;
+        else acc = acc ? `${acc} ${t}` : t;
+      }
+      sessionText.current = acc;
+      setInput(joinText(baseRef.current, acc));
+    };
+    recognition.onerror = (e: any) => {
+      const err = String(e?.error ?? "");
+      if (err === "not-allowed" || err === "service-not-allowed") {
+        listeningRef.current = false;
         setIsListening(false);
-        handleSendRef.current?.(transcript);
-      };
-
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
-      recognitionRef.current = recognition;
-    }
+        toast.error("মাইক ব্যবহারের অনুমতি দিন (ব্রাউজারের সেটিংসে)।");
+      } else if (err === "network") {
+        listeningRef.current = false;
+        setIsListening(false);
+        toast.error("ইন্টারনেট ছাড়া মুখে বলা যাচ্ছে না।");
+      }
+      // "no-speech" / "aborted": onend starts it again while the mic is on
+    };
+    recognition.onend = () => {
+      // keep what this session heard, then listen again if the mic is still on
+      baseRef.current = joinText(baseRef.current, sessionText.current);
+      sessionText.current = "";
+      skipResults.current = 0;
+      lastCount.current = 0;
+      if (listeningRef.current) {
+        window.setTimeout(() => {
+          if (!listeningRef.current) return;
+          try { recognition.start(); } catch { /* already running */ }
+        }, 200);
+      } else {
+        setIsListening(false);
+      }
+    };
+    recognitionRef.current = recognition;
+    return () => {
+      listeningRef.current = false;
+      try { recognition.abort(); } catch { /* not running */ }
+    };
   }, []);
+
+  const stopListening = () => {
+    if (!listeningRef.current) return;
+    listeningRef.current = false;
+    setIsListening(false);
+    try { recognitionRef.current?.stop(); } catch { /* not running */ }
+  };
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      toast.message("ভয়েস টাইপিংয়ের জন্য মোবাইলের কিবোর্ডের মাইক বাটনটি ব্যবহার করুন।");
+      toast.message("এই ব্রাউজারে মুখে বলা যায় না। মোবাইলের কিবোর্ডের মাইক বোতাম ব্যবহার করুন।");
       return;
     }
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      setIsListening(true);
-      recognitionRef.current.start();
+    if (listeningRef.current) {
+      stopListening();
+      // the text stays in the box to be checked and changed before sending
+      window.setTimeout(() => boxRef.current?.focus(), 150);
+      return;
+    }
+    baseRef.current = input;
+    sessionText.current = "";
+    skipResults.current = 0;
+    listeningRef.current = true;
+    setIsListening(true);
+    try { recognitionRef.current.start(); } catch { /* already running */ }
+  };
+
+  /** typing in the box while the mic is on: the typed text becomes the new start */
+  const onBoxChange = (v: string) => {
+    setInput(v);
+    if (listeningRef.current) {
+      baseRef.current = v;
+      sessionText.current = "";
+      // results heard so far in this session are already in the box
+      skipResults.current = lastCount.current;
     }
   };
 
@@ -353,6 +438,9 @@ export function AiAssistantFab() {
   const handleSend = async (customText?: string) => {
     const textToSend = (customText ?? input).trim();
     if ((!textToSend && !attachment) || loading) return;
+    // sending ends voice typing; the next tap on the mic starts a fresh text
+    stopListening();
+    baseRef.current = "";
 
     const currentAttachment = attachment;
     const userMsg: Message = {
@@ -516,7 +604,7 @@ export function AiAssistantFab() {
     const el = boxRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 168)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, Math.max(168, Math.round(window.innerHeight * 0.4)))}px`;
   }, [input, isOpen]);
 
   const empty = messages.length <= 1;
@@ -530,7 +618,7 @@ export function AiAssistantFab() {
     { icon: BrickWall, label: "আজকের কাঁচা ইট লিখি", run: () => void startAsk("kacha") },
     { icon: Lock, label: "দিন বন্ধ করি", run: () => void startAsk("day_close") },
     { icon: HandCoins, label: "কার কাছে কত বাকি?", run: () => void handleSend("কার কাছে কত বাকি?") },
-    { icon: Sun, label: "সকালের হিসাব", run: () => void startAsk("morning") },
+    { icon: ListPlus, label: "একসাথে অনেক খরচ", run: () => { addAssistant({ text: BATCH_HELP }); window.setTimeout(() => boxRef.current?.focus(), 200); } },
     { icon: Camera, label: "খাতার পাতা স্ক্যান", run: () => cameraInputRef.current?.click() },
   ];
   const canSend = !loading && (!!input.trim() || !!attachment);
@@ -663,27 +751,41 @@ export function AiAssistantFab() {
                               return <UndoBox onUndo={(pw) => undoEntry(ti, tj, pw)} />;
                             })()}
 
-                            {(m.entries ?? []).map((e, ei) => (
-                              <EntryCard
-                                key={ei}
-                                entry={e}
-                                busy={savingKey === `${idx}:${ei}`}
-                                isAdmin={isAdmin}
-                                onChange={(data) => patchEntry(idx, ei, { data })}
-                                onSave={() => void saveEntry(idx, ei)}
-                                onOpenForm={e.type === "MONEY" ? () => openForm(idx, ei) : undefined}
-                                onUndo={(pw) => undoEntry(idx, ei, pw)}
-                                onPrint={e.type === "SALE_CHALLAN" ? () => printChallan(e.data, e.challanNo) : undefined}
-                              />
-                            ))}
-
-                            {pending > 1 && (
-                              <Button size="sm" disabled={savingKey !== null} onClick={() => void saveAll(idx)}
-                                className="mt-3 h-11 w-full rounded-2xl text-sm font-bold">
-                                {savingKey !== null ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
-                                সব সেভ ({bn(pending)}টা)
-                              </Button>
-                            )}
+                            {(() => {
+                              const card = (ei: number) => {
+                                const e = m.entries![ei];
+                                return (
+                                  <EntryCard
+                                    key={ei}
+                                    entry={e}
+                                    busy={savingKey === `${idx}:${ei}`}
+                                    isAdmin={isAdmin}
+                                    onChange={(data) => patchEntry(idx, ei, { data })}
+                                    onSave={() => void saveEntry(idx, ei)}
+                                    onOpenForm={e.type === "MONEY" ? () => openForm(idx, ei) : undefined}
+                                    onUndo={(pw) => undoEntry(idx, ei, pw)}
+                                    onPrint={e.type === "SALE_CHALLAN" ? () => printChallan(e.data, e.challanNo) : undefined}
+                                  />
+                                );
+                              };
+                              const list = m.entries ?? [];
+                              // a long list (a day's expenses at once): one line each, opened on a tap
+                              if (list.length > 3) {
+                                return <BatchList entries={list} saving={savingKey !== null} onSaveAll={() => void saveAll(idx)} renderCard={card} />;
+                              }
+                              return (
+                                <>
+                                  {list.map((_e, ei) => card(ei))}
+                                  {pending > 1 && (
+                                    <Button size="sm" disabled={savingKey !== null} onClick={() => void saveAll(idx)}
+                                      className="mt-3 h-11 w-full rounded-2xl text-sm font-bold">
+                                      {savingKey !== null ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+                                      সব সেভ ({bn(pending)}টা)
+                                    </Button>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -726,17 +828,32 @@ export function AiAssistantFab() {
                   ref={boxRef}
                   rows={1}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => onBoxChange(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      void handleSend();
-                    }
+                    // a computer sends on Enter (Shift+Enter = new line); a phone's Enter is a new
+                    // line, so a list of expenses can be written one per line and sent with the button
+                    if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+                    let touch = false;
+                    try { touch = window.matchMedia("(pointer: coarse)").matches; } catch { /* old browser */ }
+                    if (touch) return;
+                    e.preventDefault();
+                    void handleSend();
                   }}
+                  enterKeyHint="enter"
                   disabled={loading}
-                  placeholder={isListening ? "শুনছি… বলুন" : attachment ? "ছবিটা সম্পর্কে কিছু লিখুন, বা সরাসরি পাঠান" : "সহকারীকে লিখুন বা মাইকে বলুন…"}
-                  className="block max-h-[168px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/80"
+                  placeholder={isListening ? "বলুন… কথাগুলো এখানে লেখা হতে থাকবে" : attachment ? "ছবিটা সম্পর্কে কিছু লিখুন, বা সরাসরি পাঠান" : "সহকারীকে লিখুন বা মাইকে বলুন…"}
+                  className="block max-h-[40vh] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/80"
                 />
+                {isListening && (
+                  <div className="flex items-center gap-2 px-4 pb-1 text-xs font-medium text-destructive" aria-live="polite">
+                    <span className="flex h-3 items-end gap-0.5" aria-hidden>
+                      <span className="w-0.5 animate-pulse rounded-full bg-destructive [animation-delay:-0.4s] h-1.5" />
+                      <span className="w-0.5 animate-pulse rounded-full bg-destructive [animation-delay:-0.2s] h-3" />
+                      <span className="w-0.5 animate-pulse rounded-full bg-destructive h-2" />
+                    </span>
+                    শুনছি — বলা শেষ হলে মাইক চাপুন, লেখা ঠিক করে পাঠান
+                  </div>
+                )}
                 <div className="flex items-center gap-1 px-2 pb-2">
                   <button type="button" title="ক্যামেরা দিয়ে খাতা বা রসিদ" aria-label="ক্যামেরা" disabled={loading}
                     onClick={() => cameraInputRef.current?.click()}

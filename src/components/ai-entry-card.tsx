@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { CheckCircle, FileEdit, Loader2, Pencil, Printer, Save, Trash2 } from "lucide-react";
+import { CheckCircle, ChevronDown, FileEdit, Loader2, Pencil, Printer, Save, Trash2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { bn, bnDate } from "@/lib/format";
@@ -446,6 +446,93 @@ export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, 
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** the money of one card for a batch's total: what leaves and what comes in now */
+function entryMoney(e: ChatEntry): { out: number; in: number; label: string } {
+  const d = e.data ?? {};
+  switch (e.type) {
+    case "MONEY": {
+      const isIn = moneyHead(d.head as MoneyKey)?.group === "in";
+      const amount = num(d.amount);
+      const label = amount > 0 ? tk(amount) : num(d.bill) > 0 ? `বিল ${tk(num(d.bill))}` : "—";
+      return isIn ? { out: 0, in: amount, label } : { out: amount, in: 0, label };
+    }
+    case "VEKU_DAY": {
+      const out = num(d.paid) + num(d.driverPay) + num(d.auto) + num(d.khoraki);
+      return { out, in: 0, label: out > 0 ? tk(out) : `${bn(num(d.hours))} ঘণ্টা` };
+    }
+    case "BOOKING": {
+      const v = bookingValue({ items: (d.items ?? []).map((i: any) => ({ ...i, trucks: num(i.trucks), perTruck: num(i.perTruck), rate: num(i.rate) })) });
+      return { out: 0, in: v, label: tk(v) };
+    }
+    case "SALE_CHALLAN": return { out: 0, in: num(d.paidAmount), label: `${bn(num(d.quantity))} পিস` };
+    case "KACHA_BRICK": return { out: 0, in: 0, label: `${bn(num(d.quantity))} পিস` };
+    case "TRANSFER": return { out: 0, in: 0, label: tk(num(d.amount)) };
+    case "DAY_CLOSE": return { out: 0, in: 0, label: tk(num(d.counted)) };
+    default: return { out: 0, in: 0, label: "" };
+  }
+}
+
+/**
+ * Many cards from one message (a list of expenses said or written together, or a ledger
+ * page): one line each with its amount, the totals on top, "সব সেভ" at the top and the
+ * bottom; a line opens into its full card to check or change it.
+ */
+export function BatchList({ entries, saving, onSaveAll, renderCard }: {
+  entries: ChatEntry[];
+  saving: boolean;
+  onSaveAll: () => void;
+  renderCard: (index: number) => ReactNode;
+}) {
+  const [open, setOpen] = useState<number | null>(null);
+  const live = entries.filter((e) => !e.undone);
+  const pending = entries.filter((e) => !e.saved).length;
+  const out = live.reduce((a, e) => a + entryMoney(e).out, 0);
+  const inn = live.reduce((a, e) => a + entryMoney(e).in, 0);
+  const saveBtn = (cls: string) => (
+    <Button size="sm" disabled={saving || !pending} onClick={onSaveAll} className={`h-11 w-full rounded-2xl text-sm font-bold ${cls}`}>
+      {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+      {pending ? `সব সেভ (${bn(pending)}টা)` : "সব খাতায় উঠেছে"}
+    </Button>
+  );
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border bg-card shadow-xs">
+      <div className="space-y-2 border-b p-3.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-sm font-semibold">{bn(entries.length)}টা এন্ট্রি</span>
+          <span className="num text-xs text-muted-foreground">
+            {out > 0 && <>গেছে <b className="text-foreground">{tk(out)}</b></>}
+            {out > 0 && inn > 0 && " · "}
+            {inn > 0 && <>এসেছে <b className="text-foreground">{tk(inn)}</b></>}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">প্রতিটা লাইন চেপে দেখে নিন বা বদলান, তারপর সব একসাথে সেভ করুন।</p>
+        {pending > 0 && saveBtn("")}
+      </div>
+      <ul className="divide-y">
+        {entries.map((e, i) => {
+          const m = entryMoney(e);
+          const isOpen = open === i;
+          return (
+            <li key={i}>
+              <button type="button" onClick={() => setOpen(isOpen ? null : i)} aria-expanded={isOpen}
+                className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left hover:bg-muted/50">
+                <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold ${e.undone ? "bg-muted text-muted-foreground" : e.saved ? "bg-emerald-600 text-white" : "border border-primary/50 text-primary"}`}>
+                  {e.undone ? "✕" : e.saved ? "✓" : bn(i + 1)}
+                </span>
+                <span className={`min-w-0 flex-1 truncate text-[13px] ${e.undone ? "text-muted-foreground line-through" : "font-medium"}`}>{entryTitle(e)}</span>
+                <span className="num shrink-0 text-[13px] font-semibold">{m.label}</span>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition ${isOpen ? "rotate-180" : ""}`} />
+              </button>
+              {isOpen && <div className="px-2.5 pb-3">{renderCard(i)}</div>}
+            </li>
+          );
+        })}
+      </ul>
+      {pending > 0 && <div className="border-t p-3">{saveBtn("")}</div>}
     </div>
   );
 }
