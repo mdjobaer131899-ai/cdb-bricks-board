@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatHero, StatFigure, StatTiles, StatTile } from "@/components/stat-hero";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { fetchProfitLoss, type PLLine } from "@/lib/pl-queries";
 import { COST_GROUPS, GROUP_LABEL, MONEY_HEADS, TONE_CLASS, headLink, moneyHead, type MoneyKey } from "@/lib/money-heads";
@@ -163,26 +164,19 @@ function ProfitPage() {
       </div>
 
       {/* the one profit figure */}
-      <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-        <div className="text-xs font-bold tracking-[0.12em] text-stone-300">{rangeText} · {profit >= 0 ? "লাভ" : "ক্ষতি"}</div>
+      <StatHero icon={profit >= 0 ? TrendingUp : TrendingDown} label={profit >= 0 ? "লাভ" : "ক্ষতি"} tag={rangeText}>
         {pl.isLoading ? (
-          <Skeleton className="mt-3 h-10 w-48 bg-white/10" />
+          <Skeleton className="mt-3 h-10 w-48" />
         ) : (
-          <div className={`mt-2 font-display num text-[40px] font-extrabold leading-[0.95] tracking-tight ${profit >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+          <StatFigure tone={profit >= 0 ? "in" : "out"}>
             {profit >= 0 ? "" : "−"}{tk(Math.abs(profit))}
-          </div>
+          </StatFigure>
         )}
-        <div className="mt-3.5 grid grid-cols-2 gap-2">
-          <Link to="/challans" className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="flex items-center gap-1 text-xs font-semibold text-emerald-200"><TrendingUp className="h-3.5 w-3.5" />ইট বিক্রি</div>
-            <div className="num text-lg font-bold text-emerald-300">{tk(d?.sales ?? 0)}</div>
-          </Link>
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="flex items-center gap-1 text-xs font-semibold text-red-200"><TrendingDown className="h-3.5 w-3.5" />মোট খরচ</div>
-            <div className="num text-lg font-bold text-red-300">{tk(d?.totalCost ?? 0)}</div>
-          </div>
-        </div>
-      </section>
+        <StatTiles>
+          <StatTile to="/challans" icon={TrendingUp} label="ইট বিক্রি" value={tk(d?.sales ?? 0)} tone="in" />
+          <StatTile icon={TrendingDown} label="মোট খরচ" value={tk(d?.totalCost ?? 0)} tone="out" />
+        </StatTiles>
+      </StatHero>
 
       {/* costs by group and head */}
       {pl.isLoading ? (

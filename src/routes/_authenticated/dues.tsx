@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowUpRight, ChevronRight, Printer } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronRight, Printer, Scale } from "lucide-react";
+import { StatHero, StatFigure, StatTiles, StatTile, StatNote } from "@/components/stat-hero";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -96,23 +97,16 @@ function DuesPage() {
         )
       ) : (
         <>
-          <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-            <div className="text-xs font-bold tracking-[0.12em] text-stone-300">সব মিলিয়ে আমরা {net >= 0 ? "পাব" : "দেব"}</div>
-            <div className={`mt-2 font-display num text-[40px] font-extrabold leading-[0.95] tracking-tight ${net >= 0 ? "text-emerald-300" : "text-red-300"}`}>{tk(Math.abs(net))}</div>
-            <div className="mt-3.5 grid grid-cols-2 gap-2">
-              <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-                <div className="text-xs font-semibold text-emerald-200">আমরা পাব</div>
-                <div className="num text-lg font-bold text-emerald-300">{tk(rTotal)}</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-                <div className="text-xs font-semibold text-red-200">আমরা দেব</div>
-                <div className="num text-lg font-bold text-red-300">{tk(pTotal)}</div>
-              </div>
-            </div>
+          <StatHero icon={Scale} label={`সব মিলিয়ে আমরা ${net >= 0 ? "পাব" : "দেব"}`}>
+            <StatFigure tone={net >= 0 ? "in" : "out"}>{tk(Math.abs(net))}</StatFigure>
+            <StatTiles>
+              <StatTile icon={ArrowDownLeft} label="আমরা পাব" value={tk(rTotal)} tone="in" />
+              <StatTile icon={ArrowUpRight} label="আমরা দেব" value={tk(pTotal)} tone="out" />
+            </StatTiles>
             {brickOwed > 0.5 && (
-              <div className="num mt-2 text-xs text-stone-300">"আমরা দেব"-র মধ্যে {tk(brickOwed)} টাকা নয়, ইট দিয়ে শোধ হবে (গ্রাহকের অগ্রিম)। টাকায় দেনা {tk(pTotal - brickOwed)}।</div>
+              <StatNote>"আমরা দেব"-র মধ্যে {tk(brickOwed)} টাকা নয়, ইট দিয়ে শোধ হবে (গ্রাহকের অগ্রিম)। টাকায় দেনা {tk(pTotal - brickOwed)}।</StatNote>
             )}
-          </section>
+          </StatHero>
           <Col title="আমরা পাব" lines={dues.receive} total={rTotal} tone="in" />
           <Col title="আমরা দেব" lines={dues.pay} total={pTotal} tone="out" />
           <p className="px-1 text-xs text-muted-foreground">

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RateDialog, StepBar } from "@/components/kacha-step-page";
+import { StatHero, StatFigure, StatTiles, StatTile } from "@/components/stat-hero";
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchActiveBrickTypes } from "@/lib/sales-queries";
@@ -189,20 +190,13 @@ function UnloadStepPage() {
 
       <Card><CardContent className="p-4"><StepBar current="unload" /></CardContent></Card>
 
-      <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-        <div className="text-xs font-bold tracking-[0.12em] text-stone-300">মোট বের করা · এই সিজন</div>
-        <div className="mt-2 font-display num text-[36px] font-extrabold leading-none">{bn(totals.qty)} <span className="text-base font-bold text-stone-300">পিস</span></div>
-        <div className="mt-3.5 grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="text-xs font-semibold text-stone-300">আজ</div>
-            <div className="num text-base font-bold">{bn(totals.todayQty)}</div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="text-xs font-semibold text-stone-300">আনলোড মজুরি</div>
-            <div className="num text-base font-bold text-amber-200">{tk(totals.wage)}</div>
-          </div>
-        </div>
-      </section>
+      <StatHero icon={ArrowUpFromLine} label="মোট বের করা" tag="এই সিজন">
+        <StatFigure unit="পিস">{bn(totals.qty)}</StatFigure>
+        <StatTiles>
+          <StatTile label="আজ" value={bn(totals.todayQty)} />
+          <StatTile label="আনলোড মজুরি" value={tk(totals.wage)} tone="money" />
+        </StatTiles>
+      </StatHero>
 
       {/* Grade mix */}
       <section className="rounded-[20px] border bg-card p-4">

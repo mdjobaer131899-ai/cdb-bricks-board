@@ -6,6 +6,7 @@ import { useCurrentUser } from "@/lib/use-current-user";
 import { currentPushSubscription, disablePush, enablePush, pushPermission, sendTestPush } from "@/lib/push";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatHero, StatTiles, StatTile } from "@/components/stat-hero";
 import { SignalCard, useKilnForecast } from "@/components/weather-signals";
 import { KILN_WEATHER_RULES, dryingDay, kilnBnTime, kilnSignals, kilnWeatherText, upcomingHours } from "@/lib/kiln-weather";
 import { bn, bnDate } from "@/lib/format";
@@ -61,36 +62,26 @@ function WeatherPage() {
       ) : (
         <>
           {/* Now */}
-          <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-            <div className="text-xs font-bold tracking-[0.12em] text-stone-300">এখন</div>
+          <StatHero icon={CloudSun} label="এখন">
             <div className="mt-1 flex items-end justify-between gap-3">
               <div>
                 <div className="font-display num text-[44px] font-extrabold leading-none">{bn(f.current.temp)}°</div>
-                <div className="mt-1 text-sm text-stone-300">অনুভূত {bn(f.current.feels)}° · {kilnWeatherText(f.current.code)}</div>
+                <div className="mt-1 text-sm text-muted-foreground">অনুভূত {bn(f.current.feels)}° · {kilnWeatherText(f.current.code)}</div>
               </div>
               {today && (
-                <div className="text-right text-xs text-stone-300">
+                <div className="text-right text-xs text-muted-foreground">
                   <div>সর্বোচ্চ {bn(today.max)}° / সর্বনিম্ন {bn(today.min)}°</div>
                   <div className="mt-1 flex items-center justify-end gap-1"><Sunrise className="h-3.5 w-3.5" />{kilnBnTime(today.sunrise)}</div>
                   <div className="flex items-center justify-end gap-1"><Sunset className="h-3.5 w-3.5" />{kilnBnTime(today.sunset)}</div>
                 </div>
               )}
             </div>
-            <div className="mt-3.5 grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
-                <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-stone-300"><Droplets className="h-3.5 w-3.5" />আর্দ্রতা</div>
-                <div className="num text-base font-bold">{bn(f.current.humidity)}%</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
-                <div className="flex items-center justify-center gap-1 text-[11px] font-semibold text-stone-300"><Wind className="h-3.5 w-3.5" />দমকা হাওয়া</div>
-                <div className="num text-base font-bold">{bn(f.current.gust)} কিমি</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
-                <div className="text-[11px] font-semibold text-stone-300">আজ বৃষ্টি</div>
-                <div className="num text-base font-bold">{bn(today?.rainProb ?? 0)}%</div>
-              </div>
-            </div>
-          </section>
+            <StatTiles cols={3}>
+              <StatTile center icon={Droplets} label="আর্দ্রতা" value={`${bn(f.current.humidity)}%`} />
+              <StatTile center icon={Wind} label="দমকা হাওয়া" value={`${bn(f.current.gust)} কিমি`} />
+              <StatTile center label="আজ বৃষ্টি" value={`${bn(today?.rainProb ?? 0)}%`} tone={(today?.rainProb ?? 0) >= 40 ? "advance" : "plain"} />
+            </StatTiles>
+          </StatHero>
 
           <PushCard />
 

@@ -10,6 +10,7 @@ import { NameCombo } from "@/components/ui/name-combo";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatHero, StatFigure, StatTiles, StatTile, StatNote } from "@/components/stat-hero";
 import { supabase } from "@/integrations/supabase/client";
 import { getSeasonRange } from "@/lib/season-db";
 import { fetchAllRows } from "@/lib/fetch-all";
@@ -206,31 +207,21 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
         </Button>
       </div>
 
-      <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-        <div className="text-xs font-bold tracking-[0.12em] text-stone-300">মোট বাকি · {cfg.person}দের পাওনা</div>
-        {loading ? <Skeleton className="mt-3 h-10 w-40 bg-white/10" /> : (
-          <div className={`mt-2 font-display num text-[40px] font-extrabold leading-none ${total.due < 0 ? "text-sky-300" : ""}`}>
+      <StatHero icon={cfg.icon} label={`মোট বাকি · ${cfg.person}দের পাওনা`}>
+        {loading ? <Skeleton className="mt-3 h-10 w-40" /> : (
+          <StatFigure tone={total.due < 0 ? "advance" : "plain"}>
             {total.due < 0 ? "অগ্রিম " : ""}{tk(Math.abs(total.due))}
-          </div>
+          </StatFigure>
         )}
-        <div className="mt-3.5 grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
-            <div className="text-[11px] font-semibold text-stone-300">{cfg.trips ? "এই মৌসুমে ট্রিপ" : "পূর্বের বকেয়া"}</div>
-            <div className="num text-sm font-bold">{cfg.trips ? bn(total.trips) : tk(total.prev)}</div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
-            <div className="text-[11px] font-semibold text-stone-300">{cfg.billLong}</div>
-            <div className="num text-sm font-bold">{tk(total.rent)}</div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-2 py-2">
-            <div className="text-[11px] font-semibold text-emerald-200">পরিশোধ</div>
-            <div className="num text-sm font-bold text-emerald-300">{tk(total.paid)}</div>
-          </div>
-        </div>
+        <StatTiles cols={3}>
+          <StatTile center label={cfg.trips ? "এই মৌসুমে ট্রিপ" : "পূর্বের বকেয়া"} value={cfg.trips ? bn(total.trips) : tk(total.prev)} />
+          <StatTile center label={cfg.billLong} value={tk(total.rent)} />
+          <StatTile center label="পরিশোধ" value={tk(total.paid)} tone="in" />
+        </StatTiles>
         {cfg.trips && total.prev > 0 && (
-          <div className="num mt-2 text-xs text-stone-300">পূর্বের বকেয়া {tk(total.prev)} বাকির মধ্যে ধরা আছে</div>
+          <StatNote>পূর্বের বকেয়া {tk(total.prev)} বাকির মধ্যে ধরা আছে</StatNote>
         )}
-      </section>
+      </StatHero>
 
       <div className="grid grid-cols-2 gap-2">
         <Button className="h-12 gap-2 rounded-2xl text-base font-bold" disabled={owners.length === 0} onClick={() => setEntry({ focus: "pay" })}>

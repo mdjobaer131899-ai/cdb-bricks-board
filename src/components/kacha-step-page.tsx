@@ -22,6 +22,7 @@ import {
 } from "@/lib/production";
 import { toast } from "sonner";
 import { PotBoard } from "@/components/pot-board";
+import { StatHero, StatFigure, StatTiles, StatTile } from "@/components/stat-hero";
 
 export type KachaStep = "production" | "load" | "damage";
 
@@ -230,26 +231,14 @@ export function KachaStepPage({ step, title, subtitle, icon: Icon, totalLabel, q
       <Card><CardContent className="p-4"><StepBar current={step} /></CardContent></Card>
 
       {/* Totals */}
-      <section className="bg-brick-pattern relative overflow-hidden rounded-[20px] bg-ink p-[18px] text-ink-foreground">
-        <div className="text-xs font-bold tracking-[0.12em] text-stone-300">{totalLabel} · এই সিজন</div>
-        <div className="mt-2 font-display num text-[36px] font-extrabold leading-none">{bn(totals.qty)} <span className="text-base font-bold text-stone-300">পিস</span></div>
-        <div className={`mt-3.5 grid gap-2 ${isMillStep ? "grid-cols-3" : "grid-cols-2"}`}>
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="text-xs font-semibold text-stone-300">আজ</div>
-            <div className="num text-base font-bold">{bn(totals.todayQty)}</div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-            <div className="text-xs font-semibold text-stone-300">মজুরি</div>
-            <div className="num text-base font-bold text-amber-200">{tk(totals.amount)}</div>
-          </div>
-          {isMillStep && (
-            <div className="rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2">
-              <div className="text-xs font-semibold text-red-200">নষ্ট</div>
-              <div className="num text-base font-bold text-red-300">{bn(totals.damaged)}</div>
-            </div>
-          )}
-        </div>
-      </section>
+      <StatHero icon={Icon} label={totalLabel} tag="এই সিজন">
+        <StatFigure unit="পিস">{bn(totals.qty)}</StatFigure>
+        <StatTiles cols={isMillStep ? 3 : 2}>
+          <StatTile label="আজ" value={bn(totals.todayQty)} />
+          <StatTile label="মজুরি" value={tk(totals.amount)} tone="money" />
+          {isMillStep && <StatTile label="নষ্ট" value={bn(totals.damaged)} tone={totals.damaged > 0 ? "out" : "plain"} />}
+        </StatTiles>
+      </StatHero>
 
       {/* Actions */}
       <div className={`grid gap-2 ${isMillStep ? "grid-cols-2" : "grid-cols-1"}`}>
