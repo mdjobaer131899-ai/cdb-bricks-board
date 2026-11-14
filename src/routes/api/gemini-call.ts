@@ -9,15 +9,15 @@ const json = (body: unknown, status = 200) =>
 
 type Part = { text: string } | { inlineData: { mimeType: string; data: string } };
 
-// দ্রুত ও কম ভিড়ের মডেল আগে। যেটা আগে উত্তর দেবে, সেটাই নেওয়া হবে।
-const MODELS: { name: string; delay: number }[] = [
-  { name: "gemini-3.5-flash-lite", delay: 0 },
-  { name: "gemini-3.1-flash-lite", delay: 2000 },
-  { name: "gemini-3.5-flash", delay: 4000 },
-  { name: process.env.GEMINI_MODEL || "gemini-3.8-flash", delay: 6000 },
-];
-
-const OVERALL_TIMEOUT_MS = 25000;
+// The same order as the ai-brain Edge Function (the app's first route): the stronger model first,
+// the next one at once when it fails or after a wait when it is slow; photos to the Pro model first.
+const list = (v: string | undefined, fallback: string[]) => {
+  const xs = (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  return xs.length ? xs : fallback;
+};
+const TEXT_MODELS = list(process.env.GEMINI_TEXT_MODELS, [process.env.GEMINI_MODEL || "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
+const FILE_MODELS = list(process.env.GEMINI_FILE_MODELS, ["gemini-3.1-pro-preview", "gemini-3.8-flash", "gemini-3.5-flash-lite"]);
+const PLAN = { text: { wait: 8000, overall: 22000 }, file: { wait: 15000, overall: 42000 } };
 
 export const Route = createFileRoute("/api/gemini-call")({
   server: {
@@ -70,57 +70,59 @@ export const Route = createFileRoute("/api/gemini-call")({
           let lastError: unknown = null;
 
           try {
+            const hasFile = parts.length > 1;
+            const models = hasFile ? FILE_MODELS : TEXT_MODELS;
+            const plan = hasFile ? PLAN.file : PLAN.text;
+            const runModel = async (name: string) => {
+              const config: Record<string, unknown> = { responseMimeType: "application/json" };
+              // lite মডেলে চিন্তার মাত্রা বদলানোর দরকার নেই
+              if (!name.includes("lite")) config.thinkingConfig = { thinkingLevel: "low" };
+              const res = await ai.models.generateContent({ model: name, contents: [{ role: "user", parts }], config: config as never });
+              const text = (res.text ?? "").trim();
+              if (!text) throw new Error("EMPTY");
+              return text;
+            };
             const result = await new Promise<{ text: string; model: string }>((resolve, reject) => {
+              const timers = new Set<ReturnType<typeof setTimeout>>();
               let finished = false;
-              let pending = MODELS.length;
-
-              const overall = setTimeout(() => {
-                if (!finished) {
-                  finished = true;
-                  reject(new Error("TIMEOUT"));
+              let next = 0;
+              let running = 0;
+              const finish = (fn: () => void) => {
+                if (finished) return;
+                finished = true;
+                clearTimeout(overall);
+                timers.forEach((t) => clearTimeout(t));
+                fn();
+              };
+              const overall = setTimeout(() => finish(() => reject(new Error("TIMEOUT"))), plan.overall);
+              const start = () => {
+                if (finished || next >= models.length) return;
+                const name = models[next++];
+                running++;
+                let timer: ReturnType<typeof setTimeout> | undefined;
+                if (next < models.length) {
+                  timer = setTimeout(() => { timers.delete(timer!); start(); }, plan.wait);
+                  timers.add(timer);
                 }
-              }, OVERALL_TIMEOUT_MS);
-
-              for (const m of MODELS) {
-                setTimeout(async () => {
-                  if (finished) {
-                    pending--;
-                    return;
-                  }
-                  try {
-                    const config: Record<string, unknown> = {
-                      responseMimeType: "application/json",
-                    };
-                    // lite মডেলে চিন্তার মাত্রা বদলানোর দরকার নেই
-                    if (!m.name.includes("lite")) {
-                      config.thinkingConfig = { thinkingLevel: "low" };
-                    }
-                    const res = await ai.models.generateContent({
-                      model: m.name,
-                      contents: [{ role: "user", parts }],
-                      config: config as never,
-                    });
-                    if (!finished) {
-                      finished = true;
-                      clearTimeout(overall);
-                      resolve({ text: res.text ?? "", model: m.name });
-                    }
-                  } catch (e) {
+                runModel(name).then(
+                  (text) => finish(() => resolve({ text, model: name })),
+                  (e) => {
                     lastError = e;
+                    running--;
+                    if (finished) return;
                     const status = (e as { status?: number })?.status;
-                    console.warn(
-                      `[/api/gemini-call] মডেল ${m.name} কাজ করেনি (status: ${status ?? "?"}) ${Date.now() - started}ms`,
-                    );
-                  } finally {
-                    pending--;
-                    if (pending <= 0 && !finished) {
-                      finished = true;
-                      clearTimeout(overall);
-                      reject(lastError ?? new Error("ALL_FAILED"));
+                    console.warn(`[/api/gemini-call] মডেল ${name} কাজ করেনি (status: ${status ?? "?"}) ${Date.now() - started}ms`);
+                    if (timer !== undefined && timers.has(timer)) {
+                      clearTimeout(timer);
+                      timers.delete(timer);
+                      start();
+                    } else if (running <= 0 && next >= models.length) {
+                      finish(() => reject(lastError ?? new Error("ALL_FAILED")));
                     }
-                  }
-                }, m.delay);
-              }
+                  },
+                );
+              };
+              start();
             });
 
             console.log(`[/api/gemini-call] ঠিক আছে, ${Date.now() - started}ms, মডেল: ${result.model}`);

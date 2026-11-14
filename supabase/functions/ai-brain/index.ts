@@ -12,14 +12,71 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "content-type": "application/json" } });
 
-// দ্রুত ও কম ভিড়ের মডেল আগে; একটু পরপর পরেরটা শুরু হয়, যেটা আগে উত্তর দেয় সেটাই নেওয়া হয়
-const MODELS: { name: string; delay: number }[] = [
-  { name: "gemini-3.5-flash-lite", delay: 0 },
-  { name: "gemini-3.1-flash-lite", delay: 1500 },
-  { name: "gemini-3.5-flash", delay: 3000 },
-  { name: Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash", delay: 4500 },
-];
-const OVERALL_TIMEOUT_MS = 22_000;
+// The stronger model answers first. If it fails, the next one starts at once; if it is slow, the
+// next one also starts after a wait, and the first answer is taken. Photos and ledger pages go to
+// the Pro model first: it needs a billed key (e.g. the Google AI Pro subscription's monthly Cloud
+// credit on the key's project); on a free key it fails at once and the next model answers.
+// Secrets GEMINI_TEXT_MODELS / GEMINI_FILE_MODELS (comma separated) change the order.
+const list = (v: string | undefined, fallback: string[]) => {
+  const xs = (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  return xs.length ? xs : fallback;
+};
+const TEXT_MODELS = list(Deno.env.get("GEMINI_TEXT_MODELS"), [Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
+const FILE_MODELS = list(Deno.env.get("GEMINI_FILE_MODELS"), ["gemini-3.1-pro-preview", "gemini-3.8-flash", "gemini-3.5-flash-lite"]);
+// the app waits 25 s for text and 45 s for a photo (gemini.ts AI_BUDGET_MS / AI_FILE_BUDGET_MS)
+const PLAN = { text: { wait: 8_000, overall: 22_000 }, file: { wait: 15_000, overall: 42_000 } };
+
+/** models in order: the next starts when one fails, or after waitMs while it is still thinking */
+function cascade(
+  models: string[], waitMs: number, overallMs: number,
+  run: (model: string, signal: AbortSignal) => Promise<string>,
+): Promise<{ text: string; model: string }> {
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    const timers = new Set<number>();
+    let finished = false;
+    let next = 0;
+    let running = 0;
+    let lastError: unknown = null;
+    const finish = (fn: () => void) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(overall);
+      timers.forEach((t) => clearTimeout(t));
+      fn();
+      controller.abort();
+    };
+    const overall = setTimeout(() => finish(() => reject(new Error("TIMEOUT"))), overallMs);
+    const start = () => {
+      if (finished || next >= models.length) return;
+      const m = models[next++];
+      running++;
+      let timer: number | undefined;
+      if (next < models.length) {
+        timer = setTimeout(() => { timers.delete(timer!); start(); }, waitMs);
+        timers.add(timer);
+      }
+      run(m, controller.signal).then(
+        (text) => finish(() => resolve({ text, model: m })),
+        (e) => {
+          lastError = e;
+          running--;
+          if (finished) return;
+          console.warn(`[ai-brain] ${m} কাজ করেনি:`, e instanceof Error ? e.message : e);
+          if (timer !== undefined && timers.has(timer)) {
+            // failed before its wait: the next model now
+            clearTimeout(timer);
+            timers.delete(timer);
+            start();
+          } else if (running <= 0 && next >= models.length) {
+            finish(() => reject(lastError ?? new Error("ALL_FAILED")));
+          }
+        },
+      );
+    };
+    start();
+  });
+}
 
 type Part = { text: string } | { inlineData: { mimeType: string; data: string } };
 
@@ -86,44 +143,12 @@ Deno.serve(async (req) => {
       parts.push({ inlineData: { mimeType: att.mimeType || "image/jpeg", data: att.base64Data } });
     }
 
-    // ৪. মডেলগুলো একটু পরপর শুরু, প্রথম সফল উত্তর নেওয়া
+    // ৪. শক্তিশালী মডেল আগে; না পারলে বা দেরি করলে পরেরটা
     const started = Date.now();
-    const controller = new AbortController();
-    const result = await new Promise<{ text: string; model: string }>((resolve, reject) => {
-      let finished = false;
-      let pending = MODELS.length;
-      let lastError: unknown = null;
-      const timers: number[] = [];
-
-      const finish = (fn: () => void) => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(overall);
-        timers.forEach((t) => clearTimeout(t));
-        fn();
-        controller.abort();
-      };
-
-      const overall = setTimeout(() => finish(() => reject(new Error("TIMEOUT"))), OVERALL_TIMEOUT_MS);
-
-      for (const m of MODELS) {
-        timers.push(
-          setTimeout(async () => {
-            if (finished) return;
-            try {
-              const text = await callModel(m.name, apiKey, parts, controller.signal);
-              finish(() => resolve({ text, model: m.name }));
-            } catch (e) {
-              lastError = e;
-              if (!finished) console.warn(`[ai-brain] ${m.name} কাজ করেনি:`, e instanceof Error ? e.message : e);
-            } finally {
-              pending--;
-              if (pending <= 0) finish(() => reject(lastError ?? new Error("ALL_FAILED")));
-            }
-          }, m.delay),
-        );
-      }
-    });
+    const hasFile = parts.length > 1;
+    const plan = hasFile ? PLAN.file : PLAN.text;
+    const result = await cascade(hasFile ? FILE_MODELS : TEXT_MODELS, plan.wait, plan.overall,
+      (model, signal) => callModel(model, apiKey, parts, signal));
 
     console.log(`[ai-brain] ঠিক আছে, ${Date.now() - started}ms, মডেল: ${result.model}`);
     return json({ text: result.text, model: result.model });

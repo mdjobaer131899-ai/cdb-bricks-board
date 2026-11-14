@@ -1511,6 +1511,8 @@ function looksLikeEntry(rawMsg: string): boolean {
 // ============================================================
 
 const AI_BUDGET_MS = 25_000;
+/** a photo or a ledger page goes to the Pro model first, which takes longer */
+const AI_FILE_BUDGET_MS = 45_000;
 const history: { q: string; a: string }[] = [];
 
 function remember(q: string, a: string) {
@@ -1750,6 +1752,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 async function callAi(promptText: string, attachment?: AIAttachment | null): Promise<string> {
   const started = Date.now();
+  const budget = attachment?.base64Data ? AI_FILE_BUDGET_MS : AI_BUDGET_MS;
   const body = {
     promptText,
     attachment: attachment?.base64Data
@@ -1761,7 +1764,7 @@ async function callAi(promptText: string, attachment?: AIAttachment | null): Pro
   try {
     const { data, error } = await withTimeout(
       supabase.functions.invoke("ai-brain", { body }) as Promise<{ data: any; error: any }>,
-      AI_BUDGET_MS,
+      budget,
     );
     if (!error && data?.text) return String(data.text);
     if (data?.error) throw new Error(String(data.error));
@@ -1773,7 +1776,7 @@ async function callAi(promptText: string, attachment?: AIAttachment | null): Pro
   }
 
   // খ) নিজের সার্ভার (/api/gemini-call)
-  const remaining = AI_BUDGET_MS - (Date.now() - started);
+  const remaining = budget - (Date.now() - started);
   if (remaining < 4000) throw new Error("TIMEOUT");
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
