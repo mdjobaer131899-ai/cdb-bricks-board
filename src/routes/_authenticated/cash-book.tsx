@@ -887,7 +887,7 @@ type BillRow = { id: string; date: string; supplier: string; item: string; qty: 
 
 async function fetchBill(id: string): Promise<BillRow | null> {
   const { data, error } = await (supabase as any).from("purchases")
-    .select("id, supplier_id, purchase_date, item_name, material_id, quantity, unit, unit_price, total_amount, note, supplier:suppliers(name, material_type)")
+    .select("id, supplier_id, purchase_date, item_name, material_id, quantity, unit, unit_price, total_amount, note, supplier:suppliers!purchases_supplier_id_fkey(name, material_type)")
     .eq("id", id).maybeSingle();
   if (error) throw error;
   if (!data) return null;

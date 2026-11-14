@@ -70,7 +70,7 @@ export async function fetchProfitLoss(filter: DateFilter = {}, opts: { allSeason
     fetchAllRows<{ amount: number; category: string; expense_date: string; note: string | null }>(() =>
       ranged(db.from("expenses").select("id, amount, category, expense_date, note").order("id"), "expense_date", filter)),
     fetchAllRows<{ total_amount: number; item_name: string; purchase_date: string; material_id: string | null; quantity: number; unit: string | null; supplier: { name: string } | null }>(() =>
-      ranged(db.from("purchases").select("id, total_amount, item_name, purchase_date, material_id, quantity, unit, supplier:suppliers(name)").order("id"), "purchase_date", filter)),
+      ranged(db.from("purchases").select("id, total_amount, item_name, purchase_date, material_id, quantity, unit, supplier:suppliers!purchases_supplier_id_fkey(name)").order("id"), "purchase_date", filter)),
     // sardar work: kacha / load / unload wage lines and old per-category work entries
     fetchAllRows<{ entry_date: string; entry_type: string; sardar_id: string | null; quantity: number; amount: number }>(() =>
       ranged(db.from("kacha_brick_entries").select("id, entry_date, entry_type, sardar_id, quantity, amount").order("id"), "entry_date", filter)),
