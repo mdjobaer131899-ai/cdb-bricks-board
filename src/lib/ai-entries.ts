@@ -55,6 +55,8 @@ export type MoneyEntry = {
   note?: string;
   vekuKind?: string;
   driver?: string;
+  /** the user's own words for this line (kept to learn from a head change) */
+  said?: string;
   /** veku / vehicle: the soil site (soil seller) this cost comes off; siteId when found */
   site?: string;
   siteId?: string | null;
@@ -526,7 +528,7 @@ export async function saveBooking(b: BookingEntry): Promise<SaveOutcome> {
 /* ---------------------------------------------------------------- undo */
 
 const UNDO_TABLES = new Set([
-  "collections", "opening_payments", "owner_transactions", "loans", "loan_payments", "sardar_payments", "worker_payments",
+  "ai_terms", "collections", "opening_payments", "owner_transactions", "loans", "loan_payments", "sardar_payments", "worker_payments",
   "expenses", "purchases", "supplier_payments", "cash_transfers", "cash_day_closes", "kacha_brick_entries", "sales_entries",
   "agent_reminders", "customers", "contracts", "pot_counts",
 ]);

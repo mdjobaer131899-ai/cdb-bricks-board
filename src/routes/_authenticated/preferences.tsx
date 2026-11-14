@@ -20,6 +20,7 @@ import { SeasonSwitcher } from "@/components/season-switcher";
 import { GlobalSearch } from "@/components/global-search";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RoutinesCard } from "@/components/assistant-routines";
+import { AiTermsCard } from "@/components/ai-terms-card";
 import { SystemSettings } from "@/components/system-settings";
 
 export const Route = createFileRoute("/_authenticated/preferences")({
@@ -131,6 +132,11 @@ function PreferencesPage() {
           <RoutinesCard />
         </section>
       )}
+
+      <section className="space-y-2">
+        <h2 className="section-label px-1">সহকারীর শেখা শব্দ</h2>
+        <AiTermsCard canDelete={isAdmin} />
+      </section>
 
       {isAdmin && (
         <Group title="অ্যাডমিন">

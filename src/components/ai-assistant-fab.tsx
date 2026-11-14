@@ -7,14 +7,14 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 import {
-  processBrickFieldCommand, saveAiActionToDatabase, startRoutineAsk, getAiHistory, setAiHistory,
+  processBrickFieldCommand, saveAiActionToDatabase, startRoutineAsk, getAiHistory, setAiHistory, changeMoneyHead,
   type AIAttachment, type AskKind,
 } from "../services/gemini";
 import { BatchList, EntryCard, UndoBox, entryTitle, type ChatEntry } from "./ai-entry-card";
 import { ExpenseEntryDialog, type ExpenseInitial, type HeadKey } from "./expense-entry";
 import { IncomeEntryDialog, type IncomeInitial, type IncomeKey } from "./income-entry";
 import { undoSaved } from "@/lib/ai-entries";
-import { moneyHead } from "@/lib/money-heads";
+import { moneyHead, type MoneyKey } from "@/lib/money-heads";
 import { useCurrentUser } from "@/lib/use-current-user";
 import { useBackToClose } from "@/lib/back-close";
 import { usePageAccess } from "@/lib/page-permissions";
@@ -590,6 +590,23 @@ export function AiAssistantFab() {
     else if (skipped && !bad) toast.info(`${bn(skipped)}টা লাইন খাতায় আগে থেকেই আছে, তাই সেভ করিনি।`);
   };
 
+  /** "খাত বদলান": the line prepared again under the picked head; its words are learned for it */
+  const changeHead = async (mi: number, ei: number, head: MoneyKey) => {
+    const e = messages[mi]?.entries?.[ei];
+    if (!e || e.saved) return;
+    setSavingKey(`${mi}:${ei}`);
+    try {
+      const r = await changeMoneyHead(e.data, head);
+      if ("ask" in r) { toast.error(r.ask || "এই খাতে বসানো গেল না, ফর্মে খুলে লিখুন।"); return; }
+      patchEntry(mi, ei, { data: r.data });
+      toast.success(`খাত বদলে "${moneyHead(head).label}" করা হলো। পরের বার এই কথা এই খাতেই লিখব।`);
+    } catch (err: any) {
+      toast.error(err?.message ?? String(err));
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
   const undoEntry = async (mi: number, ei: number, password: string) => {
     const e = messages[mi]?.entries?.[ei];
     if (!e) return;
@@ -812,6 +829,7 @@ export function AiAssistantFab() {
                                     }}
                                     onSave={() => void saveEntry(idx, ei)}
                                     onOpenForm={e.type === "MONEY" ? () => openForm(idx, ei) : undefined}
+                                    onChangeHead={e.type === "MONEY" ? (h) => void changeHead(idx, ei, h) : undefined}
                                     onUndo={(pw) => undoEntry(idx, ei, pw)}
                                     onPrint={e.type === "SALE_CHALLAN" ? () => printChallan(e.data, e.challanNo) : undefined}
                                   />

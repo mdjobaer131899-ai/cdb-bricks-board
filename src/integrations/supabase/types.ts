@@ -92,6 +92,48 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_terms: {
+        Row: {
+          created_at: string
+          created_by: string
+          head: string
+          id: string
+          item: string | null
+          person: string | null
+          phrase: string
+          phrase_key: string
+          source: string
+          updated_at: string
+          uses: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          head: string
+          id?: string
+          item?: string | null
+          person?: string | null
+          phrase: string
+          phrase_key: string
+          source?: string
+          updated_at?: string
+          uses?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          head?: string
+          id?: string
+          item?: string | null
+          person?: string | null
+          phrase?: string
+          phrase_key?: string
+          source?: string
+          updated_at?: string
+          uses?: number
+        }
+        Relationships: []
+      }
       agent_reminders: {
         Row: {
           body: string

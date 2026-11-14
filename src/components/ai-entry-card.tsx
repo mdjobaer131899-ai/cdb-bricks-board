@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { CheckCircle, ChevronDown, FileEdit, Loader2, Pencil, Printer, Save, Trash2 } from "lucide-react";
+import { CheckCircle, ChevronDown, FileEdit, Loader2, Pencil, Printer, Save, Tags, Trash2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { bn, bnDate } from "@/lib/format";
-import { moneyHead, type MoneyKey } from "@/lib/money-heads";
+import { MONEY_HEADS, moneyHead, type MoneyKey } from "@/lib/money-heads";
 import { bnOf } from "@/components/contract-config";
 import { METHOD_LABEL, PAY_METHOD_LIST, SELLER_HEADS, bookingValue, whenText, type PayMethod, type SavedRef } from "@/lib/ai-entries";
 
@@ -53,6 +53,7 @@ export function entryTitle(e: ChatEntry): string {
     case "CUSTOMER": return `👤 নতুন গ্রাহক · ${d.name ?? ""}`;
     case "BOOKING": return `📒 ঠিক দামে বুকিং · ${d.customer ?? ""}`;
     case "POT_COUNT": return `🧱 পট গোনা · ${d.mill ?? ""} · পট ${bn(num(d.potNo))}`;
+    case "TEACH": return "🎓 নতুন শব্দ শেখা";
     default: return "এন্ট্রি";
   }
 }
@@ -225,6 +226,16 @@ function Body({ e }: { e: ChatEntry }) {
           <div className="text-[11px] text-muted-foreground">মিলের সব পটের যোগফল নিজে থেকে কাঁচা ইটের খাতায় উঠবে।</div>
         </>
       );
+    case "TEACH":
+      return (
+        <>
+          <Row k="শব্দ" v={`"${d.phrase ?? ""}"`} strong />
+          <Row k="খাত" v={d.label ?? moneyHead(d.head as MoneyKey)?.label ?? d.head} />
+          {d.person && <Row k="নাম" v={d.person} />}
+          {d.item && <Row k="জিনিস" v={d.item} />}
+          <div className="text-[11px] text-muted-foreground">এরপর এই শব্দ বললে বা লিখলে এই খাতে লিখব। ভুল হলে সেটিংস → সহকারীর শেখা শব্দ থেকে মুছতে পারবেন।</div>
+        </>
+      );
     case "CUSTOMER":
       return (
         <>
@@ -353,7 +364,7 @@ function Editor({ e, onChange }: { e: ChatEntry; onChange: (d: any) => void }) {
 }
 
 const EDITABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING", "POT_COUNT"]);
-const UNDOABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "REMINDER", "SALE_CHALLAN", "CUSTOMER", "BOOKING", "POT_COUNT"]);
+const UNDOABLE = new Set(["MONEY", "KACHA_BRICK", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "REMINDER", "SALE_CHALLAN", "CUSTOMER", "BOOKING", "POT_COUNT", "TEACH"]);
 
 export function UndoBox({ onUndo, onCancel }: { onUndo: (password: string) => Promise<void>; onCancel?: () => void }) {
   const [pw, setPw] = useState("");
@@ -373,7 +384,7 @@ export function UndoBox({ onUndo, onCancel }: { onUndo: (password: string) => Pr
   );
 }
 
-export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, onUndo, onPrint }: {
+export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, onUndo, onPrint, onChangeHead }: {
   entry: ChatEntry;
   busy: boolean;
   isAdmin: boolean;
@@ -382,8 +393,11 @@ export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, 
   onOpenForm?: () => void;
   onUndo: (password: string) => Promise<void>;
   onPrint?: () => void;
+  /** a money card put under the wrong head: the line prepared again under this one (and learned) */
+  onChangeHead?: (head: MoneyKey) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [headOpen, setHeadOpen] = useState(false);
   const [undoOpen, setUndoOpen] = useState(false);
   const d = entry.data ?? {};
   const needsReason = entry.type === "DAY_CLOSE" && Math.abs(num(d.counted) - num(d.expected)) >= 1;
@@ -432,6 +446,25 @@ export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, 
         </div>
       )}
       {!entry.saved && editing && <div className="border-t pt-2.5"><Editor e={entry} onChange={onChange} /></div>}
+      {!entry.saved && headOpen && onChangeHead && entry.type === "MONEY" && (() => {
+        // the heads on the same side: money in, or money out
+        const isIn = moneyHead(d.head as MoneyKey)?.group === "in";
+        const heads = MONEY_HEADS.filter((h) => (h.group === "in") === isIn);
+        return (
+          <div className="space-y-1.5 border-t pt-2.5">
+            <div className="text-[11px] text-muted-foreground">সঠিক খাত বেছে নিন; পরের বার এই কথা এই খাতেই লিখব।</div>
+            <div className="flex flex-wrap gap-1.5">
+              {heads.map((h) => (
+                <button key={h.key} type="button" disabled={busy || h.key === d.head}
+                  onClick={() => { setHeadOpen(false); onChangeHead(h.key); }}
+                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${h.key === d.head ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                  {h.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       {!entry.saved && entry.type === "DAY_CLOSE" && (
         <TextField label={needsReason ? "গরমিলের কারণ (লিখতেই হবে)" : "নোট (ইচ্ছা হলে)"} value={d.note} onChange={(v) => onChange({ ...d, note: v })} />
       )}
@@ -457,11 +490,16 @@ export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, 
           <Button size="sm" disabled={busy || (needsReason && !String(d.note ?? "").trim())} onClick={onSave}
             className="h-10 flex-1 rounded-xl text-[13px] font-bold">
             {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
-            {entry.type === "REMINDER" ? "রেখে দিন" : entry.type === "ATTENDANCE" ? "হাজিরা সেভ" : entry.type === "CUSTOMER" ? "গ্রাহক যোগ করুন" : d.dup?.strong ? "তবুও সেভ" : "খাতায় সেভ"}
+            {entry.type === "REMINDER" ? "রেখে দিন" : entry.type === "ATTENDANCE" ? "হাজিরা সেভ" : entry.type === "CUSTOMER" ? "গ্রাহক যোগ করুন" : entry.type === "TEACH" ? "শিখে রাখুন" : d.dup?.strong ? "তবুও সেভ" : "খাতায় সেভ"}
           </Button>
           {EDITABLE.has(entry.type) && (
             <Button size="sm" variant="outline" className="h-10 rounded-xl px-3 text-xs font-semibold" onClick={() => setEditing((x) => !x)} aria-label="বদলান">
               <Pencil className="mr-1 h-3.5 w-3.5" />{editing ? "ঠিক আছে" : "বদলান"}
+            </Button>
+          )}
+          {onChangeHead && entry.type === "MONEY" && (
+            <Button size="sm" variant="outline" className="h-10 rounded-xl px-3 text-xs font-semibold" onClick={() => setHeadOpen((x) => !x)} aria-label="খাত বদলান" aria-expanded={headOpen}>
+              <Tags className="mr-1 h-3.5 w-3.5" />খাত
             </Button>
           )}
           {onOpenForm && (

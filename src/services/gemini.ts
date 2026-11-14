@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { sdb } from "@/lib/season-db";
 import { fetchCashHistory, fetchCashSummary, type CashHistoryRow } from "@/lib/cash-queries";
+import { fetchTerms, learnTerm, phraseOf, termFor, type AiTerm } from "@/lib/ai-terms";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { dailyEarned, salaryEarned, sardarEarned } from "@/lib/salary-accrual";
 import { payWorker } from "@/lib/worker-pay";
@@ -107,6 +108,7 @@ export interface AIResponse {
     | "BOOKING"
     | "NAVIGATE"
     | "POT_COUNT"
+    | "TEACH"
     | "ENTRIES"
     | "QUERY"
     | "UNKNOWN";
@@ -1628,7 +1630,13 @@ function buildPrompt(userMessage: string, s: KilnSnapshot, w: WeatherInfo | null
         `[মিল ও সরদার] ${extras.mills.filter((m) => m.active).map((m) => { const n = m.sardarId ? s.sardars.find((x) => x.id === m.sardarId)?.name : undefined; return `${m.name}${n ? ` (${n})` : ""}`; }).join(", ") || "—"}`,
         `[ভেকু] ${vekus || "—"}`,
         `[কেনার তালিকা] কাঁচামাল: ${extras.items.filter((i) => i.group === "raw").map((i) => `${i.name}${i.unit ? ` (${i.unit})` : ""}`).join(", ") || "—"}; অন্য মালামাল: ${extras.items.filter((i) => i.group !== "raw" && i.payMode === "credit").map((i) => i.name).join(", ") || "—"}`,
-      ].join("\n")
+        extras.terms.length
+          ? `[শেখা শব্দ — ব্যবহারকারী নিজে শিখিয়েছেন বা ঠিক করেছেন; খাত বাছাইয়ে এগুলো সবার আগে মানবে]\n${extras.terms.slice(0, 120).map((t) => `"${t.phrase}" → ${t.head}${t.person ? `, person "${t.person}"` : ""}${t.item ? `, item "${t.item}"` : ""}`).join("\n")}`
+          : "",
+        extras.examples.length
+          ? `[এই ভাটার খাতার নমুনা — আগের টাকা যে খাতে উঠেছে (নাম/জিনিস · ধরন → খাত); একই নাম বা একই ধরনের কথা একই খাতে যাবে]\n${extras.examples.join("\n")}`
+          : "",
+      ].filter(Boolean).join("\n")
     : "";
   const pending = pendingAsk && Date.now() - pendingAsk.at < 3 * 3600_000 ? pendingAsk.kind : null;
   const ongoing = pending === "kacha"
@@ -1679,10 +1687,13 @@ from/to সবসময় YYYY-MM-DD। সময় না বললে from/t
 ৬. এক বার্তায় একাধিক এন্ট্রি থাকলে (যেমন "রহিমকে ৫০০, করিমকে ৭০০, চা-নাস্তা ২০০") বা খাতার পাতা/রসিদের ছবিতে অনেক লাইন থাকলে {"type":"ENTRIES","reply":"সংক্ষেপে কী কী পেলে","entries":[{"type":"MONEY","data":{...}},{"type":"MONEY","data":{...}}]} দেবে; প্রতিটি লাইন আলাদা এন্ট্রি, একটাও বাদ দেবে না, দুটো মিলিয়ে একটা করবে না। লাইনগুলো নতুন লাইন, কমা, দাঁড়ি, "তারপর" বা "আর" দিয়ে আলাদা হতে পারে (মুখে বলা হলে দাঁড়ি থাকে না, কথার অর্থ দেখে ভাগ করবে)। পুরো বার্তায় একবার তারিখ বা মাধ্যম বললে (যেমন "গতকালের খরচ", "সব বিকাশে") প্রতিটি এন্ট্রিতে সেটা বসাবে; কোনো লাইনে আলাদা বললে সেই লাইনে সেটাই।
 ${hasAttachment ? "৭. সংযুক্ত ছবি/ফাইলটি মনোযোগ দিয়ে পড়ে (OCR) নাম, পরিমাণ, টাকা বের করে উপযুক্ত এন্ট্রি (অনেক লাইন হলে ENTRIES) প্রস্তুত করবে বা কী লেখা আছে তা বাংলায় বলবে। হাতের লেখার বাংলা অঙ্ক সাবধানে পড়বে।\n" : ""}
 শুধু একটি JSON ফেরত দেবে:
-{"type":"LOOKUP"|"NAVIGATE"|"MONEY"|"POT_COUNT"|"SALE_CHALLAN"|"BOOKING"|"CUSTOMER"|"KACHA_BRICK"|"ATTENDANCE"|"VEKU_DAY"|"TRANSFER"|"DAY_CLOSE"|"BOOK_MARK"|"REMINDER"|"ENTRIES"|"QUERY","tool":"(শুধু LOOKUP-এ)","args":{},"reply":"বাংলা উত্তর (LOOKUP-এ খালি)","data":{...},"entries":[ (শুধু ENTRIES-এ) ]}
+{"type":"LOOKUP"|"NAVIGATE"|"MONEY"|"TEACH"|"POT_COUNT"|"SALE_CHALLAN"|"BOOKING"|"CUSTOMER"|"KACHA_BRICK"|"ATTENDANCE"|"VEKU_DAY"|"TRANSFER"|"DAY_CLOSE"|"BOOK_MARK"|"REMINDER"|"ENTRIES"|"QUERY","tool":"(শুধু LOOKUP-এ)","args":{},"reply":"বাংলা উত্তর (LOOKUP-এ খালি)","data":{...},"entries":[ (শুধু ENTRIES-এ) ]}
 data-এর ফিল্ড:
-- MONEY (যেকোনো টাকা আসা বা যাওয়া): head (খাতের key, উপরের তালিকা থেকে), person (নাম, খাতার তালিকার মতো হুবহু), amount (এখন যত টাকা দেওয়া বা পাওয়া হলো), bill (শুধু কিছু কিনলে বা কাজ করালে তার মোট দাম/পাওনা; শুধু টাকা দিলে বা বকেয়া শোধ করলে bill দেবে না), qty, rate, unit, item (কী: মাটি, কয়লা, বিয়ারিং, চা-নাস্তা …), method ("cash" = ড্রয়ার/হাতে নগদ, "bkash", "nagad" = নগদ মোবাইল একাউন্ট, "bank"; না বললে "cash"; কথায় "নগদ দিলাম" মানে হাতে নগদ = "cash"), vekuKind (ভেকুর টাকা: ডিজেল | অটো ভাড়া | চালকের বেতন | মেরামত | যন্ত্রাংশ | মবিল-গ্রীজ | চালকের খরচ | অন্যান্য), driver, site (মাটির সাইট, নিচে দেখো), paymentType (সরদারে: "advance" = দাদন/অগ্রিম, "payment" = মজুরি), dueDate (ঋণে ফেরত/শোধের তারিখ), date, note
+- MONEY (যেকোনো টাকা আসা বা যাওয়া): head (খাতের key, উপরের তালিকা থেকে), person (নাম, খাতার তালিকার মতো হুবহু), amount (এখন যত টাকা দেওয়া বা পাওয়া হলো), bill (শুধু কিছু কিনলে বা কাজ করালে তার মোট দাম/পাওনা; শুধু টাকা দিলে বা বকেয়া শোধ করলে bill দেবে না), qty, rate, unit, item (কী: মাটি, কয়লা, বিয়ারিং, চা-নাস্তা …), method ("cash" = ড্রয়ার/হাতে নগদ, "bkash", "nagad" = নগদ মোবাইল একাউন্ট, "bank"; না বললে "cash"; কথায় "নগদ দিলাম" মানে হাতে নগদ = "cash"), vekuKind (ভেকুর টাকা: ডিজেল | অটো ভাড়া | চালকের বেতন | মেরামত | যন্ত্রাংশ | মবিল-গ্রীজ | চালকের খরচ | অন্যান্য), driver, site (মাটির সাইট, নিচে দেখো), paymentType (সরদারে: "advance" = দাদন/অগ্রিম, "payment" = মজুরি), dueDate (ঋণে ফেরত/শোধের তারিখ), date, note, said (এই লাইনে ব্যবহারকারী যা লিখেছেন বা বলেছেন, হুবহু)
   খাত বাছাই: sale = গ্রাহক টাকা দিল/জমা; openingIn = গত বছরের পাওনা আদায়; ownerInvest = মালিক টাকা দিলেন; loanIn = কারো কাছ থেকে ঋণ নিলাম; loanBack = যাকে ঋণ দিয়েছিলাম সে ফেরত দিল; sardar = সরদারকে মজুরি/দাদন; daily = ডেলি শ্রমিককে; staff = মেস্তুরি, ম্যানেজার, অন্য স্টাফকে বেতন; ownerSalary = মালিকের বেতন; ownerWithdraw = মালিক টাকা তুললেন/নিলেন; raw = মাটি, বালু, কয়লা, তুষ, লাকড়ি, ভাটার ডিজেল (বিক্রেতা বা সাইটের নামসহ); parts = যন্ত্রাংশ, ইঞ্জিনের মাল (দোকানের নাম থাকলে person); veku = ভেকুর ডিজেল, চালকের বেতন, মেরামত (একটা টাকা দিলে); vehicle = গাড়ি/ট্রাক্টরের ট্রিপ ভাড়া (qty = ট্রিপ, rate = প্রতি ট্রিপ); land = জমি ভাড়া; clean = পরিচ্ছন্ন কর্মী; power = বিদ্যুৎ বিল; misc = চা-নাস্তা, খোরাকি, যাতায়াত ও অন্য ছোট খরচ (item বাধ্যতামূলক); asset = স্থায়ী সম্পদ কেনা; loanGive = কাউকে ঋণ দিলাম; loanRepay = নেওয়া ঋণ শোধ দিলাম; openingOut = গত বছরের দেনা শোধ।
+  খাত বোঝার ধাপ: আগে "শেখা শব্দ" দেখো; তারপর "খাতার নমুনা"-য় একই নাম বা জিনিস কোন খাতে উঠেছে; তারপর নামের তালিকা (সরদার, শ্রমিক, সাপ্লায়ার, ভেকু, গাড়ি); এর পরেও না মিললে উপরের খাত বাছাই। misc (আনুষাঙ্গিক) শুধু তখনই, যখন সত্যিই অন্য কোনো খাতে পড়ে না।
+  কথ্য ও ভুল বানান (একই জিনিস): বিকো, বেকু, ভেকো, বেক্কু, ভ্যাকু = ভেকু; টলি, টলী, ট্রলী, ট্রাক্টর = ট্রলি (গাড়ি ভাড়া); ড্রাইবার, ডাইভার, ড্রাইভার = চালক; খুরাকি, খোরাকী, খাওয়ার টাকা = খোরাকি; ডিজল, তেল (ভেকু বা ইঞ্জিনে) = ডিজেল; মোবিল, গিরিজ, গ্রিজ = মবিল-গ্রীজ; সর্দার, সদ্দার = সরদার; মিস্তিরি, মিস্ত্রি, মেস্তরি = মেস্তুরি; কামলা, লেবার, মুজুর = শ্রমিক; এডভান্স, অগ্রীম = অগ্রিম/দাদন; কারেন্ট বিল, বিদ্যুত = বিদ্যুৎ বিল; দিছি, দিসি, দিলুম, দিয়া দিছি = দিলাম (টাকা গেল); নিছি, পাইছি, জমা দিল = টাকা এলো।
+  কথ্য টাকা: "সাত হাজার" = 7000, "সাড়ে তিন হাজার" = 3500, "দেড় হাজার" = 1500, "আড়াই হাজার" = 2500, "পৌনে দুই হাজার" = 1750, "বারোশো" = 1200, "এগারোশো পঞ্চাশ" = 1150, "পাঁচশ" = 500, "৭ হা" / "7k" = 7000, "এক লাখ" = 100000, "দেড় লাখ" = 150000। কথ্য দিন: লেনদেনের কথায় "কাইল"/"কাল" = গতকাল, "পরশু" = দুই দিন আগে, "আইজ" = আজ।
   উদাহরণ: "রহিমের সাইট থেকে ১০ ট্রাক মাটি ২০০০০ টাকা, ৫০০০ দিলাম" → {"type":"MONEY","data":{"head":"raw","person":"রহিম","item":"মাটি","qty":10,"unit":"ট্রাক","bill":20000,"amount":5000}}
   "করিম সরদারকে বিকাশে ৩০০০ দাদন" → {"type":"MONEY","data":{"head":"sardar","person":"করিম","amount":3000,"method":"bkash","paymentType":"advance"}}
   "আলমের কাছ থেকে ৫০ হাজার ঋণ নিলাম, ১৫ তারিখে ফেরত" → {"type":"MONEY","data":{"head":"loanIn","person":"আলম","amount":50000,"dueDate":"${s.today.slice(0, 8)}15"}}
@@ -1700,6 +1711,7 @@ data-এর ফিল্ড:
 - BOOKING (ঠিক দামে বুকিং: আজ পুরো দাম নিয়ে পরে ঠিক করা দামে ইট দেওয়া, যেমন "করিম ৫ গাড়ি ১ নং ইট বুকিং দিল, প্রতি গাড়ি ১৬ হাজার"): customerName, items [{"brick":"১ নং ইট","trucks":5,"piecesPerTruck":2000,"rate": প্রতি পিসের দাম,"truckPrice": প্রতি গাড়ির দাম বললে}], method, date, note। দাম ঠিক না করে শুধু আগে টাকা দিলে (অগ্রিম টাকা) সেটা বুকিং নয়: MONEY head "sale"; পরে চালান সেদিনের দামে সেই টাকা থেকে কাটবে।
 - CUSTOMER (নতুন গ্রাহক যোগ): name, phone (১১ সংখ্যার মোবাইল), address, note
 - POT_COUNT (মাঠে বিছানো ইটের পট গোনা: "মিল ১ এর ৩ নম্বর পটে ১১৫০", কয়েকটা পট হলে ENTRIES): mill (মিলের নাম বা নম্বর), pot (পটের নম্বর), quantity (ইট), date। পট নম্বর বললে এটাই, KACHA_BRICK নয়। একবার মিল বলে পরপর পট বললে ("মিল ২: পট ১ এগারোশো, পট ২ বারোশো") প্রতিটিতে সেই মিল বসাবে।
+- TEACH (খাত শেখানো: "এখন থেকে পানি মানে আনুষাঙ্গিক খরচ", "বিকো মানে ভেকু", "X কে Y খাতে লিখবে"): phrase (যে শব্দ শেখাচ্ছেন, হুবহু), head (খাতের key), person (শব্দটা কোনো নির্দিষ্ট মানুষ বা ভেকু বোঝালে তার নাম, খাতার তালিকার মতো), item (জিনিসের নাম, থাকলে)
 - NAVIGATE (অ্যাপের কোনো পাতা খুলতে/সেখানে যেতে বললে): {"type":"NAVIGATE","page":"<key>"}; key: ${PAGE_LINKS.map((p) => `${p.key} = ${p.title}`).join("; ")}
 - KACHA_BRICK (উৎপাদনের ধাপ): step ("production" = কাঁচা ইট তৈরি | "load" = ভাটায় ঢোকানো | "unload" = পাকা ইট বের | "damage" = কাঁচা ইট নষ্ট), mill (মিলের নাম বা নম্বর), sardarName, quantity, rate (প্রতি হাজারে মজুরি, বললে), grades (শুধু unload: [{"brick":"১ নং ইট","quantity":8000}]), reason (damage: বৃষ্টি | শুকানোর সময় ভাঙা | বহনে ভাঙা | অন্যান্য), date
 - VEKU_DAY (ভেকুর এক দিনের হিসাব: ঘণ্টা, ডিজেল, চালক — খাতার এক লাইন): veku (নাম), hours (দশমিকে; ৮ ঘণ্টা ৩০ মিনিট = 8.5), rate (ঘণ্টায়, বললে), driver, litres, dieselPrice (ডিজেলের দাম), dieselPaid (পাম্পে কত দিলেন; বাকিতে নিলে 0), driverPay, auto (ডিজেল আনার অটো ভাড়া দিলে true বা টাকা), khoraki (চালকের খোরাকি দিলে true বা টাকা), method, date, note
@@ -1885,19 +1897,43 @@ type Extras = {
   owners: Array<{ id: string; name: string }>;
   mills: Array<{ id: string; name: string; sardarId: string | null; active: boolean }>;
   items: Array<{ id: string; name: string; unit: string | null; group: string; payMode: string }>;
+  /** words the user taught or fixed (ai_terms) */
+  terms: AiTerm[];
+  /** the last 60 days of the cash book as "<who/what> · <kind> → <head>": how this kiln writes */
+  examples: string[];
 };
+
+/** after a word is learned, the next message must see it */
+export function forgetExtras() { extrasCache = null; }
 let extrasCache: { at: number; data: Extras } | null = null;
 
 /** owners, mills and the purchase catalog: small lists the snapshot does not carry */
 async function getExtras(): Promise<Extras> {
   if (extrasCache && Date.now() - extrasCache.at < 5 * 60_000) return extrasCache.data;
   const db = supabase as any;
-  const [o, m, i] = await Promise.all([
+  const today = dhakaDate(0);
+  const from = dhakaDate(-60);
+  const [o, m, i, terms, hist] = await Promise.all([
     db.from("owners").select("id, name").order("name"),
     db.from("mills").select("id, name, sardar_id, is_active, sort_order").order("sort_order"),
     db.from("raw_materials").select("id, name, unit, item_group, pay_mode, sort_order").eq("active", true).order("sort_order"),
+    fetchTerms().catch(() => [] as AiTerm[]),
+    fetchCashHistory({ from, to: today }).catch(() => [] as CashHistoryRow[]),
   ]);
+  // one line per kind of entry the book already has (newest first): who/what, the kind of payment, the head
+  const seen = new Set<string>();
+  const examples: string[] = [];
+  for (const r of [...hist].sort((a, b) => b.date.localeCompare(a.date))) {
+    if (r.key === "sale") continue;
+    const kind = String(r.note ?? "").split(/ · | — |, /)[0].trim().slice(0, 30);
+    const k = `${r.key}|${clean(r.detail)}|${clean(kind)}`;
+    if (seen.has(k) || !r.detail || r.detail === "—") continue;
+    seen.add(k);
+    examples.push(`${r.detail}${kind && kind !== r.detail ? ` · ${kind}` : ""} → ${r.key}`);
+    if (examples.length >= 60) break;
+  }
   const data: Extras = {
+    terms, examples,
     owners: ((o.data ?? []) as Row[]).map((x) => ({ id: x.id, name: String(x.name ?? "") })),
     mills: ((m.data ?? []) as Row[]).map((x) => ({ id: x.id, name: String(x.name ?? ""), sardarId: x.sardar_id ?? null, active: x.is_active !== false })),
     items: ((i.data ?? []) as Row[]).map((x) => ({ id: x.id, name: String(x.name ?? ""), unit: x.unit ?? null, group: String(x.item_group ?? ""), payMode: String(x.pay_mode ?? "credit") })),
@@ -2007,9 +2043,19 @@ function soilSite(d: Row, s: KilnSnapshot): { site: string; siteId: string | nul
   return hit.length ? { site: hit[0].name, siteId: hit[0].id } : { site: said, siteId: null };
 }
 
-async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: boolean }, s: KilnSnapshot): Promise<{ data: MoneyEntry } | { ask: string }> {
+async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: boolean; keepHead?: boolean }, s: KilnSnapshot): Promise<{ data: MoneyEntry } | { ask: string }> {
   let head = String(d.head ?? "").trim() as MoneyKey;
   if (!MONEY_HEADS.some((h) => h.key === head)) return { ask: "কোন খাতে লিখব, বুঝিনি। যেমন বলুন: \"রহিমকে ৫০০ টাকা মজুরি দিলাম\" বা \"চা-নাস্তা ২০০\"।" };
+  const said = String(d.said ?? "").trim();
+  // the model fell back to আনুষাঙ্গিক, but the user has taught these words a head
+  if (head === "misc" && !ctx.keepHead) {
+    const learned = (await getExtras()).terms;
+    const t = termFor(learned, said || [d.item, d.note, d.person].filter(Boolean).join(" "));
+    if (t && t.head !== "misc") {
+      head = t.head;
+      d = { ...d, head, ...(!d.person && t.person ? { person: t.person } : {}), ...(!d.item && t.item ? { item: t.item } : {}) };
+    }
+  }
   const name = String(d.person ?? d.name ?? d.customerName ?? d.sardarName ?? d.workerName ?? d.supplierName ?? "").trim();
   const amount = Math.round(num(d.amount ?? d.paidAmount ?? d.paid) * 100) / 100;
   let bill = Math.round(num(d.bill ?? d.billAmount ?? d.totalBill) * 100) / 100;
@@ -2017,6 +2063,7 @@ async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: bo
   let rate = num(d.rate);
   const e: MoneyEntry = {
     head, amount, method: methodFrom(d.method, ctx.single ? ctx.msg : ""),
+    said: said || undefined,
     date: resolveDate(d, s.today),
     note: String(d.note ?? d.description ?? "").trim() || undefined,
     item: String(d.item ?? d.what ?? "").trim() || undefined,
@@ -2510,6 +2557,15 @@ async function prepareEntry(type: string, data: Row, ctx: { text: string; msg: s
       const c = await preparePotCount(d, s);
       return "ask" in c ? c : { type, data: c.data };
     }
+    case "TEACH": {
+      // "এখন থেকে পানি মানে আনুষাঙ্গিক": a phrase and the head it belongs to
+      const phrase = String(d.phrase ?? d.word ?? "").replace(/["“”']/g, "").trim();
+      const said = String(d.head ?? "").trim();
+      const head = (MONEY_HEADS.find((h) => h.key === said) ?? MONEY_HEADS.find((h) => clean(h.label) === clean(said)))?.key;
+      if (!phrase) return { ask: "কোন শব্দটা শেখাতে চান, বলুন। যেমন: \"এখন থেকে পানি মানে আনুষাঙ্গিক খরচ\"।" };
+      if (!head) return { ask: `"${phrase}" কোন খাতে যাবে, বলুন (যেমন আনুষাঙ্গিক, কাঁচামাল, ভেকু, গাড়ি ভাড়া)।` };
+      return { type, data: { phrase, head, label: moneyHead(head).label, person: String(d.person ?? "").trim() || undefined, item: String(d.item ?? "").trim() || undefined } };
+    }
     case "CUSTOMER": {
       const c = prepareCustomer(d, s);
       return "ask" in c ? c : { type, data: c.data };
@@ -2523,7 +2579,7 @@ async function prepareEntry(type: string, data: Row, ctx: { text: string; msg: s
   }
 }
 
-const CARD_TYPES = new Set(["ATTENDANCE", "SALE_CHALLAN", "KACHA_BRICK", "MONEY", "EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "WORKER_PAYMENT", "SUPPLIER_PAYMENT", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING", "POT_COUNT"]);
+const CARD_TYPES = new Set(["ATTENDANCE", "SALE_CHALLAN", "KACHA_BRICK", "MONEY", "EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "WORKER_PAYMENT", "SUPPLIER_PAYMENT", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING", "POT_COUNT", "TEACH"]);
 
 /**
  * A money card that is already in the book: the same head, the same person (or item), the same
@@ -2585,6 +2641,30 @@ async function markDuplicates(ready: PreparedEntry[]): Promise<{ strong: number;
     }
   }
   return { strong, near };
+}
+
+/**
+ * "খাত বদলান" on a money card: the same line prepared again under the head the user picked
+ * (person matched in that head's list), and the line's words learned for that head.
+ */
+export async function changeMoneyHead(d: Row, head: MoneyKey): Promise<{ data: MoneyEntry } | { ask: string }> {
+  const s = await getSnapshot();
+  const nd: Row = {
+    ...d, head, personId: undefined, newPerson: undefined, prevDue: undefined, dueSide: undefined, dup: undefined,
+    siteId: undefined, sellerType: undefined, itemId: undefined,
+  };
+  // a misc line needs an item: the kind or the note said for the old head
+  if (head === "misc" && !nd.item) nd.item = d.vekuKind || d.note || d.person || undefined;
+  if (head !== "veku") { nd.vekuKind = undefined; nd.site = head === "vehicle" ? d.site : undefined; }
+  const r = await prepareMoney(nd, { text: "", msg: String(d.said ?? ""), single: true, keepHead: true }, s);
+  if ("data" in r) {
+    const phrase = phraseOf(String(d.said ?? "")) || String(d.item ?? d.person ?? "").trim();
+    if (phrase) {
+      void learnTerm({ phrase, head, person: r.data.person ?? null, item: r.data.item ?? null, source: "fix" })
+        .then(() => forgetExtras()).catch(() => { /* a hint only */ });
+    }
+  }
+  return r;
 }
 
 /** the reply for one or more entries: the cards, and the lines that need a question */
@@ -3425,6 +3505,12 @@ export const saveAiActionToDatabase = async (
       return { success: true, refs: [{ table: "pot_counts", id }], message: `${p.mill} পট ${bn(p.potNo)}: ${bn(p.quantity)} ইট লেখা হয়েছে; মিলের দিনের মোট কাঁচা ইটের খাতায় নিজে থেকে উঠেছে।` };
     }
     if (type === "BOOKING") return await saveBooking({ ...(d as BookingEntry), date: entryDate });
+    if (type === "TEACH") {
+      const r = await learnTerm({ phrase: String(d.phrase ?? ""), head: d.head as MoneyKey, person: d.person ?? null, item: d.item ?? null, source: "teach" });
+      forgetExtras();
+      if (!r) throw new Error("শব্দটা খালি, আবার বলুন।");
+      return { success: true, refs: [{ table: "ai_terms", id: r.id }], message: `শিখে রাখলাম: এখন থেকে "${d.phrase}" ${moneyHead(d.head as MoneyKey).label} খাতে যাবে।` };
+    }
 
     // ---------- হাজিরা (ডেলি শ্রমিক): শুধু অনুপস্থিত ও হাফ দিন লেখা থাকে ----------
     if (type === "ATTENDANCE") {
