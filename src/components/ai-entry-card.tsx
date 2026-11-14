@@ -4,6 +4,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { bn, bnDate } from "@/lib/format";
 import { moneyHead, type MoneyKey } from "@/lib/money-heads";
+import { bnOf } from "@/components/contract-config";
 import { METHOD_LABEL, PAY_METHOD_LIST, SELLER_HEADS, bookingValue, whenText, type PayMethod, type SavedRef } from "@/lib/ai-entries";
 
 /**
@@ -123,10 +124,18 @@ function Body({ e }: { e: ChatEntry }) {
           {d.item && <Row k="কী" v={d.item} />}
           {d.vekuKind && <Row k="কিসের" v={d.vekuKind} />}
           {d.driver && <Row k="চালক" v={d.driver} />}
+          {d.site && <Row k="মাটির সাইট" v={<>{d.site}{!d.siteId && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800">নতুন</span>}</>} />}
           {d.paymentType === "advance" && <Row k="ধরন" v="দাদন (অগ্রিম)" />}
           {bill > 0 && <Row k="বিল" v={num(d.qty) > 0 && num(d.rate) > 0 ? `${bn(num(d.qty))} ${unit} × ${tk(num(d.rate))} = ${tk(bill)}` : num(d.qty) > 0 ? `${bn(num(d.qty))} ${unit} · ${tk(bill)}` : tk(bill)} />}
           {(amount > 0 || !bill) && <Row k={isIn ? "পেলাম" : "দিলাম"} v={tk(amount)} strong />}
           {bill > 0 && !(amount > 0) && <Row k="দিলাম" v="এখন কিছু না (বাকিতে)" />}
+          {d.site && (() => {
+            // a veku cost at a site is its total (or what is paid now); a trolley's is the trips' rent
+            const off = d.head === "veku" ? (bill > 0 ? bill : amount) : bill;
+            return off > 0
+              ? <div className="num mt-1 rounded-xl bg-success/10 px-2.5 py-1.5 text-xs font-semibold text-success">{bnOf(d.site)} মাটির দাম থেকে বাদ: {tk(off)}</div>
+              : <div className="mt-1 text-xs text-muted-foreground">ট্রিপ লিখলে ভাড়াটা {bnOf(d.site)} মাটির দাম থেকে বাদ যাবে।</div>;
+          })()}
           <Row k={isIn ? "কোথায় এলো" : "কোথা থেকে"} v={METHOD_LABEL[(d.method ?? "cash") as PayMethod] ?? "ক্যাশ"} />
           {d.dueDate && <Row k="ফেরতের তারিখ" v={bnDate(d.dueDate)} />}
           <Row k="তারিখ" v={bnDate(d.date)} />

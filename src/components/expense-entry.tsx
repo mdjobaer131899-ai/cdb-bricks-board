@@ -23,8 +23,8 @@ import { fetchWorkerOldDues, payWorker, splitWorkerPay } from "@/lib/worker-pay"
 import { ASSET_PREFIX, PAY_METHODS, PAY_METHOD_BN } from "@/lib/cash-queries";
 import { useCurrentUser } from "@/lib/use-current-user";
 import {
-  CONTRACT_TYPES, HOUR, LAND_UNITS, PARTS_PREFIX, POWER_BILL, PREV_NOTE, TRIP, TRIP_WORK, VEKU_ITEM,
-  VEKU_KINDS, VEKU_TYPE, contractByKey, dayBefore, makeVekuNote, parseVekuNote,
+  CONTRACT_TYPES, HOUR, LAND_UNITS, PARTS_PREFIX, POWER_BILL, PREV_NOTE, SITE_TAG, SOIL_TYPE, TRIP, TRIP_WORK, VEKU_ITEM,
+  VEKU_KINDS, VEKU_TYPE, bnOf, contractByKey, dayBefore, makeVekuNote, parseVekuNote, siteName,
 } from "@/components/contract-config";
 
 /**
@@ -42,6 +42,10 @@ import {
  *   first (opening_payments), the rest worker_payments (lib/worker-pay.ts);
  *   raw, parts, veku, vehicle, land, clean → purchases (bill) + supplier_payments (paid);
  *   parts with no shop, power bill, misc, asset → expenses.
+ * Trolley trips and the veku's costs can name a soil site ("কোন মাটির জন্য"): the bill then
+ * carries purchases.site_supplier_id and the database takes the same amount off that soil
+ * seller (a minus bill, migration soil_site_costs). A veku cost at a site is a bill of its own
+ * (the total) plus the money paid now, so the veku account changes only by what is still unpaid.
  * Opened from the cash book, the purchases page and its folders, and the suppliers page.
  */
 
@@ -73,6 +77,8 @@ const SUPPLIER_HEADS = new Set<HeadKey>(["raw", "parts", "veku", "vehicle", "lan
 const CASH_HEADS = new Set<HeadKey>(["power", "misc", "asset"]);
 /** heads whose person is picked from a fixed list by id */
 const PICK_HEADS = new Set<HeadKey>(["sardar", "daily", "staff", "veku", "ownerSalary", "ownerWithdraw", "openingOut", "loanRepay"]);
+/** heads whose cost can be charged to a soil site */
+const SITE_HEADS = new Set<HeadKey>(["veku", "vehicle"]);
 /** heads whose bill is usually written with the payment; the others start with the bill folded */
 const BILL_OPEN = new Set<HeadKey>(["raw", "parts", "vehicle"]);
 
@@ -99,18 +105,22 @@ type Form = {
   dueDate: string;
   /** how the money was paid: cash (drawer), bkash, nagad, bank */
   method: string;
+  /** veku / vehicle: the soil site this cost comes off (a soil seller's name) */
+  site: string;
 };
 
 const blank = (today: string): Form => ({
   personId: "", party: "", kindId: "", vekuKind: "", work: "", what: "", qty: "", rate: "", total: "",
   billKind: "rent", area: "", areaUnit: LAND_UNITS[0], driver: "", rateTouched: false, paid: "", paidTouched: false, date: today, note: "", dueDate: "",
-  method: "cash",
+  method: "cash", site: "",
 });
 
 /** what to fill in when the form opens (the AI assistant's card opens the form this way) */
 export type ExpenseInitial = {
   party?: string; paid?: number; qty?: number; rate?: number; total?: number; what?: string; kindName?: string;
   vekuKind?: string; driver?: string; method?: string; date?: string; note?: string; dueDate?: string | null;
+  /** veku / vehicle: the soil site the cost comes off */
+  site?: string;
 };
 
 export function ExpenseEntryDialog({
@@ -200,6 +210,7 @@ export function ExpenseEntryDialog({
           ...(i.date ? { date: i.date } : {}),
           ...(i.note ? { note: i.note } : {}),
           ...(i.dueDate ? { dueDate: i.dueDate } : {}),
+          ...(i.site ? { site: i.site } : {}),
         }));
         if (i.total || i.qty) setBillOpen(true);
       }
@@ -230,6 +241,7 @@ export function ExpenseEntryDialog({
         areaUnit: h === "land" && edit.unit && !trip ? edit.unit : LAND_UNITS[0],
         work: h === "vehicle" && TRIP_WORK.includes((edit.note ?? "").trim()) ? (edit.note ?? "").trim() : "",
         driver: h === "veku" ? veku.driver : "",
+        vekuKind: h === "veku" ? veku.kind : "",
         rateTouched: true,
         date: edit.date,
         note: h === "veku" ? veku.rest
@@ -365,6 +377,35 @@ export function ExpenseEntryDialog({
     },
   });
   const party = partyIds.length ? partyQ.data : undefined;
+
+  /* ---------- soil site (veku / trolley cost that comes off a soil seller) ---------- */
+  const soilSellers = useMemo(() => (supsQ.data ?? []).filter((s) => s.material_type === SOIL_TYPE), [supsQ.data]);
+  // a saved bill: is it charged to a soil site, or is it itself the automatic minus line?
+  const siteInfoQ = useQuery({
+    queryKey: ["expense-form-site", edit?.table === "purchases" ? edit.id : ""],
+    enabled: open && edit?.table === "purchases",
+    queryFn: async () => {
+      const { data, error } = await supabase.from("purchases").select("site_supplier_id, mirror_of").eq("id", (edit as { id: string }).id).maybeSingle();
+      if (error) throw error;
+      return { siteId: (data?.site_supplier_id ?? null) as string | null, mirrorOf: (data?.mirror_of ?? null) as string | null };
+    },
+  });
+  const siteFilled = useRef(false);
+  useEffect(() => { if (!open) siteFilled.current = false; }, [open]);
+  useEffect(() => {
+    const id = siteInfoQ.data?.siteId;
+    if (siteFilled.current || !id || !supsQ.data) return;
+    const s = supsQ.data.find((x) => x.id === id);
+    if (s) { siteFilled.current = true; set({ site: s.name }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteInfoQ.data, supsQ.data]);
+  const isMirror = !!siteInfoQ.data?.mirrorOf;
+  // an hours bill stays an hours bill; a site cost of the veku is a total
+  const canSite = !!head && SITE_HEADS.has(head) && !isEditPay && !(head === "veku" && edit?.table === "purchases" && edit.unit === HOUR);
+  const siteText = siteName(f.site);
+  const siteSeller = soilSellers.find((s) => nfc(s.name) === nfc(siteText));
+  const siteOn = canSite && !!siteText;
+  const vekuSite = head === "veku" && siteOn;
 
   // last rate for the next bill: this seller first, then anyone
   const rateItem = head === "raw" ? kindItem?.name ?? "" : head === "vehicle" ? cfg?.item ?? "" : head === "veku" ? VEKU_ITEM : "";
@@ -557,7 +598,10 @@ export function ExpenseEntryDialog({
 
   /* ---------- the numbers ---------- */
   const rawAuto = num(f.qty) * num(f.rate);
-  const bill = !billOpen || isEditPay ? 0
+  const bill = isEditPay ? 0
+    // a veku cost at a soil site: its total, or what is paid now when no total is given
+    : vekuSite ? (num(f.total) > 0 ? num(f.total) : isEditBill ? 0 : num(f.paid))
+    : !billOpen ? 0
     : head === "raw" ? (f.total.trim() ? num(f.total) : rawAuto)
     : head === "veku" || (head === "vehicle" && f.billKind === "rent") ? num(f.qty) * num(f.rate)
     : head === "parts" || head === "land" || head === "clean" || head === "vehicle" ? num(f.total)
@@ -592,6 +636,20 @@ export function ExpenseEntryDialog({
   const createSardarPay = useServerFn(createSardarPayment);
   const uid = () => { if (!me?.user.id) throw new Error("আবার লগইন করুন"); return me.user.id; };
 
+  /** the soil site's supplier id (a new soil seller is added), or null when none is named */
+  const ensureSite = async (payee: string | null): Promise<string | null> => {
+    if (!siteOn) return null;
+    let id = siteSeller?.id ?? null;
+    if (!id) {
+      if (!supsQ.isSuccess) throw new Error("নামের তালিকা এখনো আসেনি, একটু পরে আবার চাপুন");
+      const { data, error } = await supabase.from("suppliers").insert({ name: siteText, material_type: SOIL_TYPE }).select("id").single();
+      if (error) throw error;
+      id = data.id as string;
+    }
+    if (payee && id === payee) throw new Error("যে টাকা পাবে আর মাটির সাইট একই জন হতে পারে না");
+    return id;
+  };
+
   const ensureSeller = async (type: string): Promise<string> => {
     const name = f.party.trim();
     if (seller) return seller.id;
@@ -609,6 +667,7 @@ export function ExpenseEntryDialog({
       if (!f.date) throw new Error("তারিখ দিন");
 
       /* ----- edit one saved row ----- */
+      if (isMirror) throw new Error("এই লাইন ট্রলি বা ভেকুর বিল থেকে নিজে আসে। ওই বিলটা বদলান।");
       if (edit) {
         if (edit.table === "expenses") {
           const amount = head === "parts" ? num(f.total) : num(f.paid);
@@ -630,7 +689,9 @@ export function ExpenseEntryDialog({
           const sid = head === "veku" ? f.personId : seller?.id;
           if (!sid) throw new Error(`${partyLabel} বেছে নিন`);
           if (!(bill > 0)) throw new Error("বিলের টাকা দিন");
-          await writeBill(sid, edit.id);
+          if (canSite && !siteInfoQ.isSuccess) throw new Error("একটু পরে আবার চাপুন");
+          if (vekuSite && !f.vekuKind) throw new Error("কিসের খরচ (ডিজেল, চালকের বেতন …), বেছে নিন");
+          await writeBill(sid, edit.id, canSite ? await ensureSite(sid) : undefined);
         }
         done("সংশোধন হয়েছে");
         return;
@@ -681,7 +742,8 @@ export function ExpenseEntryDialog({
         // sellers and contract people: a bill and / or money paid now
         if (!(bill > 0) && !(paid > 0)) throw new Error(billOpen ? "বিল বা দেওয়া টাকা লিখুন" : "কত টাকা দিলেন, লিখুন");
         if (head === "veku" && !f.personId) throw new Error("কোন ভেকু, বেছে নিন");
-        if (head === "veku" && paid > 0 && !f.vekuKind) throw new Error("টাকা কিসের জন্য (ডিজেল, মবিল …), বেছে নিন");
+        if (head === "veku" && (paid > 0 || vekuSite) && !f.vekuKind) throw new Error(vekuSite ? "কিসের খরচ (ডিজেল, চালকের বেতন …), বেছে নিন" : "টাকা কিসের জন্য (ডিজেল, মবিল …), বেছে নিন");
+        if (vekuSite && paid > bill + 0.001) throw new Error("দেওয়া টাকা খরচের মোটের চেয়ে বেশি। মোট খরচ ঠিক করে লিখুন।");
         if (head === "raw" && bill > 0 && !kindItem) throw new Error("কোন কাঁচামাল, বেছে নিন");
         if (head === "parts" && bill > 0 && !f.what.trim()) throw new Error("কী কী কিনলেন, লিখুন");
         if (cfg && f.billKind === "prev" && bill > 0 && seasonStart && f.date >= seasonStart) throw new Error("পূর্বের বকেয়ার তারিখ এই মৌসুম শুরুর আগে হতে হবে");
@@ -696,11 +758,14 @@ export function ExpenseEntryDialog({
           if (head !== "veku" && !f.party.trim()) throw new Error(`${partyLabel}: নাম লিখুন`);
           const sid = head === "veku" ? f.personId
             : await ensureSeller(head === "raw" ? kindItem?.name ?? "কাঁচামাল" : head === "parts" ? kindItem?.name ?? "ইঞ্জিন মালামাল" : cfg!.type);
-          if (bill > 0) await writeBill(sid, null);
+          const siteId = canSite ? await ensureSite(sid) : undefined;
+          if (bill > 0) await writeBill(sid, null, siteId);
           if (paid > 0) {
             const what = head === "raw" ? kindItem?.name ?? seller?.material_type ?? "কাঁচামাল" : head === "parts" ? f.what.trim() || "মালামাল" : "";
-            const payNote = head === "veku" ? makeVekuNote(f.vekuKind, f.driver, note)
-              : cfg ? (note ? `${cfg.item} পরিশোধ — ${note}` : `${cfg.item} পরিশোধ`)
+            // a payment for a soil site's cost says which site, so the ledgers show it
+            const withSite = siteOn ? [`${SITE_TAG}${siteText}`, note].filter(Boolean).join(" · ") : note;
+            const payNote = head === "veku" ? makeVekuNote(f.vekuKind, f.driver, withSite)
+              : cfg ? (withSite ? `${cfg.item} পরিশোধ — ${withSite}` : `${cfg.item} পরিশোধ`)
               : `${what} — ${bill > 0 ? "পরিশোধ" : "অগ্রিম/বকেয়া পরিশোধ"}${note ? ` (${note})` : ""}`;
             const { error } = await supabase.from("supplier_payments").insert({
               supplier_id: sid, amount: paid, payment_date: f.date, method: f.method, note: payNote, created_by: uid(),
@@ -717,8 +782,11 @@ export function ExpenseEntryDialog({
     }
   };
 
-  /** one purchases row for the bill part (insert, or update when id is given) */
-  async function writeBill(sid: string, id: string | null) {
+  /**
+   * one purchases row for the bill part (insert, or update when id is given). siteId: the soil
+   * site it comes off (veku / vehicle; null = none, undefined = leave the saved one as it is)
+   */
+  async function writeBill(sid: string, id: string | null, siteId?: string | null) {
     const note = f.note.trim();
     let row: Record<string, unknown>;
     if (head === "raw") {
@@ -733,6 +801,9 @@ export function ExpenseEntryDialog({
       };
     } else if (head === "parts") {
       row = { item_name: f.what.trim(), material_id: kindItem?.id ?? null, quantity: 1, unit: null, unit_price: bill, total_amount: bill, note: note || null };
+    } else if (head === "veku" && vekuSite) {
+      // a cost at a soil site: no hours, just the total (diesel, driver …)
+      row = { item_name: VEKU_ITEM, material_id: null, quantity: 0, unit: null, unit_price: 0, total_amount: Math.round(bill * 100) / 100, note: makeVekuNote(f.vekuKind, f.driver, note) };
     } else if (head === "veku") {
       row = { item_name: VEKU_ITEM, material_id: null, quantity: num(f.qty), unit: HOUR, unit_price: num(f.rate), total_amount: Math.round(bill * 100) / 100, note: makeVekuNote("", f.driver, note) };
     } else {
@@ -748,7 +819,7 @@ export function ExpenseEntryDialog({
         note: prev ? [PREV_NOTE, text].filter(Boolean).join(" — ") : text || null,
       };
     }
-    const payload = { ...row, supplier_id: sid, purchase_date: f.date };
+    const payload = { ...row, supplier_id: sid, purchase_date: f.date, ...(siteId !== undefined ? { site_supplier_id: siteId } : {}) };
     const { error } = id
       ? await supabase.from("purchases").update(payload as never).eq("id", id)
       : await supabase.from("purchases").insert({ ...payload, created_by: uid() } as never);
@@ -764,7 +835,7 @@ export function ExpenseEntryDialog({
     }
     if (again.current && !edit && head) {
       again.current = false;
-      startHead(head, { ...blank(today), date: f.date, method: f.method });
+      startHead(head, { ...blank(today), date: f.date, method: f.method, site: f.site });
       setRecent(readRecent(`out:${head}`));
       onDone?.();
       return;
@@ -904,6 +975,42 @@ export function ExpenseEntryDialog({
               </Section>
             )}
 
+            {/* the automatic minus line on a soil seller is changed through its source bill */}
+            {isMirror && (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                এই লাইনটা ট্রলি বা ভেকুর বিল থেকে নিজে আসে (মাটির দাম থেকে বাদ)। বদলাতে বা মুছতে ওই ট্রলি বা ভেকুর বিলটা খুলুন।
+              </p>
+            )}
+
+            {/* 1b. which soil site this cost comes off (trolley trips, the veku's diesel / driver) */}
+            {canSite && !isMirror && (
+              <Section label="কোন মাটির জন্য? (ঐচ্ছিক)">
+                <NameCombo value={f.site} placeholder="মাটির সাইটের নাম, না হলে খালি" onChange={(v) => set({ site: v })}
+                  options={soilSellers.map((x) => x.name)} />
+                {siteOn && !siteSeller && supsQ.isSuccess && (
+                  <p className="text-xs text-muted-foreground">নতুন মাটির সাইট "{siteText}", মালামালের মাটির খাতায় নিজে থেকে যোগ হবে।</p>
+                )}
+                {siteOn ? (
+                  <p className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                    {head === "vehicle" ? "ট্রিপের পুরো ভাড়া" : "এই খরচের পুরোটা"} {bnOf(siteText)} মাটির দাম থেকে বাদ যাবে। যা এখনো দেননি, তা {head === "vehicle" ? "ট্রলির মালিকের" : "ভেকুর"} কাছে আমাদের বাকি থাকবে।
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">মাটির সাইট থেকে মাটি আনার খরচ হলে নাম দিন; খরচটা তখন সেই মাটির দাম থেকে কাটবে।</p>
+                )}
+                {vekuSite && (
+                  <>
+                    <div className="text-xs font-bold text-muted-foreground">কিসের খরচ</div>
+                    <Chips value={f.vekuKind} onChange={(v) => set({ vekuKind: v })} options={VEKU_KINDS.map((k) => [k, k])} small />
+                    <Field label="এই খরচ মোট কত (৳)" value={f.total} onChange={(v) => set({ total: v })}
+                      placeholder={isEditBill ? "মোট টাকা" : "খালি রাখলে যত দিলেন ততই"} />
+                  </>
+                )}
+                {head === "vehicle" && siteOn && !isEditBill && !(bill > 0) && (
+                  <p className="text-xs font-semibold text-warning">ট্রিপ লিখলে তবেই ভাড়াটা মাটির দাম থেকে বাদ যাবে। এখন শুধু টাকা দিলে সেটা ট্রলির মালিকের হিসাবে উঠবে।</p>
+                )}
+              </Section>
+            )}
+
             {/* 2. what */}
             {MOVE_HELP[head] && <p className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{MOVE_HELP[head]}</p>}
             {(head === "raw" || head === "parts") && (
@@ -934,7 +1041,7 @@ export function ExpenseEntryDialog({
             )}
 
             {/* 3. bill */}
-            {isSupplierHead && !isEditPay && (billOpen ? (
+            {isSupplierHead && !isEditPay && !vekuSite && !isMirror && (billOpen ? (
               <Section label={head === "raw" || head === "parts" ? "বিল" : billWord}>
                 {cfg && !isEditBill && (
                   <Chips value={f.billKind} onChange={(v) => set({ billKind: v as Form["billKind"], date: v === "prev" ? prevDate : head === "clean" && seasonStart ? seasonStart : today })}
@@ -1007,7 +1114,7 @@ export function ExpenseEntryDialog({
                     <Chips value={f.method} onChange={(v) => set({ method: v })} options={PAY_METHODS} small />
                   </>
                 )}
-                {head === "veku" && (num(f.paid) > 0 || !billOpen) && (
+                {head === "veku" && !vekuSite && (num(f.paid) > 0 || !billOpen) && (
                   <>
                     <div className="text-xs font-bold text-muted-foreground">কিসের টাকা</div>
                     <Chips value={f.vekuKind} onChange={(v) => set({ vekuKind: v })} options={VEKU_KINDS.map((k) => [k, k])} small />
@@ -1019,6 +1126,11 @@ export function ExpenseEntryDialog({
             {/* 5. the account */}
             {!edit && !isCash && (prevDue !== null || bill > 0) && (bill > 0 || paid > 0) && (
               <BalanceStrip prev={prevDue} bill={bill} paid={paid} advanceWord={head === "sardar" ? "দাদন" : "অগ্রিম"} />
+            )}
+            {siteOn && bill > 0 && (
+              <p className="num rounded-xl bg-success/10 px-3 py-2 text-sm font-semibold text-success">
+                {bnOf(siteText)} মাটির দাম থেকে বাদ: {tk(bill)}
+              </p>
             )}
 
             {/* 6. date, note */}
@@ -1054,7 +1166,7 @@ export function ExpenseEntryDialog({
               সেভ, আরেকটা
             </Button>
           )}
-          {head && (
+          {head && !isMirror && (
             <Button type="button" onClick={() => { again.current = false; void save(); }} disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}সংরক্ষণ
             </Button>

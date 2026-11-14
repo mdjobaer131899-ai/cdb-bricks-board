@@ -74,6 +74,8 @@ type Entry = {
   note: string | null;
   /** expenses rows: the stored category */
   category?: string;
+  /** the automatic minus line on a soil seller (trolley / veku cost at the site); not edited here */
+  mirror?: boolean;
 };
 
 const RAW_LOOK: Record<string, { chip: string; initial: string }> = {
@@ -130,7 +132,7 @@ function PurchasesPage() {
     queryFn: async () => {
       const { data, error } = await sdb
         .from("purchases")
-        .select("id, purchase_date, supplier_id, material_id, item_name, quantity, unit, unit_price, total_amount, note")
+        .select("id, purchase_date, supplier_id, material_id, item_name, quantity, unit, unit_price, total_amount, note, mirror_of")
         .order("purchase_date", { ascending: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -202,6 +204,7 @@ function PurchasesPage() {
         rate: Number(p.unit_price) || 0,
         total: Number(p.total_amount) || 0,
         note: p.note,
+        mirror: !!p.mirror_of,
       };
     });
     const fromExpenses: Entry[] = [...(expQ.data ?? []), ...(partsExpQ.data ?? [])].map((e) => ({
@@ -260,6 +263,7 @@ function PurchasesPage() {
 
   /* ---------- edit through the one form ---------- */
   function openEdit(e: Entry) {
+    if (e.mirror) return toast.info("এই লাইন ট্রলি বা ভেকুর বিল থেকে নিজে আসে। গাড়ি ভাড়া বা ভেকুর খাতায় ওই বিলটা বদলান।");
     if (e.source === "expense") {
       const head: HeadKey | null = e.category === POWER_BILL ? "power" : e.category?.startsWith(PARTS_PREFIX) ? "parts" : null;
       if (!head) return toast.error("এই এন্ট্রি ক্যাশ বই থেকে সংশোধন করুন");
@@ -282,7 +286,7 @@ function PurchasesPage() {
   });
 
   const lineText = (e: Entry) =>
-    e.source === "expense" ? "নগদ, বাকি নেই" : e.quantity > 0 ? `${bn(e.quantity)} ${e.unit ?? ""} × ${tk(e.rate)}` : "মোট দাম";
+    e.mirror ? "মাটির দাম থেকে বাদ" : e.source === "expense" ? "নগদ, বাকি নেই" : e.quantity > 0 ? `${bn(e.quantity)} ${e.unit ?? ""} × ${tk(e.rate)}` : "মোট দাম";
 
   const print = (rows: Entry[], title: string) =>
     printTable({
@@ -328,8 +332,8 @@ function PurchasesPage() {
                 {e.note ? ` · ${e.note}` : ""}
               </div>
             </div>
-            <div className="num shrink-0 text-[15px] font-bold">{tk(e.total)}</div>
-            {isAdmin && (
+            <div className={`num shrink-0 text-[15px] font-bold ${e.total < 0 ? "text-success" : ""}`}>{e.total < 0 ? `−${tk(-e.total)}` : tk(e.total)}</div>
+            {isAdmin && !e.mirror && (
               <div className="flex shrink-0">
                 <Button size="icon" variant="ghost" aria-label="সম্পাদনা" onClick={() => openEdit(e)}>
                   <Pencil className="h-4 w-4" />

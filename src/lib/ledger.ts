@@ -265,7 +265,7 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
     for (const b of bills) {
       const qty = Number(b.quantity) > 0 && b.unit ? `${bn(Number(b.quantity))} ${b.unit}` : "";
       const rate = Number(b.unit_price) > 0 && qty ? ` × ${tk(Number(b.unit_price))}` : "";
-      lines.push({ id: `b-${b.id}`, date: b.purchase_date, text: `${b.item_name}${qty ? ` · ${qty}${rate}` : ""}`, sub: b.note ?? undefined, bill: Number(b.total_amount || 0), paid: 0, link: billLink(b.id), linkLabel: "আয়-ব্যয় (ক্যাশ বই)" });
+      lines.push({ id: `b-${b.id}`, date: b.purchase_date, text: Number(b.total_amount) < 0 ? "ট্রলি/ভেকুর খরচ মাটির দাম থেকে বাদ" : `${b.item_name}${qty ? ` · ${qty}${rate}` : ""}`, sub: b.note ?? undefined, bill: Number(b.total_amount || 0), paid: 0, link: billLink(b.id), linkLabel: "আয়-ব্যয় (ক্যাশ বই)" });
     }
     for (const p of pays) {
       lines.push({

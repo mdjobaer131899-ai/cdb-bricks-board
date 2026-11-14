@@ -36,7 +36,11 @@ const METHODS: Array<[string, string]> = [["cash", "নগদ"], ["bkash", "ব�
 const tk = (n: number) => `৳${bn(Math.round(n))}`;
 
 type Owner = { id: string; name: string; phone: string | null; address: string | null; note: string | null };
-type Bill = { id: string; supplier_id: string | null; purchase_date: string; quantity: number; unit: string | null; unit_price: number; total_amount: number; note: string | null };
+type Bill = {
+  id: string; supplier_id: string | null; purchase_date: string; quantity: number; unit: string | null; unit_price: number; total_amount: number; note: string | null;
+  /** trolley trips for a soil site: the whole rent comes off that soil seller's price */
+  site?: { name: string } | null;
+};
 type Pay = { id: string; supplier_id: string; payment_date: string; amount: number; method: string | null; note: string | null };
 
 type OwnerForm = { id?: string; name: string; phone: string; land: string; note: string; prevDue: string; rent: string };
@@ -75,7 +79,7 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
   const billsQ = useQuery({
     queryKey: ["contract-bills", cfg.key],
     queryFn: () => fetchAllRows<Bill>(() => supabase.from("purchases")
-      .select("id, supplier_id, purchase_date, quantity, unit, unit_price, total_amount, note").eq("item_name", cfg.item).order("id")),
+      .select("id, supplier_id, purchase_date, quantity, unit, unit_price, total_amount, note, site:suppliers!purchases_site_supplier_id_fkey(name)").eq("item_name", cfg.item).order("id")),
   });
   const paysQ = useQuery({
     queryKey: ["contract-payments", cfg.key, ownerIds.join(",")],
@@ -336,7 +340,7 @@ export function ContractFolder({ cfg, onBack }: { cfg: ContractConfig; onBack: (
           {detail && (() => {
             const s = stats.get(detail.id)!;
             const rows = [
-              ...bills.filter((b) => b.supplier_id === detail.id).map((b) => ({ key: `b${b.id}`, date: b.purchase_date, kind: isPrev(b) ? "prev" as const : "rent" as const, label: isPrev(b) ? PREV_NOTE : b.unit === TRIP ? `${cfg.bill} (${bn(Number(b.quantity))} ${TRIP} × ${tk(Number(b.unit_price))})` : `${cfg.bill}${b.unit && Number(b.quantity) > 0 ? ` (${bn(Number(b.quantity))} ${b.unit})` : ""}`, plus: Number(b.total_amount), minus: 0, note: b.note, bill: b, pay: null as Pay | null })),
+              ...bills.filter((b) => b.supplier_id === detail.id).map((b) => ({ key: `b${b.id}`, date: b.purchase_date, kind: isPrev(b) ? "prev" as const : "rent" as const, label: isPrev(b) ? PREV_NOTE : `${b.unit === TRIP ? `${cfg.bill} (${bn(Number(b.quantity))} ${TRIP} × ${tk(Number(b.unit_price))})` : `${cfg.bill}${b.unit && Number(b.quantity) > 0 ? ` (${bn(Number(b.quantity))} ${b.unit})` : ""}`}${b.site ? ` · ${b.site.name} মাটি` : ""}`, plus: Number(b.total_amount), minus: 0, note: b.note, bill: b, pay: null as Pay | null })),
               ...pays.filter((p) => p.supplier_id === detail.id).map((p) => ({ key: `p${p.id}`, date: p.payment_date, kind: "pay" as const, label: `পরিশোধ${p.method && p.method !== "cash" ? ` (${METHODS.find(([k]) => k === p.method)?.[1] ?? p.method})` : ""}`, plus: 0, minus: Number(p.amount), note: p.note, bill: null as Bill | null, pay: p })),
             ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.kind === "pay" ? 1 : -1));
             let run = 0;

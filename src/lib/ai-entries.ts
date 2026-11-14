@@ -3,7 +3,7 @@ import { fetchCashSummary, PAY_METHOD_BN } from "@/lib/cash-queries";
 import { payWorker } from "@/lib/worker-pay";
 import { saveVekuDay, type VekuDayInput } from "@/lib/veku-save";
 import { ASSET_PREFIX, MISC_PREFIX, PARTS_PREFIX, POWER_BILL, moneyHead, type MoneyKey } from "@/lib/money-heads";
-import { HOUR, TRIP, VEKU_ITEM, contractByKey, makeVekuNote } from "@/components/contract-config";
+import { HOUR, SITE_TAG, SOIL_TYPE, TRIP, VEKU_ITEM, bnOf, contractByKey, makeVekuNote, siteName } from "@/components/contract-config";
 import { bn, bnDate } from "@/lib/format";
 
 /**
@@ -55,6 +55,9 @@ export type MoneyEntry = {
   note?: string;
   vekuKind?: string;
   driver?: string;
+  /** veku / vehicle: the soil site (soil seller) this cost comes off; siteId when found */
+  site?: string;
+  siteId?: string | null;
   dueDate?: string | null;
   paymentType?: "payment" | "advance";
   /** what is owed before this entry (shown on the card), and which way it runs */
@@ -98,6 +101,18 @@ async function insertOne(table: string, row: Record<string, unknown>): Promise<S
   return { table, id: (data as { id: string }).id };
 }
 
+/** a soil site's supplier id by name (a new soil seller is added, as the expense form does) */
+async function soilSiteId(e: MoneyEntry): Promise<string | null> {
+  if (e.siteId) return e.siteId;
+  const name = siteName(e.site ?? "");
+  if (!name) return null;
+  const { data: same } = await supabase.from("suppliers").select("id").eq("name", name).eq("material_type", SOIL_TYPE).limit(1);
+  if (same?.length) return (same[0] as { id: string }).id;
+  const { data, error } = await supabase.from("suppliers").insert({ name, material_type: SOIL_TYPE }).select("id").single();
+  if (error) throw friendly(error);
+  return (data as { id: string }).id;
+}
+
 /* ---------------------------------------------------------------- money by head */
 
 export async function saveMoneyEntry(e: MoneyEntry, uid: string): Promise<SaveOutcome> {
@@ -111,6 +126,8 @@ export async function saveMoneyEntry(e: MoneyEntry, uid: string): Promise<SaveOu
   const date = e.date;
   if (!date) throw new Error("তারিখ দিন");
   const refs: SavedRef[] = [];
+  /** said back after a save: how much came off a soil seller's price */
+  let siteMsg = "";
   const need = (ok: unknown, msg: string) => { if (!ok) throw new Error(msg); };
   const by = { created_by: uid };
 
@@ -224,7 +241,11 @@ export async function saveMoneyEntry(e: MoneyEntry, uid: string): Promise<SaveOu
         break;
       }
       if (head === "veku" && !e.personId) throw new Error("কোন ভেকু, বোঝা যায়নি");
-      if (head === "veku" && amount > 0 && !e.vekuKind) throw new Error("ভেকুর টাকা কিসের (ডিজেল, মেরামত, চালকের বেতন …), বলুন");
+      // a trolley's or the veku's cost at a soil site comes off that soil seller's price
+      const siteId = head === "veku" || head === "vehicle" ? await soilSiteId(e) : null;
+      const siteBill = siteId && head === "veku" ? (bill > 0 ? bill : amount) : 0;
+      if (head === "veku" && (amount > 0 || siteId) && !e.vekuKind) throw new Error("ভেকুর টাকা কিসের (ডিজেল, মেরামত, চালকের বেতন …), বলুন");
+      if (siteId && head === "veku" && amount > siteBill + 0.001) throw new Error("দেওয়া টাকা খরচের মোটের চেয়ে বেশি। মোট খরচ ঠিক করে বলুন।");
       if (head === "raw" && bill > 0 && !e.item) throw new Error("কোন কাঁচামাল, বলুন");
       if (head === "parts" && bill > 0 && !(e.item ?? "").trim()) throw new Error("কী কী কিনলেন, বলুন");
       let sid = e.personId ?? null;
@@ -241,7 +262,17 @@ export async function saveMoneyEntry(e: MoneyEntry, uid: string): Promise<SaveOu
           sid = (data as { id: string }).id;
         }
       }
-      if (bill > 0) {
+      if (siteId) {
+        const off = head === "veku" ? siteBill : bill;
+        siteMsg = off > 0 ? ` ${bnOf(siteName(e.site ?? ""))} মাটির দাম থেকে ${tk(off)} বাদ গেল।` : ` (${siteName(e.site ?? "")} মাটির সাইট; ট্রিপ লিখলে ভাড়াটা মাটির দাম থেকে বাদ যাবে।)`;
+      }
+      if (siteId && head === "veku") {
+        // no hours: the total of this cost (diesel, driver …); paid now is the payment below
+        refs.push(await insertOne("purchases", {
+          item_name: VEKU_ITEM, material_id: null, quantity: 0, unit: null, unit_price: 0, total_amount: round2(siteBill),
+          note: makeVekuNote(e.vekuKind ?? "অন্যান্য", e.driver ?? "", note), supplier_id: sid, purchase_date: date, site_supplier_id: siteId, ...by,
+        }));
+      } else if (bill > 0) {
         const qty = Number(e.qty) || 0;
         const rate = Number(e.rate) || 0;
         let row: Record<string, unknown>;
@@ -264,12 +295,13 @@ export async function saveMoneyEntry(e: MoneyEntry, uid: string): Promise<SaveOu
             unit_price: trips ? rate : bill, total_amount: trips ? round2(qty * rate) : bill, note: note || null,
           };
         }
-        refs.push(await insertOne("purchases", { ...row, supplier_id: sid, purchase_date: date, ...by }));
+        refs.push(await insertOne("purchases", { ...row, supplier_id: sid, purchase_date: date, ...(siteId ? { site_supplier_id: siteId } : {}), ...by }));
       }
       if (amount > 0) {
         const what = head === "raw" ? e.item || e.sellerType || "কাঁচামাল" : head === "parts" ? (e.item ?? "").trim() || "মালামাল" : "";
-        const payNote = head === "veku" ? makeVekuNote(e.vekuKind ?? "অন্যান্য", e.driver ?? "", note)
-          : cfg ? (note ? `${cfg.item} পরিশোধ — ${note}` : `${cfg.item} পরিশোধ`)
+        const withSite = siteId ? [`${SITE_TAG}${siteName(e.site ?? "")}`, note].filter(Boolean).join(" · ") : note;
+        const payNote = head === "veku" ? makeVekuNote(e.vekuKind ?? "অন্যান্য", e.driver ?? "", withSite)
+          : cfg ? (withSite ? `${cfg.item} পরিশোধ — ${withSite}` : `${cfg.item} পরিশোধ`)
           : `${what} — ${bill > 0 ? "পরিশোধ" : "অগ্রিম/বকেয়া পরিশোধ"}${note ? ` (${note})` : ""}`;
         try {
           refs.push(await insertOne("supplier_payments", { supplier_id: sid, amount, payment_date: date, method, note: payNote, ...by }));
@@ -285,7 +317,7 @@ export async function saveMoneyEntry(e: MoneyEntry, uid: string): Promise<SaveOu
 
   const who = e.person ? `${e.person} · ` : "";
   const parts = [bill > 0 ? `বিল ${tk(bill)}` : "", amount > 0 ? `${def.group === "in" ? "পেলাম" : "দিলাম"} ${tk(amount)}` : ""].filter(Boolean).join(", ");
-  return { success: true, refs, message: `${def.label}: ${who}${parts} খাতায় উঠেছে${method !== "cash" ? ` (${METHOD_LABEL[method]})` : ""}।` };
+  return { success: true, refs, message: `${def.label}: ${who}${parts} খাতায় উঠেছে${method !== "cash" ? ` (${METHOD_LABEL[method]})` : ""}।${siteMsg}` };
 }
 
 async function openingLeft(id: string): Promise<number> {

@@ -25,6 +25,7 @@ import { LedgerView } from "@/components/ledger-view";
 import { usePageAccess } from "@/lib/page-permissions";
 import { printTable } from "@/lib/print-table";
 import { fetchBookMarks } from "@/lib/book-marks";
+import { bnOf } from "@/components/contract-config";
 
 export const Route = createFileRoute("/_authenticated/cash-book")({
   head: () => ({
@@ -873,6 +874,7 @@ function CashBookPage() {
               b={bill}
               onEdit={() => { const b = bill; setBill(null); setFormEdit({ head: b.head as HeadKey, edit: b.edit }); }}
               onDelete={() => { setDeleteBill(bill); setBill(null); }}
+              onOpenSource={(id) => fetchBill(id).then((b) => { if (b) setBill(b); else toast.error("মূল বিলটা পাওয়া যায়নি"); }).catch((e) => toast.error(e.message))}
             />
           )}
         </SheetContent>
@@ -883,11 +885,17 @@ function CashBookPage() {
 }
 
 /** one purchases row (a bill) with what the form needs to change it */
-type BillRow = { id: string; date: string; supplier: string; item: string; qty: number; unit: string | null; rate: number; total: number; note: string | null; head: MoneyKey; edit: ExpenseEdit };
+type BillRow = {
+  id: string; date: string; supplier: string; item: string; qty: number; unit: string | null; rate: number; total: number; note: string | null; head: MoneyKey; edit: ExpenseEdit;
+  /** the soil site this cost comes off (trolley / veku bill) */
+  site: string | null;
+  /** this row is the automatic minus line on a soil seller: the id of its source bill */
+  mirrorOf: string | null;
+};
 
 async function fetchBill(id: string): Promise<BillRow | null> {
   const { data, error } = await (supabase as any).from("purchases")
-    .select("id, supplier_id, purchase_date, item_name, material_id, quantity, unit, unit_price, total_amount, note, supplier:suppliers!purchases_supplier_id_fkey(name, material_type)")
+    .select("id, supplier_id, purchase_date, item_name, material_id, quantity, unit, unit_price, total_amount, note, mirror_of, supplier:suppliers!purchases_supplier_id_fkey(name, material_type), site:suppliers!purchases_site_supplier_id_fkey(name)")
     .eq("id", id).maybeSingle();
   if (error) throw error;
   if (!data) return null;
@@ -901,6 +909,7 @@ async function fetchBill(id: string): Promise<BillRow | null> {
   return {
     id: data.id, date: data.purchase_date, supplier: data.supplier?.name ?? "—", item: data.item_name,
     qty: Number(data.quantity) || 0, unit: data.unit, rate: Number(data.unit_price) || 0, total: Number(data.total_amount) || 0, note: data.note, head,
+    site: data.site?.name ?? null, mirrorOf: data.mirror_of ?? null,
     edit: {
       table: "purchases", id: data.id, supplier_id: data.supplier_id, date: data.purchase_date, item_name: data.item_name, material_id: data.material_id ?? null,
       quantity: Number(data.quantity) || 0, unit: data.unit, unit_price: Number(data.unit_price) || 0, total: Number(data.total_amount) || 0, note: data.note,
@@ -908,7 +917,7 @@ async function fetchBill(id: string): Promise<BillRow | null> {
   };
 }
 
-function BillDetail({ b, onEdit, onDelete }: { b: BillRow; onEdit: () => void; onDelete: () => void }) {
+function BillDetail({ b, onEdit, onDelete, onOpenSource }: { b: BillRow; onEdit: () => void; onDelete: () => void; onOpenSource: (id: string) => void }) {
   const { Icon, tone } = lookOf(b.head);
   return (
     <div className="space-y-4">
@@ -925,13 +934,22 @@ function BillDetail({ b, onEdit, onDelete }: { b: BillRow; onEdit: () => void; o
         <div className="font-semibold">{b.item}</div>
         {b.qty > 0 && b.unit && <div className="num text-muted-foreground">{bn(b.qty)} {b.unit}{b.rate > 0 ? ` × ${tk(b.rate)}` : ""}</div>}
         {b.note && <div className="text-muted-foreground">{b.note}</div>}
-        <div className="num pt-1 font-display text-2xl font-extrabold">{tk(b.total)}</div>
-        <p className="text-xs text-muted-foreground">বিল মানে কত টাকার মাল বা কাজ নেওয়া হলো; হাতে নগদ কমে টাকা দিলে।</p>
+        <div className={`num pt-1 font-display text-2xl font-extrabold ${b.total < 0 ? "text-success" : ""}`}>{b.total < 0 ? `−${tk(-b.total)}` : tk(b.total)}</div>
+        {b.site && <p className="text-sm font-semibold text-success">মাটির সাইট: {b.site} — এই টাকা {bnOf(b.site)} মাটির দাম থেকে বাদ যায়।</p>}
+        <p className="text-xs text-muted-foreground">
+          {b.mirrorOf ? "এটা মাটির দাম থেকে বাদ যাওয়া ট্রলি বা ভেকুর খরচ। লাইনটা ওই বিল থেকে নিজে আসে।" : "বিল মানে কত টাকার মাল বা কাজ নেওয়া হলো; হাতে নগদ কমে টাকা দিলে।"}
+        </p>
       </div>
+      {b.mirrorOf ? (
+        <Button variant="outline" className="h-12 w-full gap-2 rounded-xl text-base font-bold" onClick={() => onOpenSource(b.mirrorOf!)}>
+          <Pencil className="h-4 w-4" /> মূল বিলটা খুলুন
+        </Button>
+      ) : (
       <div className="grid grid-cols-2 gap-2">
         <Button variant="outline" className="h-12 gap-2 rounded-xl text-base font-bold" onClick={onEdit}><Pencil className="h-4 w-4" /> সম্পাদনা</Button>
         <Button variant="outline" className="h-12 gap-2 rounded-xl border-destructive/40 text-base font-bold text-destructive" onClick={onDelete}><Trash2 className="h-4 w-4" /> মুছুন</Button>
       </div>
+      )}
     </div>
   );
 }

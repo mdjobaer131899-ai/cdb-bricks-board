@@ -55,7 +55,11 @@ const hm = (h: number) => {
 const cell = (n: number) => (n > 0.004 ? bn(Math.round(n)) : "");
 
 type Veku = { id: string; name: string; note: string | null };
-type Bill = { id: string; supplier_id: string | null; purchase_date: string; quantity: number; unit: string | null; unit_price: number; total_amount: number; note: string | null };
+type Bill = {
+  id: string; supplier_id: string | null; purchase_date: string; quantity: number; unit: string | null; unit_price: number; total_amount: number; note: string | null;
+  /** a cost at a soil site (diesel, driver): it comes off that soil seller's price, not rent */
+  site_supplier_id?: string | null; site?: { name: string } | null;
+};
 type Pay = { id: string; supplier_id: string; payment_date: string; amount: number; note: string | null };
 type Food = { id: string; expense_date: string; amount: number; note: string | null; category: string };
 
@@ -85,7 +89,7 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
   const billsQ = useQuery({
     queryKey: ["veku-bills"],
     queryFn: () => fetchAllRows<Bill>(() => supabase.from("purchases")
-      .select("id, supplier_id, purchase_date, quantity, unit, unit_price, total_amount, note").eq("item_name", VEKU_ITEM).order("id")),
+      .select("id, supplier_id, purchase_date, quantity, unit, unit_price, total_amount, note, site_supplier_id, site:suppliers!purchases_site_supplier_id_fkey(name)").eq("item_name", VEKU_ITEM).order("id")),
   });
   const paysQ = useQuery({
     queryKey: ["veku-payments", ids.join(",")],
@@ -138,6 +142,8 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
 
     const hours = fb.reduce((a, b) => a + (b.unit === HOUR ? Number(b.quantity || 0) : 0), 0);
     const bill = fb.reduce((a, b) => a + Number(b.total_amount || 0), 0);
+    // costs at a soil site: in the account (what is unpaid stays due), but not the veku's rent
+    const siteBill = fb.reduce((a, b) => a + (b.site_supplier_id ? Number(b.total_amount || 0) : 0), 0);
     const paid = fp.reduce((a, p) => a + Number(p.amount || 0), 0);
     const khoraki = ff.reduce((a, x) => a + Number(x.amount || 0), 0);
 
@@ -152,7 +158,7 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
     for (const b of fb) {
       const d = dayOf(b.purchase_date, b.supplier_id);
       if (b.unit === HOUR) d.hours += Number(b.quantity || 0);
-      d.rent += Number(b.total_amount || 0);
+      if (!b.site_supplier_id) d.rent += Number(b.total_amount || 0);
       const credit = vekuCreditPart(parseNote(b.note).rest);
       if (credit) { d.litres += credit.litres; d.price += credit.price ?? 0; }
       d.lines.push({ key: `b${b.id}`, date: b.purchase_date, sid: b.supplier_id, bill: b });
@@ -197,7 +203,7 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
     return {
-      hours, bill, paid, due: bill - paid, khoraki, pumpDue: dayTotal.price - dayTotal.paid,
+      hours, bill, siteBill, paid, due: bill - paid, khoraki, pumpDue: dayTotal.price - dayTotal.paid,
       byKind: [...byKind].sort((a, b) => b[1] - a[1]), daily, dayTotal, repairs, repairTotal, lines,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -249,7 +255,8 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
     if (l.bill) {
       const n = parseNote(l.bill.note);
       return {
-        label: l.bill.unit === HOUR ? `কাজ ${hm(Number(l.bill.quantity))} ঘণ্টা × ${tk(Number(l.bill.unit_price))}` : "কাজের বিল",
+        label: l.bill.site_supplier_id ? `মাটির সাইটের খরচ — ${l.bill.site?.name ?? "মাটির সাইট"}${n.kind ? ` (${n.kind})` : ""}`
+          : l.bill.unit === HOUR ? `কাজ ${hm(Number(l.bill.quantity))} ঘণ্টা × ${tk(Number(l.bill.unit_price))}` : "কাজের বিল",
         sub: [n.driver ? `চালক ${n.driver}` : "", n.rest].filter(Boolean).join(" · "), amount: Number(l.bill.total_amount), sign: "+",
       };
     }
@@ -348,7 +355,7 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
           </div>
           <div className="rounded-xl bg-muted/50 px-2 py-2">
             <div className="text-[11px] font-semibold text-muted-foreground">ভেকুর ভাড়া</div>
-            <div className="num text-sm font-bold">{tk(view.bill)}</div>
+            <div className="num text-sm font-bold">{tk(view.bill - view.siteBill)}</div>
           </div>
           <div className="rounded-xl bg-muted/50 px-2 py-2">
             <div className="text-[11px] font-semibold text-muted-foreground">দেওয়া হয়েছে</div>
@@ -356,7 +363,8 @@ export function VekuFolder({ onBack }: { onBack: () => void }) {
           </div>
         </div>
         <div className="num mt-2.5 space-y-0.5 text-xs text-muted-foreground">
-          {view.hours > 0 && <div>গড়ে ঘণ্টায় {tk(view.bill / view.hours)}</div>}
+          {view.hours > 0 && <div>গড়ে ঘণ্টায় {tk((view.bill - view.siteBill) / view.hours)}</div>}
+          {view.siteBill > 0.5 && <div>মাটির সাইটের খরচ {tk(view.siteBill)}: মাটির দাম থেকে বাদ যায়, ভেকুর ভাড়া নয়</div>}
           {view.khoraki > 0 && <div>চালকের খোরাকি {tk(view.khoraki)}: ভাটার খরচ, ভেকুর হিসাবে কাটা হয়নি</div>}
           {view.pumpDue > 0.5 && <div className="font-semibold text-warning">পাম্পে ডিজেলের বাকি {tk(view.pumpDue)}</div>}
           {asset > 0 && filter === "all" && <div>ভেকুতে ভাটার অংশ (সম্পদ): {tk(asset)}</div>}

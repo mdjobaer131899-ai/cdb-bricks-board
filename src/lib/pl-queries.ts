@@ -69,8 +69,8 @@ export async function fetchProfitLoss(filter: DateFilter = {}, opts: { allSeason
       ranged(db.from("sales_entries").select("id, total_amount, sale_date, opening_balance_id").eq("status", "approved").order("id"), "sale_date", filter)),
     fetchAllRows<{ amount: number; category: string; expense_date: string; note: string | null }>(() =>
       ranged(db.from("expenses").select("id, amount, category, expense_date, note").order("id"), "expense_date", filter)),
-    fetchAllRows<{ total_amount: number; item_name: string; purchase_date: string; material_id: string | null; quantity: number; unit: string | null; supplier: { name: string } | null }>(() =>
-      ranged(db.from("purchases").select("id, total_amount, item_name, purchase_date, material_id, quantity, unit, supplier:suppliers!purchases_supplier_id_fkey(name)").order("id"), "purchase_date", filter)),
+    fetchAllRows<{ total_amount: number; item_name: string; purchase_date: string; material_id: string | null; quantity: number; unit: string | null; note: string | null; mirror_of: string | null; supplier: { name: string } | null }>(() =>
+      ranged(db.from("purchases").select("id, total_amount, item_name, purchase_date, material_id, quantity, unit, note, mirror_of, supplier:suppliers!purchases_supplier_id_fkey(name)").order("id"), "purchase_date", filter)),
     // sardar work: kacha / load / unload wage lines and old per-category work entries
     fetchAllRows<{ entry_date: string; entry_type: string; sardar_id: string | null; quantity: number; amount: number }>(() =>
       ranged(db.from("kacha_brick_entries").select("id, entry_date, entry_type, sardar_id, quantity, amount").order("id"), "entry_date", filter)),
@@ -97,7 +97,8 @@ export async function fetchProfitLoss(filter: DateFilter = {}, opts: { allSeason
   const assetLines: PLLine[] = [];
   for (const p of pur) {
     const qty = Number(p.quantity) > 0 && p.unit ? ` · ${Number(p.quantity)} ${p.unit}` : "";
-    lines.push({ key: purchaseHead(p), date: p.purchase_date, name: p.supplier?.name ?? "—", detail: `${p.item_name}${qty}`, amount: Number(p.total_amount || 0) });
+    // a soil site's minus line (trolley / veku cost taken off the soil price) says what it is
+    lines.push({ key: purchaseHead(p), date: p.purchase_date, name: p.supplier?.name ?? "—", detail: p.mirror_of ? p.note ?? "ট্রলি/ভেকুর খরচ বাদ" : `${p.item_name}${qty}`, amount: Number(p.total_amount || 0) });
   }
   for (const e of exp) {
     const h = expenseHead(e.category);

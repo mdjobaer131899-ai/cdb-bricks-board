@@ -14,8 +14,8 @@ import { savePotCount } from "@/lib/pots";
 import { MISC_PREFIX, MONEY_HEADS, moneyHead, supplierHead, type MoneyKey } from "@/lib/money-heads";
 import { checkVekuDay, type VekuDayInput } from "@/lib/veku-save";
 import {
-  CONTRACT_TYPES, HOUR, VEKU_AUTO_TK, VEKU_KHORAKI, VEKU_KHORAKI_TK, VEKU_KINDS, VEKU_RATE, VEKU_SEP, VEKU_TYPE,
-  contractByKey, parseVekuNote,
+  CONTRACT_TYPES, HOUR, SOIL_TYPE, VEKU_AUTO_TK, VEKU_KHORAKI, VEKU_KHORAKI_TK, VEKU_KINDS, VEKU_RATE, VEKU_SEP, VEKU_TYPE,
+  contractByKey, parseVekuNote, siteName,
 } from "@/components/contract-config";
 import {
   PAY_METHOD_LIST, SELLER_HEADS, asMethod, expectedDrawer, saveBookMarks, saveDayClose, saveKacha, saveMoneyEntry,
@@ -1681,11 +1681,21 @@ ${hasAttachment ? "৭. সংযুক্ত ছবি/ফাইলটি ম�
 শুধু একটি JSON ফেরত দেবে:
 {"type":"LOOKUP"|"NAVIGATE"|"MONEY"|"POT_COUNT"|"SALE_CHALLAN"|"BOOKING"|"CUSTOMER"|"KACHA_BRICK"|"ATTENDANCE"|"VEKU_DAY"|"TRANSFER"|"DAY_CLOSE"|"BOOK_MARK"|"REMINDER"|"ENTRIES"|"QUERY","tool":"(শুধু LOOKUP-এ)","args":{},"reply":"বাংলা উত্তর (LOOKUP-এ খালি)","data":{...},"entries":[ (শুধু ENTRIES-এ) ]}
 data-এর ফিল্ড:
-- MONEY (যেকোনো টাকা আসা বা যাওয়া): head (খাতের key, উপরের তালিকা থেকে), person (নাম, খাতার তালিকার মতো হুবহু), amount (এখন যত টাকা দেওয়া বা পাওয়া হলো), bill (শুধু কিছু কিনলে বা কাজ করালে তার মোট দাম/পাওনা; শুধু টাকা দিলে বা বকেয়া শোধ করলে bill দেবে না), qty, rate, unit, item (কী: মাটি, কয়লা, বিয়ারিং, চা-নাস্তা …), method ("cash" = ড্রয়ার/হাতে নগদ, "bkash", "nagad" = নগদ মোবাইল একাউন্ট, "bank"; না বললে "cash"; কথায় "নগদ দিলাম" মানে হাতে নগদ = "cash"), vekuKind (ভেকুর টাকা: ডিজেল | অটো ভাড়া | চালকের বেতন | মেরামত | যন্ত্রাংশ | মবিল-গ্রীজ | চালকের খরচ | অন্যান্য), driver, paymentType (সরদারে: "advance" = দাদন/অগ্রিম, "payment" = মজুরি), dueDate (ঋণে ফেরত/শোধের তারিখ), date, note
+- MONEY (যেকোনো টাকা আসা বা যাওয়া): head (খাতের key, উপরের তালিকা থেকে), person (নাম, খাতার তালিকার মতো হুবহু), amount (এখন যত টাকা দেওয়া বা পাওয়া হলো), bill (শুধু কিছু কিনলে বা কাজ করালে তার মোট দাম/পাওনা; শুধু টাকা দিলে বা বকেয়া শোধ করলে bill দেবে না), qty, rate, unit, item (কী: মাটি, কয়লা, বিয়ারিং, চা-নাস্তা …), method ("cash" = ড্রয়ার/হাতে নগদ, "bkash", "nagad" = নগদ মোবাইল একাউন্ট, "bank"; না বললে "cash"; কথায় "নগদ দিলাম" মানে হাতে নগদ = "cash"), vekuKind (ভেকুর টাকা: ডিজেল | অটো ভাড়া | চালকের বেতন | মেরামত | যন্ত্রাংশ | মবিল-গ্রীজ | চালকের খরচ | অন্যান্য), driver, site (মাটির সাইট, নিচে দেখো), paymentType (সরদারে: "advance" = দাদন/অগ্রিম, "payment" = মজুরি), dueDate (ঋণে ফেরত/শোধের তারিখ), date, note
   খাত বাছাই: sale = গ্রাহক টাকা দিল/জমা; openingIn = গত বছরের পাওনা আদায়; ownerInvest = মালিক টাকা দিলেন; loanIn = কারো কাছ থেকে ঋণ নিলাম; loanBack = যাকে ঋণ দিয়েছিলাম সে ফেরত দিল; sardar = সরদারকে মজুরি/দাদন; daily = ডেলি শ্রমিককে; staff = মেস্তুরি, ম্যানেজার, অন্য স্টাফকে বেতন; ownerSalary = মালিকের বেতন; ownerWithdraw = মালিক টাকা তুললেন/নিলেন; raw = মাটি, বালু, কয়লা, তুষ, লাকড়ি, ভাটার ডিজেল (বিক্রেতা বা সাইটের নামসহ); parts = যন্ত্রাংশ, ইঞ্জিনের মাল (দোকানের নাম থাকলে person); veku = ভেকুর ডিজেল, চালকের বেতন, মেরামত (একটা টাকা দিলে); vehicle = গাড়ি/ট্রাক্টরের ট্রিপ ভাড়া (qty = ট্রিপ, rate = প্রতি ট্রিপ); land = জমি ভাড়া; clean = পরিচ্ছন্ন কর্মী; power = বিদ্যুৎ বিল; misc = চা-নাস্তা, খোরাকি, যাতায়াত ও অন্য ছোট খরচ (item বাধ্যতামূলক); asset = স্থায়ী সম্পদ কেনা; loanGive = কাউকে ঋণ দিলাম; loanRepay = নেওয়া ঋণ শোধ দিলাম; openingOut = গত বছরের দেনা শোধ।
   উদাহরণ: "রহিমের সাইট থেকে ১০ ট্রাক মাটি ২০০০০ টাকা, ৫০০০ দিলাম" → {"type":"MONEY","data":{"head":"raw","person":"রহিম","item":"মাটি","qty":10,"unit":"ট্রাক","bill":20000,"amount":5000}}
   "করিম সরদারকে বিকাশে ৩০০০ দাদন" → {"type":"MONEY","data":{"head":"sardar","person":"করিম","amount":3000,"method":"bkash","paymentType":"advance"}}
   "আলমের কাছ থেকে ৫০ হাজার ঋণ নিলাম, ১৫ তারিখে ফেরত" → {"type":"MONEY","data":{"head":"loanIn","person":"আলম","amount":50000,"dueDate":"${s.today.slice(0, 8)}15"}}
+  মাটির সাইট: যার জায়গা থেকে মাটি আসে (মাটির মালিক, লেখা হয় "<নাম> মাটি"; খাতার মাটির বিক্রেতা: ${s.suppliers.filter((x) => x.material === SOIL_TYPE).map((x) => x.name).join(", ") || "—"})। সেখান থেকে মাটি আনার ভেকু ও ট্রলির সব খরচ শুধু সেই মাটির দাম থেকে কাটে। site-এ শুধু মালিকের নাম দেবে ("মাটি" শব্দ ছাড়া)। নিয়ম:
+  • লাইনে মাটির সাইট আর ভেকুর কথা (ডিজেল, চালক/ড্রাইভার …): head "veku", person = ভেকুর নাম, vekuKind, driver, site, amount = যত দিলেন; খরচের মোট আলাদা বললে bill (না বললে bill দেবে না)।
+  • লাইনে মাটির সাইট আর টলি/ট্রলি: head "vehicle", person = ট্রলির মালিক (সাইটের নাম নয়), site; ট্রিপ বললে qty = ট্রিপ, rate = প্রতি ট্রিপ।
+  • মাটির সাইটের নাম আছে কিন্তু ভেকু বা ট্রলি নয় (আনলোড, সিলিপ, মাটির দাম, মালিককে টাকা): head "raw", person = সাইটের নাম, item "মাটি", note = কিসের টাকা।
+  • মাটির সাইট কখনো গ্রাহক নয়, আর ভেকু বা ট্রলির লাইনে সাইটকে person করবে না।
+  উদাহরণ: "ভেকু-২ ডিজেল মেহেদী মাটি ৭০০০" → {"type":"MONEY","data":{"head":"veku","person":"ভেকু ২","vekuKind":"ডিজেল","site":"মেহেদী","amount":7000}}
+  "ভেকু-২ মিনহাজ ড্রাইভার মেহেদী মাটি ২০০০" → {"type":"MONEY","data":{"head":"veku","person":"ভেকু ২","vekuKind":"চালকের বেতন","driver":"মিনহাজ","site":"মেহেদী","amount":2000}}
+  "মেহেদী মাটি মাসুদ টলি ২০০০" → {"type":"MONEY","data":{"head":"vehicle","person":"মাসুদ","site":"মেহেদী","amount":2000}}
+  "মাসুদের টলি মেহেদী মাটি ২৫ ট্রিপ ২০০ করে" → {"type":"MONEY","data":{"head":"vehicle","person":"মাসুদ","site":"মেহেদী","qty":25,"rate":200}}
+  "মেহেদী মাটি ৩২০০ (আনলোড ও সিলিপ)" → {"type":"MONEY","data":{"head":"raw","person":"মেহেদী","item":"মাটি","amount":3200,"note":"আনলোড ও সিলিপ"}}
 - SALE_CHALLAN (ইট বিক্রি/চালান): customerName, brickType, quantity, rate (প্রতি পিস দাম), totalAmount, paidAmount, dueAmount, vehicleNumber, driverName, date
 - BOOKING (ঠিক দামে বুকিং: আজ পুরো দাম নিয়ে পরে ঠিক করা দামে ইট দেওয়া, যেমন "করিম ৫ গাড়ি ১ নং ইট বুকিং দিল, প্রতি গাড়ি ১৬ হাজার"): customerName, items [{"brick":"১ নং ইট","trucks":5,"piecesPerTruck":2000,"rate": প্রতি পিসের দাম,"truckPrice": প্রতি গাড়ির দাম বললে}], method, date, note। দাম ঠিক না করে শুধু আগে টাকা দিলে (অগ্রিম টাকা) সেটা বুকিং নয়: MONEY head "sale"; পরে চালান সেদিনের দামে সেই টাকা থেকে কাটবে।
 - CUSTOMER (নতুন গ্রাহক যোগ): name, phone (১১ সংখ্যার মোবাইল), address, note
@@ -1900,9 +1910,11 @@ const toEnDigits = (s: string) => s.replace(/[০-৯]/g, (d) => String("০১�
 
 /** the people in a list that a said name points to (exact first, then the best partial match) */
 function matchName<T extends { id: string; name: string }>(list: T[], name: string): T[] {
+  // "ভেকু-১" written on paper is the "ভেকু ১" in the book
+  const dash = (s: string) => clean(s).replace(/\s*[-–—]\s*/g, " ").trim();
   const q = clean(name);
   if (!q) return [];
-  const exact = list.filter((x) => clean(x.name) === q);
+  const exact = list.filter((x) => clean(x.name) === q || dash(x.name) === dash(name));
   if (exact.length) return exact;
   const words = new Set(q.split(" "));
   let top = 0;
@@ -1982,6 +1994,19 @@ function legacyToMoney(type: string, d: Row, s: KilnSnapshot): Row {
 }
 
 /** one MONEY entry: the head decides whose list the person is in and what the card shows */
+/**
+ * the soil site a trolley's or the veku's cost comes off ("মেহেদী মাটি"): a known soil seller,
+ * or a new name the save adds; null when no site was said, an ask when two sellers match
+ */
+function soilSite(d: Row, s: KilnSnapshot): { site: string; siteId: string | null } | { ask: string } | null {
+  const said = siteName(String(d.site ?? d.soilSite ?? d.soil ?? "").trim());
+  if (!said) return null;
+  const soil = s.suppliers.filter((x) => x.material === SOIL_TYPE);
+  const hit = matchName(soil, said);
+  if (hit.length > 1) return { ask: `কোন মাটির সাইট: ${hit.map((h) => h.name).join(", ")}? পুরো নাম বলুন।` };
+  return hit.length ? { site: hit[0].name, siteId: hit[0].id } : { site: said, siteId: null };
+}
+
 async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: boolean }, s: KilnSnapshot): Promise<{ data: MoneyEntry } | { ask: string }> {
   let head = String(d.head ?? "").trim() as MoneyKey;
   if (!MONEY_HEADS.some((h) => h.key === head)) return { ask: "কোন খাতে লিখব, বুঝিনি। যেমন বলুন: \"রহিমকে ৫০০ টাকা মজুরি দিলাম\" বা \"চা-নাস্তা ২০০\"।" };
@@ -2114,9 +2139,11 @@ async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: bo
       const catalog = extras.items.filter((i) => i.payMode === "credit" && group(i));
       const itemHit = e.item ? catalog.find((i) => clean(i.name) === clean(e.item!)) ?? catalog.find((i) => clean(e.item!).includes(clean(i.name)) || clean(i.name).includes(clean(e.item!))) : undefined;
       let seller: SupplierLine | undefined;
-      if (name) {
-        const hit = matchName(sellers, name);
-        if (hit.length > 1) return { ask: `"${name}" নামে একাধিক বিক্রেতা: ${hit.slice(0, 6).map((h) => h.name).join(", ")}। পুরো নাম বলুন।` };
+      // "মেহেদী মাটি" said as the name: the soil seller is মেহেদী
+      const nm = head === "raw" ? siteName(name) || name : name;
+      if (nm) {
+        const hit = matchName(sellers, nm);
+        if (hit.length > 1) return { ask: `"${nm}" নামে একাধিক বিক্রেতা: ${hit.slice(0, 6).map((h) => h.name).join(", ")}। পুরো নাম বলুন।` };
         seller = hit[0];
       }
       if (head === "raw") {
@@ -2126,7 +2153,7 @@ async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: bo
         e.item = item.name;
         e.itemId = item.id;
         e.unit = item.unit;
-        if (!name) return { ask: `${item.name} কার কাছ থেকে (বিক্রেতা বা সাইটের নাম)? নাম না রাখতে চাইলে বলুন "আনুষাঙ্গিক খরচ"।` };
+        if (!nm) return { ask: `${item.name} কার কাছ থেকে (বিক্রেতা বা সাইটের নাম)? নাম না রাখতে চাইলে বলুন "আনুষাঙ্গিক খরচ"।` };
         e.sellerType = item.name;
       } else {
         if (itemHit) { e.itemId = itemHit.id; }
@@ -2135,7 +2162,7 @@ async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: bo
         e.sellerType = itemHit?.name ?? "ইঞ্জিন মালামাল";
       }
       if (seller) Object.assign(e, { personId: seller.id, person: seller.name, prevDue: seller.due, dueSide: "pay" });
-      else if (name) Object.assign(e, { person: name, newPerson: true, prevDue: 0, dueSide: "pay" });
+      else if (nm) Object.assign(e, { person: nm, newPerson: true, prevDue: 0, dueSide: "pay" });
       if (bill > 0 && qty > 0) { e.qty = qty; if (rate > 0) e.rate = rate; }
       else if (!bill && qty > 0 && rate > 0) { bill = Math.round(qty * rate * 100) / 100; e.qty = qty; e.rate = rate; }
       break;
@@ -2149,8 +2176,12 @@ async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: bo
       if (hasAny(clean(kindText), ["খোরাকি", "খাওয়া", "খাবার"])) {
         return { data: { ...e, head: "misc", item: VEKU_KHORAKI.slice(MISC_PREFIX.length), note: [v.name, e.driver ? `চালক: ${e.driver}` : "", e.note ?? ""].filter(Boolean).join(VEKU_SEP), person: undefined } };
       }
-      e.vekuKind = amount > 0 ? vekuKindOf(kindText) || "অন্যান্য" : undefined;
-      if (qty > 0) { e.qty = qty; e.rate = rate || VEKU_RATE; rate = e.rate; bill = Math.round(qty * rate * 100) / 100; }
+      // a cost at a soil site (diesel, driver): its total comes off that soil seller's price
+      const site = soilSite(d, s);
+      if (site && "ask" in site) return site;
+      if (site) Object.assign(e, site);
+      e.vekuKind = amount > 0 || site ? vekuKindOf(kindText) || "অন্যান্য" : undefined;
+      if (qty > 0 && !site) { e.qty = qty; e.rate = rate || VEKU_RATE; rate = e.rate; bill = Math.round(qty * rate * 100) / 100; }
       const due = vekus.reduce((a, x) => a + x.due, 0);
       Object.assign(e, { personId: v.id, person: v.name, prevDue: due, dueSide: "pay", item: undefined });
       break;
@@ -2166,6 +2197,12 @@ async function prepareMoney(d: Row, ctx: { text: string; msg: string; single: bo
       if (hit.length === 1) Object.assign(e, { personId: hit[0].id, person: hit[0].name, prevDue: hit[0].due, dueSide: "pay" });
       else Object.assign(e, { person: name, newPerson: true, prevDue: 0, dueSide: "pay" });
       if (cfg.trips && qty > 0 && rate > 0) { e.qty = qty; e.rate = rate; bill = Math.round(qty * rate * 100) / 100; }
+      if (head === "vehicle") {
+        // trolley trips for a soil site: the whole rent comes off that soil seller's price
+        const site = soilSite(d, s);
+        if (site && "ask" in site) return site;
+        if (site) Object.assign(e, site);
+      }
       e.item = undefined;
       break;
     }

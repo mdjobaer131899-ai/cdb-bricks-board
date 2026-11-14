@@ -621,6 +621,7 @@ export function AiAssistantFab() {
           what: ["parts", "misc", "asset"].includes(d.head) ? d.item : undefined,
           kindName: ["raw", "parts"].includes(d.head) ? d.item : undefined,
           vekuKind: d.vekuKind, driver: d.driver, method: d.method, date: d.date, note: d.note, dueDate: d.dueDate,
+          site: d.site,
         },
       });
     }

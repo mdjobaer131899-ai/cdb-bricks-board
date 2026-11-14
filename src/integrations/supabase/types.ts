@@ -1909,9 +1909,11 @@ export type Database = {
           item_name: string
           legacy_rmp_id: string | null
           material_id: string | null
+          mirror_of: string | null
           note: string | null
           purchase_date: string
           quantity: number
+          site_supplier_id: string | null
           supplier_id: string | null
           total_amount: number
           unit: string | null
@@ -1925,9 +1927,11 @@ export type Database = {
           item_name: string
           legacy_rmp_id?: string | null
           material_id?: string | null
+          mirror_of?: string | null
           note?: string | null
           purchase_date?: string
           quantity?: number
+          site_supplier_id?: string | null
           supplier_id?: string | null
           total_amount?: number
           unit?: string | null
@@ -1941,9 +1945,11 @@ export type Database = {
           item_name?: string
           legacy_rmp_id?: string | null
           material_id?: string | null
+          mirror_of?: string | null
           note?: string | null
           purchase_date?: string
           quantity?: number
+          site_supplier_id?: string | null
           supplier_id?: string | null
           total_amount?: number
           unit?: string | null
@@ -1963,6 +1969,20 @@ export type Database = {
             columns: ["material_id"]
             isOneToOne: false
             referencedRelation: "raw_materials"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_mirror_of_fkey"
+            columns: ["mirror_of"]
+            isOneToOne: false
+            referencedRelation: "purchases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchases_site_supplier_id_fkey"
+            columns: ["site_supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
           {

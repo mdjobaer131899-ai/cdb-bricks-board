@@ -108,6 +108,24 @@ export const dayBefore = (d: string) => new Date(new Date(`${d}T00:00:00Z`).getT
 export const VEKU_TYPE = "ভেকু";
 export const VEKU_ITEM = "ভেকু";
 export const HOUR = "ঘণ্টা";
+/**
+ * Soil sites: a soil seller (suppliers.material_type SOIL_TYPE) whose soil price the cost of
+ * bringing that soil comes off: trolley trips and the veku's diesel/driver at that site. Such a
+ * bill carries purchases.site_supplier_id, and the database keeps a minus bill on the soil seller
+ * (purchases.mirror_of, migration soil_site_costs). Payments for it carry SITE_TAG in the note.
+ */
+export const SOIL_TYPE = "মাটি";
+export const SITE_TAG = "মাটির সাইট: ";
+/** "মেহেদী মাটি" / "মেহেদী মাটির সাইট" → "মেহেদী" (the name as the soil seller) */
+export const siteName = (s: string) =>
+  s.normalize("NFC").trim().replace(/\s+(মাটির\s*সাইট|মাটি|সাইট)$/u, "").trim();
+
+/** a name with the Bangla possessive: "মেহেদী" → "মেহেদীর", "রাসেল" → "রাসেলের" */
+export const bnOf = (name: string) => {
+  const n = name.trim();
+  return /[\u0985-\u0994\u09BE-\u09CC\u09D7]$/u.test(n) ? `${n}র` : `${n}ের`;
+};
+
 export const VEKU_KINDS = ["ডিজেল", "অটো ভাড়া", "চালকের বেতন", "মেরামত", "যন্ত্রাংশ", "মবিল-গ্রীজ", "চালকের খরচ", "অন্যান্য"];
 /** kinds written on the daily sheet (দৈনিক খাতা); every other kind is on the repair sheet */
 export const VEKU_DAY_KINDS = new Set(["ডিজেল", "অটো ভাড়া", "চালকের বেতন"]);
