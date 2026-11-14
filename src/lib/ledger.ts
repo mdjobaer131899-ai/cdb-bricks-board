@@ -149,7 +149,7 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
     fetchAllRows<any>(() => db.from("worker_attendance").select("id, worker_id, date, present, is_half_day").order("id")),
     fetchAllRows<any>(() => db.from("worker_payments").select("id, worker_id, payment_date, amount, note").order("id")),
     fetchAllRows<any>(() => all.from("owner_transactions").select("id, owner_id, txn_type, amount, txn_date, note").order("id")),
-    fetchAllRows<any>(() => all.from("purchases").select("id, supplier_id, purchase_date, item_name, material_id, quantity, unit, unit_price, total_amount, note").order("id")),
+    fetchAllRows<any>(() => all.from("purchases").select("id, supplier_id, purchase_date, item_name, material_id, quantity, unit, unit_price, total_amount, note, site_supplier_id").order("id")),
     fetchAllRows<any>(() => all.from("supplier_payments").select("id, supplier_id, payment_date, amount, method, note").order("id")),
     fetchAllRows<any>(() => db.from("expenses").select("id, expense_date, category, amount, note").order("id")),
     fetchAllRows<any>(() => all.from("loans").select("id, party_name, direction, amount, loan_date, note").order("id")),
@@ -248,14 +248,16 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
   const supHead = (s: any): MoneyKey => {
     const h = supplierHead(s.material_type);
     if (h !== "parts" && h !== "raw") return h;
-    // a seller's folder: what they mostly sold (catalog group), else the seller's type
-    const bills = purchases.filter((p) => p.supplier_id === s.id);
+    // a seller's folder: what they mostly sold (catalog group), else the seller's type;
+    // minus lines (a soil site's trolley / veku cost) do not decide it
+    const bills = purchases.filter((p) => p.supplier_id === s.id && Number(p.total_amount) > 0);
     if (!bills.length) return h;
     const raw = bills.filter((p) => (p.material_id && rawIds.has(p.material_id)) || rawNames.has(nfc(p.item_name))).reduce((a, p) => a + Number(p.total_amount || 0), 0);
     const total = bills.reduce((a, p) => a + Number(p.total_amount || 0), 0);
     return raw * 2 >= total ? "raw" : "parts";
   };
   const supplierIds = new Set(suppliers.map((s) => s.id));
+  const supName = new Map(suppliers.map((s) => [s.id as string, s.name as string]));
   for (const s of [...suppliers, { id: "__none__", name: "নাম ছাড়া", material_type: null }]) {
     const bills = purchases.filter((p) => (p.supplier_id ?? "__none__") === s.id || (s.id === "__none__" && p.supplier_id && !supplierIds.has(p.supplier_id)));
     const pays = supPay.filter((p) => (p.supplier_id ?? "__none__") === s.id || (s.id === "__none__" && p.supplier_id && !supplierIds.has(p.supplier_id)));
@@ -265,7 +267,12 @@ export async function fetchLedger(): Promise<LedgerFolder[]> {
     for (const b of bills) {
       const qty = Number(b.quantity) > 0 && b.unit ? `${bn(Number(b.quantity))} ${b.unit}` : "";
       const rate = Number(b.unit_price) > 0 && qty ? ` × ${tk(Number(b.unit_price))}` : "";
-      lines.push({ id: `b-${b.id}`, date: b.purchase_date, text: Number(b.total_amount) < 0 ? "ট্রলি/ভেকুর খরচ মাটির দাম থেকে বাদ" : `${b.item_name}${qty ? ` · ${qty}${rate}` : ""}`, sub: b.note ?? undefined, bill: Number(b.total_amount || 0), paid: 0, link: billLink(b.id), linkLabel: "আয়-ব্যয় (ক্যাশ বই)" });
+      // a trolley's trips or the veku's cost for a soil site say which site
+      const site = b.site_supplier_id ? supName.get(b.site_supplier_id) : undefined;
+      const text = Number(b.total_amount) < 0 ? "ট্রলি/ভেকুর খরচ মাটির দাম থেকে বাদ"
+        : site && !qty ? `মাটির সাইটের খরচ — ${site} মাটি`
+        : `${b.item_name}${qty ? ` · ${qty}${rate}` : ""}${site ? ` · ${site} মাটি` : ""}`;
+      lines.push({ id: `b-${b.id}`, date: b.purchase_date, text, sub: b.note ?? undefined, bill: Number(b.total_amount || 0), paid: 0, link: billLink(b.id), linkLabel: "আয়-ব্যয় (ক্যাশ বই)" });
     }
     for (const p of pays) {
       lines.push({
