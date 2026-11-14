@@ -578,12 +578,16 @@ export function AiAssistantFab() {
     const es = messages[mi]?.entries ?? [];
     let ok = 0;
     let bad = 0;
+    let skipped = 0;
     for (let j = 0; j < es.length; j++) {
-      if (es[j].saved) continue;
+      if (es[j].saved || es[j].undone) continue;
+      // already in the book: only its own card's "তবুও সেভ" writes it
+      if (es[j].data?.dup?.strong) { skipped++; continue; }
       if (await saveEntry(mi, j, true)) ok++;
       else bad++;
     }
-    if (ok) toast.success(`${bn(ok)}টা এন্ট্রি খাতায় উঠেছে${bad ? `, ${bn(bad)}টা হয়নি` : ""}`);
+    if (ok) toast.success(`${bn(ok)}টা এন্ট্রি খাতায় উঠেছে${bad ? `, ${bn(bad)}টা হয়নি` : ""}${skipped ? `, ${bn(skipped)}টা আগে থেকে থাকায় বাদ` : ""}`);
+    else if (skipped && !bad) toast.info(`${bn(skipped)}টা লাইন খাতায় আগে থেকেই আছে, তাই সেভ করিনি।`);
   };
 
   const undoEntry = async (mi: number, ei: number, password: string) => {
@@ -738,7 +742,7 @@ export function AiAssistantFab() {
                   <div className="space-y-6">
                     {messages.map((m, idx) => {
                       if (idx === 0 && m === messages[0] && m.text === WELCOME.text) return null;
-                      const pending = (m.entries ?? []).filter((e) => !e.saved).length;
+                      const pending = (m.entries ?? []).filter((e) => !e.saved && !e.undone && !e.data?.dup?.strong).length;
                       if (m.role === "user") {
                         return (
                           <div key={idx} className="flex justify-end">
@@ -800,7 +804,12 @@ export function AiAssistantFab() {
                                     entry={e}
                                     busy={savingKey === `${idx}:${ei}`}
                                     isAdmin={isAdmin}
-                                    onChange={(data) => patchEntry(idx, ei, { data })}
+                                    onChange={(data) => {
+                                      // a changed amount, bill or date is no longer the line it matched
+                                      const o = e.data ?? {};
+                                      const moved = data?.dup && (data.amount !== o.amount || data.bill !== o.bill || data.date !== o.date);
+                                      patchEntry(idx, ei, { data: moved ? { ...data, dup: undefined } : data });
+                                    }}
                                     onSave={() => void saveEntry(idx, ei)}
                                     onOpenForm={e.type === "MONEY" ? () => openForm(idx, ei) : undefined}
                                     onUndo={(pw) => undoEntry(idx, ei, pw)}

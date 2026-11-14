@@ -426,6 +426,11 @@ export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, 
         <Body e={entry} />
       )}
 
+      {!entry.saved && !entry.undone && d.dup && (
+        <div className={`rounded-xl px-2.5 py-2 text-xs font-semibold ${d.dup.strong ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100" : "bg-muted text-foreground/80"}`}>
+          {d.dup.strong ? "⚠️ " : "🔎 "}{d.dup.text}
+        </div>
+      )}
       {!entry.saved && editing && <div className="border-t pt-2.5"><Editor e={entry} onChange={onChange} /></div>}
       {!entry.saved && entry.type === "DAY_CLOSE" && (
         <TextField label={needsReason ? "গরমিলের কারণ (লিখতেই হবে)" : "নোট (ইচ্ছা হলে)"} value={d.note} onChange={(v) => onChange({ ...d, note: v })} />
@@ -452,7 +457,7 @@ export function EntryCard({ entry, busy, isAdmin, onChange, onSave, onOpenForm, 
           <Button size="sm" disabled={busy || (needsReason && !String(d.note ?? "").trim())} onClick={onSave}
             className="h-10 flex-1 rounded-xl text-[13px] font-bold">
             {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
-            {entry.type === "REMINDER" ? "রেখে দিন" : entry.type === "ATTENDANCE" ? "হাজিরা সেভ" : entry.type === "CUSTOMER" ? "গ্রাহক যোগ করুন" : "খাতায় সেভ"}
+            {entry.type === "REMINDER" ? "রেখে দিন" : entry.type === "ATTENDANCE" ? "হাজিরা সেভ" : entry.type === "CUSTOMER" ? "গ্রাহক যোগ করুন" : d.dup?.strong ? "তবুও সেভ" : "খাতায় সেভ"}
           </Button>
           {EDITABLE.has(entry.type) && (
             <Button size="sm" variant="outline" className="h-10 rounded-xl px-3 text-xs font-semibold" onClick={() => setEditing((x) => !x)} aria-label="বদলান">
@@ -513,7 +518,9 @@ export function BatchList({ entries, saving, onSaveAll, renderCard }: {
 }) {
   const [open, setOpen] = useState<number | null>(null);
   const live = entries.filter((e) => !e.undone);
-  const pending = entries.filter((e) => !e.saved).length;
+  // a line already in the book is left out of "সব সেভ" (it can still be saved from its card)
+  const pending = entries.filter((e) => !e.saved && !e.undone && !e.data?.dup?.strong).length;
+  const dupLeft = entries.filter((e) => !e.saved && !e.undone && e.data?.dup?.strong).length;
   const out = live.reduce((a, e) => a + entryMoney(e).out, 0);
   const inn = live.reduce((a, e) => a + entryMoney(e).in, 0);
   const saveBtn = (cls: string) => (
@@ -534,6 +541,11 @@ export function BatchList({ entries, saving, onSaveAll, renderCard }: {
           </span>
         </div>
         <p className="text-xs text-muted-foreground">প্রতিটা লাইন চেপে দেখে নিন বা বদলান, তারপর সব একসাথে সেভ করুন।</p>
+        {dupLeft > 0 && (
+          <p className="rounded-xl bg-amber-100 px-2.5 py-1.5 text-xs font-semibold text-amber-900 dark:bg-amber-950/50 dark:text-amber-100">
+            ⚠️ {bn(dupLeft)}টা লাইন খাতায় আগে থেকেই আছে, "সব সেভ" এগুলো বাদ দেবে।
+          </p>
+        )}
         {pending > 0 && saveBtn("")}
       </div>
       <ul className="divide-y">
@@ -548,6 +560,11 @@ export function BatchList({ entries, saving, onSaveAll, renderCard }: {
                   {e.undone ? "✕" : e.saved ? "✓" : bn(i + 1)}
                 </span>
                 <span className={`min-w-0 flex-1 truncate text-[13px] ${e.undone ? "text-muted-foreground line-through" : "font-medium"}`}>{entryTitle(e)}</span>
+                {!e.saved && !e.undone && e.data?.dup && (
+                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${e.data.dup.strong ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200" : "bg-muted text-muted-foreground"}`}>
+                    {e.data.dup.strong ? "আগে আছে" : "দেখুন"}
+                  </span>
+                )}
                 <span className="num shrink-0 text-[13px] font-semibold">{m.label}</span>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition ${isOpen ? "rotate-180" : ""}`} />
               </button>

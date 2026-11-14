@@ -2525,6 +2525,68 @@ async function prepareEntry(type: string, data: Row, ctx: { text: string; msg: s
 
 const CARD_TYPES = new Set(["ATTENDANCE", "SALE_CHALLAN", "KACHA_BRICK", "MONEY", "EXPENSE", "COLLECTION", "SARDAR_PAYMENT", "WORKER_PAYMENT", "SUPPLIER_PAYMENT", "VEKU_DAY", "TRANSFER", "DAY_CLOSE", "BOOK_MARK", "REMINDER", "CUSTOMER", "BOOKING", "POT_COUNT"]);
 
+/**
+ * A money card that is already in the book: the same head, the same person (or item), the same
+ * amount and, for the veku, the same kind, on the same day (strong: "সব সেভ" leaves it out) or the
+ * day before/after (a warning only), or a seller's bill of the same amount; also a line said twice
+ * in one message. Sets data.dup on the card and returns how many are strong / near.
+ */
+async function markDuplicates(ready: PreparedEntry[]): Promise<{ strong: number; near: number }> {
+  const cards = ready.filter((r) => r.type === "MONEY" && (num(r.data?.amount) > 0 || num(r.data?.bill) > 0));
+  if (!cards.length) return { strong: 0, near: 0 };
+  const shift = (iso: string, n: number) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const dateOf = (r: PreparedEntry) => validIso(r.data?.date) ?? dhakaDate(0);
+  const dates = cards.map(dateOf).sort();
+  const from = shift(dates[0], -1);
+  const to = shift(dates[dates.length - 1], 1);
+  const rows = await fetchCashHistory({ from, to }).catch(() => [] as CashHistoryRow[]);
+  const key = (x: unknown) => clean(String(x ?? "")).replace(/[\s\-–—()]/g, "");
+  const sameName = (a: unknown, b: unknown) => {
+    const x = key(a);
+    const y = key(b);
+    return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
+  };
+  const whoOf = (d: Row) => String(d.person ?? d.item ?? "").trim();
+  const line = (r: CashHistoryRow) => `${bnDate(r.date)} · ${r.detail} · ${tk(r.amount)}${r.note ? ` (${r.note})` : ""}`;
+  let strong = 0;
+  let near = 0;
+  for (let i = 0; i < cards.length; i++) {
+    const d = cards[i].data as Row;
+    const date = dateOf(cards[i]);
+    const amt = num(d.amount);
+    const bill = num(d.bill);
+    const who = whoOf(d);
+    const kind = String(d.vekuKind ?? "");
+    // the same line twice in this message
+    const twin = cards.slice(0, i).find((o) => {
+      const od = o.data as Row;
+      return od.head === d.head && num(od.amount) === amt && num(od.bill) === bill && dateOf(o) === date
+        && String(od.vekuKind ?? "") === kind && (who ? sameName(whoOf(od), who) : !whoOf(od));
+    });
+    if (twin) { d.dup = { strong: true, text: "এই তালিকাতেই একই লাইন আগেও আছে।" }; strong++; continue; }
+    if (amt > 0) {
+      const hits = rows.filter((r) => Math.abs(r.amount - amt) < 0.5 && r.key === d.head
+        && (!who || sameName(r.detail, who)) && (!kind || r.note.startsWith(kind)));
+      const same = hits.find((r) => r.date === date);
+      // the day before/after: only for bigger money, so a daily ৳300 khoraki is not flagged every day
+      const close = amt >= 1000 ? hits.find((r) => r.date !== date && r.date >= shift(date, -1) && r.date <= shift(date, 1)) : undefined;
+      if (same) { d.dup = { strong: true, text: `খাতায় আগেই আছে: ${line(same)}` }; strong++; continue; }
+      if (close) { d.dup = { strong: false, text: `কাছাকাছি দিনে একই টাকা আছে: ${line(close)}। একই খরচ হলে সেভ করবেন না।` }; near++; continue; }
+    }
+    if (bill > 0 && d.personId) {
+      const { data: bills } = await supabase.from("purchases").select("purchase_date, total_amount, quantity, unit, note")
+        .eq("supplier_id", String(d.personId)).is("mirror_of", null).gte("purchase_date", shift(date, -1)).lte("purchase_date", shift(date, 1));
+      const b = ((bills ?? []) as Row[]).find((x) => Math.abs(num(x.total_amount) - bill) < 0.5);
+      if (b) {
+        const sameDay = b.purchase_date === date;
+        d.dup = { strong: sameDay, text: `${sameDay ? "এই বিল আগেই আছে" : "কাছাকাছি দিনে একই বিল আছে"}: ${bnDate(String(b.purchase_date))} · ${String(d.person ?? "")} · ${tk(num(b.total_amount))}${b.note ? ` (${b.note})` : ""}` };
+        if (sameDay) strong++; else near++;
+      }
+    }
+  }
+  return { strong, near };
+}
+
 /** the reply for one or more entries: the cards, and the lines that need a question */
 function entriesReply(text: string, ready: PreparedEntry[], asks: string[]): AIResponse {
   const askText = asks.filter(Boolean);
@@ -3208,7 +3270,14 @@ export const processBrickFieldCommand = async (
         const r = await prepareEntry(t, d, { text, msg: message, single }, snapshot).catch((e: unknown) => ({ ask: e instanceof Error ? e.message : String(e) }));
         if ("ask" in r) { if (r.ask) asks.push(r.ask); } else ready.push(r);
       }
-      const lead = text || (ready.length > 1 ? `${bn(ready.length)}টা এন্ট্রি তৈরি করেছি। দেখে নিয়ে "সব সেভ" চাপুন।` : ready.length ? "এন্ট্রিটা দেখে নিয়ে \"খাতায় সেভ\" চাপুন।" : "");
+      const lead0 = text || (ready.length > 1 ? `${bn(ready.length)}টা এন্ট্রি তৈরি করেছি। দেখে নিয়ে "সব সেভ" চাপুন।` : ready.length ? "এন্ট্রিটা দেখে নিয়ে \"খাতায় সেভ\" চাপুন।" : "");
+      // a line that is already in the book must not be counted twice
+      const dup = await markDuplicates(ready).catch(() => ({ strong: 0, near: 0 }));
+      const dupNote = [
+        dup.strong ? `⚠️ ${bn(dup.strong)}টা লাইন খাতায় আগে থেকেই আছে মনে হচ্ছে (হলুদ দাগ)। "সব সেভ" এগুলো বাদ দেবে; সত্যিই নতুন খরচ হলে লাইনটা খুলে "তবুও সেভ" চাপুন।` : "",
+        dup.near ? `🔎 ${bn(dup.near)}টা লাইনের মতো টাকা আগের বা পরের দিনে আছে। দেখে নিন, একই খরচ হলে সেভ করবেন না।` : "",
+      ].filter(Boolean).join("\n");
+      const lead = [lead0, dupNote].filter(Boolean).join("\n\n");
       const out = entriesReply(lead, ready, asks);
       remember(message || "(ছবি/ফাইল)", out.reply);
       return out;
